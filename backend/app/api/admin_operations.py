@@ -30,8 +30,10 @@ from app.core.permissions import Permission
 from app.core.time_utils import utc_now
 from app.db.session import get_db
 from app.dependencies import PermissionChecker, get_current_active_user, no_store_cache
+from app.models.server import Server
 from app.models.server_launch_operation import ServerLaunchOperation
 from app.models.user import User
+from app.models.volume import Volume
 from app.models.volume_backup import VolumeBackup
 from app.models.volume_restore import VolumeRestore
 from app.schemas.admin_operations import (
@@ -62,7 +64,9 @@ _LAUNCH_ACTIVE_STATES = frozenset({"prepared", "executing", "uncertain"})
 _VOLUME_ACTIVE_STATES = frozenset({"pending", "in_progress", "recovery_required"})
 _MAX_OFFSET = 1000
 _DIAGNOSTIC_VALUE_MAX = 64
+_DISPLAY_NAME_MAX = 120
 _SAFE_CODE_RE = re.compile(r"[a-z][a-z0-9_]{0,99}\Z")
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _SAFE_DIAGNOSTIC_KEYS = (
     "row_state",
     "action",
@@ -164,7 +168,93 @@ def _heartbeat_age(row) -> int | None:
     return min(max(age, 0), 2**31 - 1)
 
 
-def _summary(kind: OperationKind, row) -> AdminOperation:
+def _safe_display_name(value: object) -> str | None:
+    """Return bounded display text without control characters."""
+    if not isinstance(value, str):
+        return None
+    cleaned = _CONTROL_CHAR_RE.sub("", value).strip()
+    if not cleaned:
+        return None
+    return cleaned[:_DISPLAY_NAME_MAX]
+
+
+def _owner_id(kind: OperationKind, row) -> UUID | None:
+    return row.owner_id if kind is OperationKind.LAUNCH else row.user_id
+
+
+def _target_name(
+    kind: OperationKind,
+    row,
+    server_names: dict[UUID, str],
+    volume_names: dict[UUID, str],
+) -> str | None:
+    if kind is OperationKind.LAUNCH:
+        return server_names.get(row.server_id)
+    if kind is OperationKind.BACKUP:
+        direct = _safe_display_name(row.source_display_name)
+        if direct is not None:
+            return direct
+        return volume_names.get(row.source_volume_id)
+    return row.display_name
+
+
+async def _name_maps(
+    db: AsyncSession, rows: list[tuple[OperationKind, object]]
+) -> tuple[dict[UUID, str], dict[UUID, str], dict[UUID, str]]:
+    """Bulk-fetch owner, server, and volume display names for a page."""
+    owner_ids: set[UUID] = set()
+    server_ids: set[UUID] = set()
+    volume_ids: set[UUID] = set()
+    for kind, row in rows:
+        owner_id = _owner_id(kind, row)
+        if owner_id is not None:
+            owner_ids.add(owner_id)
+        if kind is OperationKind.LAUNCH and row.server_id is not None:
+            server_ids.add(row.server_id)
+        elif kind is OperationKind.BACKUP and row.source_volume_id is not None:
+            volume_ids.add(row.source_volume_id)
+    usernames: dict[UUID, str] = {}
+    if owner_ids:
+        usernames = dict(
+            (await db.execute(select(User.id, User.username).where(User.id.in_(owner_ids)))).all()
+        )
+    server_names: dict[UUID, str] = {}
+    if server_ids:
+        server_names = dict(
+            (
+                await db.execute(select(Server.id, Server.name).where(Server.id.in_(server_ids)))
+            ).all()
+        )
+    volume_names: dict[UUID, str] = {}
+    if volume_ids:
+        volume_names = dict(
+            (
+                await db.execute(
+                    select(Volume.id, Volume.display_name).where(Volume.id.in_(volume_ids))
+                )
+            ).all()
+        )
+    return usernames, server_names, volume_names
+
+
+async def _enriched_summary(db: AsyncSession, kind: OperationKind, row) -> AdminOperation:
+    """Build one summary with join-derived names for detail/reconcile."""
+    usernames, server_names, volume_names = await _name_maps(db, [(kind, row)])
+    return _summary(
+        kind,
+        row,
+        owner_username=usernames.get(_owner_id(kind, row)),
+        target_name=_target_name(kind, row, server_names, volume_names),
+    )
+
+
+def _summary(
+    kind: OperationKind,
+    row,
+    *,
+    owner_username: str | None = None,
+    target_name: str | None = None,
+) -> AdminOperation:
     if kind is OperationKind.LAUNCH:
         state = _safe_code(row.state, fallback="unknown")
         action = _safe_code(row.action)
@@ -183,6 +273,9 @@ def _summary(kind: OperationKind, row) -> AdminOperation:
         state=state,
         action=action,
         owner_id=owner_id,
+        owner_username=_safe_display_name(owner_username),
+        target_type="server" if kind is OperationKind.LAUNCH else "volume",
+        target_name=_safe_display_name(target_name),
         created_at=row.created_at,
         updated_at=updated_at,
         finished_at=finished_at,
@@ -388,7 +481,7 @@ async def list_operations(
     created_before = _cutoff(age_days, older_than)
     bound = offset + limit
     total = 0
-    items: list[AdminOperation] = []
+    matched_rows: list[tuple[OperationKind, object]] = []
     for current_kind in selected:
         model = _model(current_kind)
         conditions = _conditions(
@@ -409,16 +502,28 @@ async def list_operations(
                 .limit(bound)
             )
         ).scalars()
-        items.extend(_summary(current_kind, row) for row in rows)
-    items.sort(key=lambda item: (item.created_at or datetime.min, str(item.id)), reverse=True)
-    page = items[offset : offset + limit]
+        matched_rows.extend((current_kind, row) for row in rows)
+    matched_rows.sort(
+        key=lambda pair: (pair[1].created_at or datetime.min, str(pair[1].id)), reverse=True
+    )
+    page_rows = matched_rows[offset : offset + limit]
+    usernames, server_names, volume_names = await _name_maps(db, page_rows)
+    items = [
+        _summary(
+            current_kind,
+            row,
+            owner_username=usernames.get(_owner_id(current_kind, row)),
+            target_name=_target_name(current_kind, row, server_names, volume_names),
+        )
+        for current_kind, row in page_rows
+    ]
     return AdminOperationPage(
-        items=page,
+        items=items,
         pagination=AdminOperationPagination(
             limit=limit,
             offset=offset,
             total=total,
-            has_more=offset + len(page) < total,
+            has_more=offset + len(items) < total,
         ),
     )
 
@@ -436,7 +541,7 @@ async def get_operation(
     row = await _load(db, kind, operation_id)
     if row is None:
         raise _not_found()
-    item = _summary(kind, row)
+    item = await _enriched_summary(db, kind, row)
     if not _is_active(kind, item.state):
         return item
     try:
@@ -491,7 +596,7 @@ async def reconcile_operation(
         raise _not_found()
     previous_state = _row_state(kind, row)
     expected_fence = row.fencing_token
-    base_item = _summary(kind, row)
+    base_item = await _enriched_summary(db, kind, row)
     try:
         driver = await get_driver()
         decision = await _inspect(db, driver, kind, operation_id)
@@ -583,7 +688,7 @@ async def reconcile_operation(
         outcome = "applied"
     else:
         outcome = "noop"
-    result = _summary(kind, current) if current is not None else base_item
+    result = await _enriched_summary(db, kind, current) if current is not None else base_item
     result.state = current_state
     _apply_decision(result, decision)
     await _record_audit(

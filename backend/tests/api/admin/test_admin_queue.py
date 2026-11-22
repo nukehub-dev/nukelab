@@ -6,6 +6,7 @@
 import json
 import uuid
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,6 +17,7 @@ from app.models.environment_template import EnvironmentTemplate
 from app.models.server_plan import ServerPlan
 from app.models.server_queue import ServerQueue
 from app.models.user import User
+from app.services.server_queue_service import _admin_entry
 
 pytestmark = pytest.mark.asyncio
 
@@ -164,10 +166,14 @@ async def test_admin_queue_filters_order_and_bounded_pagination(
     assert set(first) == {
         "id",
         "owner_id",
+        "owner_username",
         "server_id",
         "server_name",
         "environment_id",
+        "environment_name",
         "plan_id",
+        "plan_name",
+        "resources",
         "status",
         "reason_code",
         "position",
@@ -325,8 +331,6 @@ async def test_admin_queue_sanitizes_payloads_tokens_and_raw_text(
         "payload-token",
         "env-secret",
         "plan-snapshot-secret",
-        plan.name,
-        environment.name,
         str(row.claim_token),
         str(row.revision_id),
         str(row.request_payload["volume_mounts"][0]["volume_id"]),
@@ -339,7 +343,325 @@ async def test_admin_queue_sanitizes_payloads_tokens_and_raw_text(
     assert sanitized["reason_code"] == "recovery_required"
     assert sanitized["environment_id"] == str(environment.id)
     assert sanitized["plan_id"] == str(plan.id)
+    assert sanitized["owner_username"] == test_user.username
+    assert sanitized["environment_name"] == environment.name
+    assert sanitized["plan_name"] == plan.name
     assert items[str(bad_reason.id)]["reason_code"] is None
+
+
+async def test_admin_queue_displays_owner_environment_plan_and_resources(
+    client, admin_token, db_session, test_user
+):
+    plan, environment = await _targets(db_session)
+    row = await _queue_row(
+        db_session,
+        test_user,
+        plan,
+        environment,
+        name="resource-request",
+        requested_cpu=2.5,
+        requested_memory="1536m",
+        requested_disk="2g",
+        requested_gpu=1,
+    )
+    response = await client.get(
+        f"/api/admin/server-queue?owner_id={test_user.id}",
+        headers=auth(admin_token),
+    )
+    assert response.status_code == 200
+    item = next(entry for entry in response.json()["items"] if entry["id"] == str(row.id))
+    assert item["owner_username"] == test_user.username
+    assert item["environment_name"] == environment.name
+    assert item["plan_name"] == plan.name
+    assert item["resources"] == {
+        "cpu": 2.5,
+        "memory_mib": 1536,
+        "disk_mib": 2048,
+        "gpu_count": 1,
+    }
+    for forbidden in (
+        "request_payload",
+        "plan_snapshot",
+        "request_version",
+        "claim_token",
+        "revision_id",
+        "error_message",
+        "mounts",
+        "environment_values",
+    ):
+        assert forbidden not in json.dumps(item)
+
+    defaults = await _queue_row(
+        db_session,
+        test_user,
+        plan,
+        environment,
+        name="default-resources",
+    )
+    response = await client.get(
+        f"/api/admin/server-queue?owner_id={test_user.id}",
+        headers=auth(admin_token),
+    )
+    default_item = next(
+        entry for entry in response.json()["items"] if entry["id"] == str(defaults.id)
+    )
+    assert default_item["resources"] == {
+        "cpu": 0.0,
+        "memory_mib": 0,
+        "disk_mib": 0,
+        "gpu_count": 0,
+    }
+
+
+async def test_admin_queue_summary_counts_and_filter_semantics(
+    client, admin_token, db_session, test_user
+):
+    plan, environment = await _targets(db_session)
+    foreign = await _other_user(db_session)
+    now = utc_now()
+    old = await _queue_row(
+        db_session,
+        test_user,
+        plan,
+        environment,
+        name="summary-old-pending",
+        status="pending",
+        requested_at=now - timedelta(days=10),
+    )
+    rows = {
+        "scheduled": await _queue_row(
+            db_session,
+            test_user,
+            plan,
+            environment,
+            name="summary-scheduled",
+            status="scheduled",
+            requested_at=now,
+        ),
+        "recovery": await _queue_row(
+            db_session,
+            test_user,
+            plan,
+            environment,
+            name="summary-recovery",
+            status="starting",
+            reason_code="recovery_required",
+            requested_at=now,
+        ),
+        "starting": await _queue_row(
+            db_session,
+            test_user,
+            plan,
+            environment,
+            name="summary-starting",
+            status="starting",
+            reason_code="capacity_wait",
+            requested_at=now,
+        ),
+        "started": await _queue_row(
+            db_session,
+            test_user,
+            plan,
+            environment,
+            name="summary-started",
+            status="started",
+            requested_at=now,
+        ),
+        "failed": await _queue_row(
+            db_session,
+            test_user,
+            plan,
+            environment,
+            name="summary-failed",
+            status="failed",
+            requested_at=now,
+        ),
+        "cancelled": await _queue_row(
+            db_session,
+            test_user,
+            plan,
+            environment,
+            name="summary-cancelled",
+            status="cancelled",
+            requested_at=now,
+        ),
+    }
+    foreign_row = await _queue_row(
+        db_session,
+        foreign,
+        plan,
+        environment,
+        name="summary-foreign",
+        status="pending",
+        requested_at=now,
+    )
+    headers = auth(admin_token)
+
+    listed = await client.get("/api/admin/server-queue", headers=headers)
+    assert listed.status_code == 200
+    summary = listed.json()["summary"]
+    assert summary == {
+        "total": 8,
+        "pending": 2,
+        "scheduled": 1,
+        "starting": 2,
+        "started": 1,
+        "failed": 1,
+        "cancelled": 1,
+        "recovery_required": 1,
+    }
+    assert summary["total"] == sum(
+        summary[status]
+        for status in ("pending", "scheduled", "starting", "started", "failed", "cancelled")
+    )
+
+    by_status = await client.get("/api/admin/server-queue?status=failed", headers=headers)
+    assert by_status.json()["pagination"]["total"] == 1
+    assert [item["id"] for item in by_status.json()["items"]] == [str(rows["failed"].id)]
+    assert by_status.json()["summary"] == summary
+
+    by_owner = await client.get(
+        f"/api/admin/server-queue?owner_id={test_user.id}",
+        headers=headers,
+    )
+    assert by_owner.json()["summary"] == {
+        "total": 7,
+        "pending": 1,
+        "scheduled": 1,
+        "starting": 2,
+        "started": 1,
+        "failed": 1,
+        "cancelled": 1,
+        "recovery_required": 1,
+    }
+    assert foreign_row.id not in {uuid.UUID(item["id"]) for item in by_owner.json()["items"]}
+
+    recovery = await client.get("/api/admin/server-queue?recovery_required=true", headers=headers)
+    assert [item["id"] for item in recovery.json()["items"]] == [str(rows["recovery"].id)]
+    assert recovery.json()["summary"] == {
+        "total": 1,
+        "pending": 0,
+        "scheduled": 0,
+        "starting": 1,
+        "started": 0,
+        "failed": 0,
+        "cancelled": 0,
+        "recovery_required": 1,
+    }
+
+    healthy = await client.get("/api/admin/server-queue?recovery_required=false", headers=headers)
+    assert healthy.json()["pagination"]["total"] == 7
+    assert healthy.json()["summary"] == {
+        "total": 7,
+        "pending": 2,
+        "scheduled": 1,
+        "starting": 1,
+        "started": 1,
+        "failed": 1,
+        "cancelled": 1,
+        "recovery_required": 0,
+    }
+
+    aged = await client.get("/api/admin/server-queue?age_days=5", headers=headers)
+    assert [item["id"] for item in aged.json()["items"]] == [str(old.id)]
+    assert aged.json()["summary"] == {
+        "total": 1,
+        "pending": 1,
+        "scheduled": 0,
+        "starting": 0,
+        "started": 0,
+        "failed": 0,
+        "cancelled": 0,
+        "recovery_required": 0,
+    }
+
+    aged_failed = await client.get(
+        "/api/admin/server-queue?age_days=5&status=failed",
+        headers=headers,
+    )
+    assert aged_failed.json()["items"] == []
+    assert aged_failed.json()["pagination"]["total"] == 0
+    assert aged_failed.json()["summary"] == aged.json()["summary"]
+
+
+async def test_admin_queue_sanitizes_and_bounds_display_names(client, admin_token, db_session):
+    marker = uuid.uuid4().hex[:8]
+    owner = User(
+        username=f"  queue\x01owner-{marker}\t  ",
+        email=f"queue-owner-sanitized-{marker}@example.test",
+        password_hash=get_password_hash("otherpass123"),
+        role="user",
+        is_active=True,
+        is_verified=True,
+    )
+    plan = ServerPlan(
+        name="P" * 150,
+        slug=f"admin-queue-long-plan-{marker}",
+        cpu_limit=1,
+    )
+    environment = EnvironmentTemplate(
+        name=f"  Env\t{marker}\n  ",
+        slug=f"admin-queue-env-sanitized-{marker}",
+        image="approved",
+    )
+    db_session.add_all([owner, plan, environment])
+    await db_session.flush()
+    row = await _queue_row(
+        db_session,
+        owner,
+        plan,
+        environment,
+        name=f"  srv\t{marker}\x02  ",
+    )
+
+    response = await client.get(
+        f"/api/admin/server-queue?owner_id={owner.id}",
+        headers=auth(admin_token),
+    )
+    assert response.status_code == 200
+    item = next(entry for entry in response.json()["items"] if entry["id"] == str(row.id))
+    assert item["owner_username"] == f"queueowner-{marker}"
+    assert item["environment_name"] == f"Env{marker}"
+    assert item["plan_name"] == "P" * 120
+    assert item["server_name"] == f"srv{marker}"
+    assert len(item["plan_name"]) == 120
+
+
+async def test_admin_queue_entry_handles_missing_related_names():
+    entry = SimpleNamespace(
+        id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        server_id=None,
+        server_name="queue-name",
+        environment_id=uuid.uuid4(),
+        plan_id=uuid.uuid4(),
+        requested_cpu=None,
+        requested_memory=None,
+        requested_disk=None,
+        requested_gpu=None,
+        status="pending",
+        reason_code=None,
+        priority=0,
+        requested_at=None,
+        started_at=None,
+        failed_at=None,
+        expires_at=None,
+    )
+    item = _admin_entry(
+        entry,
+        owner_username=None,
+        environment_name=None,
+        plan_name=None,
+        position=None,
+    )
+    assert item.owner_username is None
+    assert item.environment_name is None
+    assert item.plan_name is None
+    assert item.server_name == "queue-name"
+    assert item.resources.cpu == 0
+    assert item.resources.memory_mib == 0
+    assert item.resources.disk_mib == 0
+    assert item.resources.gpu_count == 0
 
 
 async def test_admin_queue_exposes_no_mutation_route(client, admin_token):

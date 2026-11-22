@@ -139,6 +139,50 @@ export function shortOperationId(value: string | null | undefined): string {
   return value.slice(0, 8)
 }
 
+function safeOperationDisplayText(value: unknown, maximumLength = 120): string | null {
+  if (typeof value !== 'string') return null
+  const cleaned = Array.from(value)
+    .filter((character) => {
+      const code = character.codePointAt(0) ?? 0
+      return code >= 32 && code !== 127
+    })
+    .join('')
+    .trim()
+  if (!cleaned) return null
+  return Array.from(cleaned).slice(0, maximumLength).join('')
+}
+
+function safeOperationUsername(value: unknown): string | null {
+  const username = safeOperationDisplayText(value, 64)
+  if (!username) return null
+  return username.replace(/^@+/, '') || null
+}
+
+/** Owner names are display-only; the short owner reference stays the fallback. */
+export function operationOwnerLabel(
+  operation: Pick<AdminOperation, 'owner_id' | 'owner_username'>
+): string {
+  const username = safeOperationUsername(operation.owner_username)
+  return username ? `@${username}` : shortOperationId(operation.owner_id)
+}
+
+export function operationTargetName(operation: Pick<AdminOperation, 'target_name'>): string | null {
+  return safeOperationDisplayText(operation.target_name)
+}
+
+/** Target name is the primary identity; the operation kind is the fallback. */
+export function operationTargetLabel(
+  operation: Pick<AdminOperation, 'kind' | 'target_name'>
+): string {
+  return operationTargetName(operation) ?? adminOperationKindLabel(operation.kind)
+}
+
+export function operationTargetTypeLabel(targetType: AdminOperation['target_type']): string | null {
+  if (targetType === 'server') return 'Server'
+  if (targetType === 'volume') return 'Volume'
+  return null
+}
+
 export function operationActionLabel(action: string | null | undefined): string {
   if (!action || !SAFE_CODE.test(action)) return '—'
   return humanizeCode(action)

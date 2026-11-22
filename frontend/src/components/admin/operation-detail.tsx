@@ -1,7 +1,16 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { AlertTriangle, Clock, Fingerprint, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
+import {
+  AlertTriangle,
+  Box,
+  Clock,
+  Fingerprint,
+  RefreshCw,
+  ShieldCheck,
+  User,
+  Wrench,
+} from 'lucide-react'
 import { useState } from 'react'
 import {
   adminOperationErrorInfo,
@@ -11,10 +20,14 @@ import {
   isAdminOperationActive,
   operationActionLabel,
   operationLivenessPresentation,
+  operationOwnerLabel,
   operationProofSourceLabel,
   operationReasonCodeLabel,
   operationRuntimePresentation,
   operationStateLabel,
+  operationTargetLabel,
+  operationTargetName,
+  operationTargetTypeLabel,
   sanitizeOperationCounters,
   sanitizeOperationDiagnostics,
   shortOperationId,
@@ -125,6 +138,18 @@ export function OperationReconcileOutcome({ result }: { result: AdminOperationRe
   )
 }
 
+/** Shared identity: target name first, then the kind and short operation ID. */
+export function OperationTargetSummary({ operation }: { operation: AdminOperation }) {
+  return (
+    <div className="min-w-0">
+      <p className="truncate text-sm font-medium">{operationTargetLabel(operation)}</p>
+      <p className="font-mono text-[10px] text-muted-foreground">
+        {adminOperationKindLabel(operation.kind)} · {shortOperationId(operation.id)}
+      </p>
+    </div>
+  )
+}
+
 export interface OperationDetailContentProps {
   operation: AdminOperation
   canManage: boolean
@@ -149,6 +174,8 @@ export function OperationDetailContent({
   const runtime = operationRuntimePresentation(operation.runtime_state)
   const diagnostics = sanitizeOperationDiagnostics(operation.diagnostics)
   const counters = sanitizeOperationCounters(operation.counters)
+  const targetName = operationTargetName(operation)
+  const targetType = operationTargetTypeLabel(operation.target_type)
 
   return (
     <div className="space-y-5">
@@ -158,12 +185,13 @@ export function OperationDetailContent({
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="text-base font-semibold leading-tight">
-            {adminOperationKindLabel(operation.kind)} operation
+            {operationTargetLabel(operation)}
           </h3>
           <p className="mt-1 text-xs text-muted-foreground">
+            {adminOperationKindLabel(operation.kind)} operation ·{' '}
             <span className="font-mono">{shortOperationId(operation.id)}</span>
             {operation.action ? ` · ${operationActionLabel(operation.action)}` : ''}
-            {operation.owner_id ? ` · owner ${shortOperationId(operation.owner_id)}` : ''}
+            {` · owner ${operationOwnerLabel(operation)}`}
           </p>
         </div>
       </div>
@@ -205,6 +233,18 @@ export function OperationDetailContent({
       {error && <OperationErrorNotice error={error} />}
 
       <section className="grid grid-cols-2 gap-2">
+        <DetailCard
+          icon={Box}
+          label={targetType ? `Target ${targetType.toLowerCase()}` : 'Target'}
+          value={operationTargetLabel(operation)}
+          muted={!targetName}
+        />
+        <DetailCard
+          icon={User}
+          label="Owner"
+          value={operationOwnerLabel(operation)}
+          muted={!operation.owner_username && !operation.owner_id}
+        />
         <DetailCard
           icon={ShieldCheck}
           label="Liveness"

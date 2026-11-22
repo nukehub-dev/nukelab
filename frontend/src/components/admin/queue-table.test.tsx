@@ -17,10 +17,14 @@ function entry(overrides: Partial<AdminQueueEntry> = {}): AdminQueueEntry {
   return {
     id: requestId,
     owner_id: ownerId,
+    owner_username: 'alice',
     server_id: serverId,
     server_name: 'visible-request',
     environment_id: environmentId,
+    environment_name: 'Ubuntu 24.04',
     plan_id: planId,
+    plan_name: 'Starter',
+    resources: { cpu: 2, memory_mib: 4096, disk_mib: 20480, gpu_count: 1 },
     status: 'pending',
     reason_code: 'capacity_wait',
     position: 1,
@@ -144,6 +148,28 @@ describe('AdminQueueTable', () => {
     ]) {
       expect(html).not.toContain(forbidden)
     }
+  })
+
+  it('shows owner, plan, and environment names with compact resource chips', () => {
+    const html = renderTable([entry()])
+
+    expect(html).toContain('Owner @alice')
+    expect(html).toContain('Plan Starter')
+    expect(html).toContain('Environment Ubuntu 24.04')
+    expect(html).toContain('2 vCPU')
+    expect(html).toContain('4 GB RAM')
+    expect(html).toContain('20 GB disk')
+    expect(html).toContain('1 GPU')
+  })
+
+  it('falls back to short references when display names are unavailable', () => {
+    const html = renderTable([
+      entry({ owner_username: null, plan_name: null, environment_name: null }),
+    ])
+
+    expect(html).toContain('Owner 11111111')
+    expect(html).toContain('Plan 55555555')
+    expect(html).toContain('Environment 44444444')
   })
 
   it('shows a filter-aware empty state', () => {

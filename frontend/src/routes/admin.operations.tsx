@@ -22,7 +22,7 @@ import { Select, SelectItem } from '../components/ui/select'
 import { Button } from '../components/ui/button'
 import { Tooltip } from '../components/ui/tooltip'
 import { OperationStatusPills } from '../components/admin/operation-status'
-import { OperationDetailDrawer } from '../components/admin/operation-detail'
+import { OperationDetailDrawer, OperationTargetSummary } from '../components/admin/operation-detail'
 import { useAdminOperations } from '../hooks/use-admin-operations'
 import { useDataTable } from '../hooks/use-data-table'
 import { useIsDesktopViewport } from '../hooks/use-is-desktop'
@@ -33,7 +33,7 @@ import {
   adminOperationLoadErrorInfo,
   formatHeartbeatAge,
   operationActionLabel,
-  shortOperationId,
+  operationOwnerLabel,
 } from '../lib/admin-operations'
 import { formatDate, formatRelativeTime } from '../lib/utils'
 import { useAuthStore } from '../stores/auth-store'
@@ -97,12 +97,6 @@ function kindIcon(kind: AdminOperationKind) {
   if (kind === 'launch') return Rocket
   if (kind === 'backup') return Archive
   return RefreshCw
-}
-
-function kindLabel(kind: AdminOperationKind): string {
-  if (kind === 'launch') return 'Launch'
-  if (kind === 'backup') return 'Backup'
-  return 'Restore'
 }
 
 function AdminOperationsPage() {
@@ -175,23 +169,18 @@ function AdminOperationsContent() {
 
   const columns: ColumnDef<AdminOperation>[] = [
     {
-      id: 'kind',
-      header: 'Kind',
+      id: 'target',
+      header: 'Target',
       enableSorting: false,
       cell: ({ row }) => {
         const operation = row.original
         const Icon = kindIcon(operation.kind)
         return (
-          <div className="flex items-center gap-2">
-            <div className="rounded-md bg-primary/10 p-1.5 text-primary">
+          <div className="flex max-w-64 items-center gap-2">
+            <div className="shrink-0 rounded-md bg-primary/10 p-1.5 text-primary">
               <Icon className="h-3.5 w-3.5" />
             </div>
-            <div className="space-y-0.5">
-              <p className="text-sm font-medium">{kindLabel(operation.kind)}</p>
-              <p className="font-mono text-[10px] text-muted-foreground">
-                {shortOperationId(operation.id)}
-              </p>
-            </div>
+            <OperationTargetSummary operation={operation} />
           </div>
         )
       },
@@ -209,9 +198,7 @@ function AdminOperationsContent() {
       cell: ({ row }) => (
         <div className="space-y-0.5 text-sm text-muted-foreground">
           <div>{operationActionLabel(row.original.action)}</div>
-          <div className="font-mono text-[10px]">
-            Owner {row.original.owner_id ? row.original.owner_id.slice(0, 8) : 'unknown'}
-          </div>
+          <div className="break-all text-[10px]">Owner {operationOwnerLabel(row.original)}</div>
         </div>
       ),
     },
@@ -276,16 +263,11 @@ function AdminOperationsContent() {
     return (
       <div className="space-y-3 p-4">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <div className="rounded-md bg-primary/10 p-1.5 text-primary">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="shrink-0 rounded-md bg-primary/10 p-1.5 text-primary">
               <Icon className="h-3.5 w-3.5" />
             </div>
-            <div>
-              <p className="text-sm font-medium">{kindLabel(operation.kind)}</p>
-              <p className="font-mono text-[10px] text-muted-foreground">
-                {shortOperationId(operation.id)}
-              </p>
-            </div>
+            <OperationTargetSummary operation={operation} />
           </div>
           <button
             type="button"
@@ -298,6 +280,7 @@ function AdminOperationsContent() {
         </div>
         <OperationStatusPills operation={operation} showRuntime={false} />
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span>Owner: {operationOwnerLabel(operation)}</span>
           <span>Action: {operationActionLabel(operation.action)}</span>
           <span>Age: {operation.created_at ? formatRelativeTime(operation.created_at) : '—'}</span>
           <span>Heartbeat: {formatHeartbeatAge(operation.heartbeat_age_seconds)}</span>

@@ -15,6 +15,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 AdminOperationKind = Literal["launch", "backup", "restore"]
+AdminOperationTargetType = Literal["server", "volume"]
 AdminLiveness = Literal["alive", "stopped", "ambiguous"]
 AdminRuntimeState = Literal["present", "absent", "ambiguous"]
 AdminTerminalState = Literal["succeeded", "failed", "recovery_required"]
@@ -37,6 +38,9 @@ class AdminOperation(BaseModel):
     state: str
     action: str | None = None
     owner_id: UUID | None = None
+    owner_username: str | None = None
+    target_type: AdminOperationTargetType | None = None
+    target_name: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     finished_at: datetime | None = None

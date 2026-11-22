@@ -43,6 +43,16 @@ async def test_admin_and_super_admin_can_read(client, admin_token, superadmin_to
         assert response.json() == {
             "items": [],
             "pagination": {"limit": 50, "offset": 0, "total": 0, "has_more": False},
+            "summary": {
+                "total": 0,
+                "pending": 0,
+                "scheduled": 0,
+                "starting": 0,
+                "started": 0,
+                "failed": 0,
+                "cancelled": 0,
+                "recovery_required": 0,
+            },
         }
 
 

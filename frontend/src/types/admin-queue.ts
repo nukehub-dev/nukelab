@@ -9,6 +9,25 @@ export type AdminQueueStatus =
   | 'failed'
   | 'cancelled'
 
+export interface AdminQueueResources {
+  cpu: number
+  memory_mib: number
+  disk_mib: number
+  gpu_count: number
+}
+
+/** Aggregate counts for every queue record matching the current filters. */
+export interface AdminQueueSummary {
+  total: number
+  pending: number
+  scheduled: number
+  starting: number
+  started: number
+  failed: number
+  cancelled: number
+  recovery_required: number
+}
+
 /**
  * One sanitized queue request returned by the read-only admin queue API.
  * Request payloads, claim tokens, mounts, environment values, plan snapshots,
@@ -17,10 +36,14 @@ export type AdminQueueStatus =
 export interface AdminQueueEntry {
   id: string
   owner_id: string
+  owner_username: string | null
   server_id: string | null
   server_name: string
   environment_id: string
+  environment_name: string | null
   plan_id: string
+  plan_name: string | null
+  resources: AdminQueueResources
   status: AdminQueueStatus
   reason_code: string | null
   position: number | null
@@ -41,6 +64,7 @@ export interface AdminQueuePagination {
 export interface AdminQueuePage {
   items: AdminQueueEntry[]
   pagination: AdminQueuePagination
+  summary: AdminQueueSummary
 }
 
 export interface AdminQueueFilters {

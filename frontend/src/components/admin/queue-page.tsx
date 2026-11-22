@@ -5,21 +5,27 @@ import { useMemo, useState } from 'react'
 import { Activity, AlertTriangle, Clock, Filter, ListOrdered, ShieldCheck } from 'lucide-react'
 import { ResourcePageLayout } from '../layout/resource-page-layout'
 import { Button } from '../ui/button'
+import { Combobox } from '../ui/combobox'
 import { Input } from '../ui/input'
 import { Select, SelectItem } from '../ui/select'
 import { AdminQueueTable } from './queue-table'
 import { useAdminQueue } from '../../hooks/use-admin-queue'
 import { useDataTable } from '../../hooks/use-data-table'
 import { usePageGuard } from '../../hooks/use-page-guard'
+import { useUsers } from '../../hooks/use-users'
 import {
+  ADMIN_QUEUE_ANY_OWNER_LABEL,
   ADMIN_QUEUE_READ_PERMISSIONS,
   ADMIN_QUEUE_STATUSES,
   adminQueueLoadErrorInfo,
-  isQueueRecoveryRequired,
-  isQueueReference,
+  adminQueueOwnerPickerAllowed,
+  queueOwnerFilterValue,
+  queueOwnerOptions,
   queueStatusLabel,
+  sanitizeQueueSummary,
 } from '../../lib/admin-queue'
 import { cn } from '../../lib/utils'
+import { useAuthStore } from '../../stores/auth-store'
 import { useThemeStore } from '../../stores/theme-store'
 import type {
   AdminQueueFilters,
@@ -43,8 +49,43 @@ function olderThanTimestamp(value: string): string | null {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null
 }
 
+/**
+ * Mounted only when the actor can read the user directory, so queue filters
+ * never issue a user query for roles without `users:read`.
+ */
+function QueueOwnerPicker({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  const { data, isLoading, isError } = useUsers({ limit: 100 })
+  const options = useMemo(() => queueOwnerOptions(data?.data ?? []), [data])
+
+  return (
+    <div className="space-y-1" data-testid="queue-owner-picker">
+      <Combobox
+        value={value}
+        onChange={onChange}
+        options={options}
+        placeholder={ADMIN_QUEUE_ANY_OWNER_LABEL}
+        searchPlaceholder="Search owners..."
+        disabled={isLoading}
+      />
+      {isLoading && <p className="text-[11px] text-muted-foreground">Loading owners…</p>}
+      {isError && (
+        <p className="text-[11px] text-amber-400">
+          Owner names are unavailable. Refresh to try loading the user directory again.
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function AdminQueuePageContent() {
   const density = useThemeStore((state) => state.density)
+  const canPickOwner = useAuthStore((state) => adminQueueOwnerPickerAllowed(state.hasPermission))
   const { state: tableState, setPage, setLimit } = useDataTable({ defaultLimit: 20 })
   const [selectedStatuses, setSelectedStatuses] = useState<AdminQueueStatus[]>([])
   const [recoveryFilter, setRecoveryFilter] = useState<AdminQueueRecoveryFilter>('all')
@@ -53,19 +94,20 @@ export function AdminQueuePageContent() {
   const [ownerFilter, setOwnerFilter] = useState('')
 
   const ownerId = ownerFilter.trim()
-  const ownerIdValid = ownerId === '' || isQueueReference(ownerId)
+  const ownerFilterId = queueOwnerFilterValue(ownerFilter)
+  const ownerIdValid = ownerId === '' || ownerFilterId !== null
   const hasFilters =
     selectedStatuses.length > 0 ||
     recoveryFilter !== 'all' ||
     ageFilter !== 'all' ||
     olderThanDate !== '' ||
-    (ownerId !== '' && ownerIdValid)
+    ownerFilterId !== null
   const hasFilterInput = hasFilters || ownerId !== ''
 
   const filters = useMemo<AdminQueueFilters>(
     () => ({
       statuses: selectedStatuses,
-      owner_id: ownerIdValid && ownerId ? ownerId : null,
+      owner_id: ownerFilterId,
       age_days: ageFilter === 'all' ? null : Number(ageFilter),
       older_than: olderThanTimestamp(olderThanDate),
       recovery_required: recoveryFilter === 'all' ? null : recoveryFilter === 'required',
@@ -74,8 +116,7 @@ export function AdminQueuePageContent() {
     }),
     [
       selectedStatuses,
-      ownerId,
-      ownerIdValid,
+      ownerFilterId,
       ageFilter,
       olderThanDate,
       recoveryFilter,
@@ -87,10 +128,8 @@ export function AdminQueuePageContent() {
   const { data, isLoading, isError, error, refetch, isFetching } = useAdminQueue(filters)
   const entries = data?.items ?? []
   const total = data?.pagination.total ?? 0
+  const summary = sanitizeQueueSummary(data?.summary)
   const pageCount = Math.max(1, Math.ceil(total / tableState.limit))
-  const recoveryCount = entries.filter((entry) => isQueueRecoveryRequired(entry.reason_code)).length
-  const startingCount = entries.filter((entry) => entry.status === 'starting').length
-  const pendingCount = entries.filter((entry) => entry.status === 'pending').length
 
   const clearFilters = () => {
     setSelectedStatuses([])
@@ -117,34 +156,34 @@ export function AdminQueuePageContent() {
       stats={[
         {
           title: 'Requests',
-          value: total,
-          subtitle: 'All matching records',
+          value: summary.total,
+          subtitle: 'All statuses, all pages',
           icon: Activity,
           iconColor: 'text-blue-400',
           bgColor: 'bg-blue-500/10',
         },
         {
           title: 'Starting',
-          value: startingCount,
-          subtitle: 'On this page',
+          value: summary.starting,
+          subtitle: 'All pages',
           icon: Clock,
-          iconColor: startingCount > 0 ? 'text-amber-400' : 'text-emerald-400',
-          bgColor: startingCount > 0 ? 'bg-amber-500/10' : 'bg-emerald-500/10',
+          iconColor: summary.starting > 0 ? 'text-amber-400' : 'text-emerald-400',
+          bgColor: summary.starting > 0 ? 'bg-amber-500/10' : 'bg-emerald-500/10',
         },
         {
           title: 'Recovery Required',
-          value: recoveryCount,
-          subtitle: 'On this page',
+          value: summary.recovery_required,
+          subtitle: 'All pages',
           icon: AlertTriangle,
-          iconColor: recoveryCount > 0 ? 'text-amber-400' : 'text-emerald-400',
-          bgColor: recoveryCount > 0 ? 'bg-amber-500/10' : 'bg-emerald-500/10',
+          iconColor: summary.recovery_required > 0 ? 'text-amber-400' : 'text-emerald-400',
+          bgColor: summary.recovery_required > 0 ? 'bg-amber-500/10' : 'bg-emerald-500/10',
         },
         {
           title: 'Pending',
-          value: pendingCount,
-          subtitle: 'On this page',
+          value: summary.pending,
+          subtitle: 'All pages',
           icon: Clock,
-          iconColor: pendingCount > 0 ? 'text-blue-400' : 'text-emerald-400',
+          iconColor: summary.pending > 0 ? 'text-blue-400' : 'text-emerald-400',
           bgColor: 'bg-blue-500/10',
         },
       ]}
@@ -249,19 +288,31 @@ export function AdminQueuePageContent() {
             />
           </div>
           <div className="space-y-1">
-            <span className="text-xs text-muted-foreground">Owner ID</span>
-            <Input
-              type="text"
-              value={ownerFilter}
-              placeholder="Owner UUID"
-              maxLength={36}
-              data-testid="queue-owner-filter"
-              aria-label="Owner ID"
-              onChange={(event) => {
-                setOwnerFilter(event.target.value)
-                setPage(1)
-              }}
-            />
+            <span className="text-xs text-muted-foreground">
+              {canPickOwner ? 'Owner' : 'Owner ID'}
+            </span>
+            {canPickOwner ? (
+              <QueueOwnerPicker
+                value={ownerFilter}
+                onChange={(value) => {
+                  setOwnerFilter(value)
+                  setPage(1)
+                }}
+              />
+            ) : (
+              <Input
+                type="text"
+                value={ownerFilter}
+                placeholder="Owner UUID"
+                maxLength={36}
+                data-testid="queue-owner-filter"
+                aria-label="Owner ID"
+                onChange={(event) => {
+                  setOwnerFilter(event.target.value)
+                  setPage(1)
+                }}
+              />
+            )}
             {!ownerIdValid && (
               <p className="text-[11px] text-amber-400">
                 Enter a complete owner UUID, or leave the field empty.

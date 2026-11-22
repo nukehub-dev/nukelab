@@ -4,13 +4,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from './api'
 import {
+  ADMIN_QUEUE_ANY_OWNER_LABEL,
+  ADMIN_QUEUE_OWNER_PICKER_PERMISSION,
   ADMIN_QUEUE_READ_PERMISSIONS,
   adminQueueAccess,
   adminQueueLoadErrorInfo,
+  adminQueueOwnerPickerAllowed,
   adminQueuePath,
   buildAdminQueueQuery,
+  emptyQueueSummary,
   fetchAdminQueue,
   isQueueRecoveryRequired,
+  queueEnvironmentLabel,
+  queueOwnerFilterValue,
+  queueOwnerLabel,
+  queueOwnerOptions,
+  queuePlanLabel,
   queueReasonPresentation,
   queueRelativeTimestampLabel,
   queueStatusPresentation,
@@ -18,6 +27,9 @@ import {
   safeQueueReasonCode,
   safeQueueServerName,
   sanitizeQueueEntry,
+  sanitizeQueuePage,
+  sanitizeQueueResources,
+  sanitizeQueueSummary,
   shortQueueReference,
 } from './admin-queue'
 import type { AdminQueueEntry, AdminQueueStatus } from '../types/admin-queue'
@@ -32,10 +44,14 @@ function entry(overrides: Partial<AdminQueueEntry> = {}): AdminQueueEntry {
   return {
     id: requestId,
     owner_id: ownerId,
+    owner_username: 'alice',
     server_id: serverId,
     server_name: 'saved-request',
     environment_id: environmentId,
+    environment_name: 'Ubuntu 24.04',
     plan_id: planId,
+    plan_name: 'Starter',
+    resources: { cpu: 2, memory_mib: 4096, disk_mib: 20480, gpu_count: 1 },
     status: 'pending',
     reason_code: 'capacity_wait',
     position: 2,
@@ -45,6 +61,19 @@ function entry(overrides: Partial<AdminQueueEntry> = {}): AdminQueueEntry {
     failed_at: null,
     expires_at: '2026-01-01T01:00:00',
     ...overrides,
+  }
+}
+
+function summary() {
+  return {
+    total: 61,
+    pending: 3,
+    scheduled: 1,
+    starting: 2,
+    started: 50,
+    failed: 4,
+    cancelled: 1,
+    recovery_required: 1,
   }
 }
 
@@ -129,6 +158,7 @@ describe('admin queue filters and transport', () => {
       jsonResponse({
         items: [entry()],
         pagination: { limit: 20, offset: 40, total: 61, has_more: true },
+        summary: summary(),
       })
     )
     vi.stubGlobal('fetch', fetchMock)
@@ -138,6 +168,7 @@ describe('admin queue filters and transport', () => {
     expect(page.items).toHaveLength(1)
     expect(page.items[0].position).toBe(2)
     expect(page.pagination).toEqual({ limit: 20, offset: 40, total: 61, has_more: true })
+    expect(page.summary).toEqual(summary())
     expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/server-queue?limit=20&offset=40')
     expect(fetchMock.mock.calls[0][1].headers).toMatchObject({
       Authorization: 'Bearer token',
@@ -171,6 +202,7 @@ describe('admin queue filters and transport', () => {
     expect(page.items[0].priority).toBe(0)
     expect(page.items[0].requested_at).toBeNull()
     expect(page.pagination).toEqual({ limit: 50, offset: 0, total: 0, has_more: false })
+    expect(page.summary).toEqual(emptyQueueSummary())
   })
 
   it('preserves stable API error codes and gives bounded messages', async () => {
@@ -222,6 +254,95 @@ describe('admin queue presentation', () => {
     expect(safeQueueReasonCode('password=secret')).toBeNull()
     expect(isQueueRecoveryRequired('recovery_required')).toBe(true)
     expect(isQueueRecoveryRequired('capacity_wait')).toBe(false)
+  })
+
+  it('defaults missing or malformed summaries to bounded zero counts', () => {
+    const missing = sanitizeQueuePage({
+      items: [],
+      pagination: { limit: 20, offset: 0, total: 5, has_more: false },
+    } as unknown as Parameters<typeof sanitizeQueuePage>[0])
+
+    expect(missing.summary).toEqual(emptyQueueSummary())
+    expect(
+      sanitizeQueueSummary({
+        total: -4,
+        pending: 2.9,
+        scheduled: Number.POSITIVE_INFINITY,
+        starting: '3',
+        started: 9,
+        failed: null,
+        cancelled: 1,
+        recovery_required: 1,
+      })
+    ).toEqual({
+      total: 0,
+      pending: 2,
+      scheduled: 0,
+      starting: 0,
+      started: 9,
+      failed: 0,
+      cancelled: 1,
+      recovery_required: 1,
+    })
+  })
+
+  it('uses owner, plan, and environment names before short references', () => {
+    const named = entry()
+    expect(queueOwnerLabel(named)).toBe('@alice')
+    expect(queuePlanLabel(named)).toBe('Starter')
+    expect(queueEnvironmentLabel(named)).toBe('Ubuntu 24.04')
+
+    const fallback = entry({
+      owner_username: null,
+      plan_name: null,
+      environment_name: null,
+    })
+    expect(queueOwnerLabel(fallback)).toBe('11111111')
+    expect(queuePlanLabel(fallback)).toBe('55555555')
+    expect(queueEnvironmentLabel(fallback)).toBe('44444444')
+    expect(queueOwnerLabel(entry({ owner_username: 'bad\u0007owner' }))).toBe('@badowner')
+  })
+
+  it('builds owner-picker options from the user directory with UUID values', () => {
+    const options = queueOwnerOptions([
+      {
+        id: ownerId,
+        username: 'alice',
+        display_name: 'Alice Admin',
+        avatar_url: 'https://example.test/alice.png',
+      },
+      { id: requestId, username: 'bob', display_name: '', avatar_url: '' },
+      { id: 'not-a-uuid', username: 'hidden', display_name: 'Hidden' },
+    ])
+
+    expect(options).toEqual([
+      { value: '', label: 'Any owner' },
+      {
+        value: ownerId,
+        label: 'Alice Admin (@alice)',
+        image: 'https://example.test/alice.png',
+      },
+      { value: requestId, label: 'bob (@bob)' },
+    ])
+  })
+
+  it('gates the owner picker on users:read and keeps UUID-only selection semantics', () => {
+    expect(ADMIN_QUEUE_OWNER_PICKER_PERMISSION).toBe('users:read')
+    expect(adminQueueOwnerPickerAllowed((permission) => permission === 'users:read')).toBe(true)
+    expect(adminQueueOwnerPickerAllowed(() => false)).toBe(false)
+    expect(ADMIN_QUEUE_ANY_OWNER_LABEL).toBe('Any owner')
+    expect(queueOwnerFilterValue(` ${ownerId} `)).toBe(ownerId)
+    expect(queueOwnerFilterValue('')).toBeNull()
+    expect(queueOwnerFilterValue('not-a-uuid')).toBeNull()
+  })
+
+  it('sanitizes request resource sizing without inventing values', () => {
+    expect(
+      sanitizeQueueResources({ cpu: 1.5, memory_mib: 4096, disk_mib: 20480, gpu_count: 1 })
+    ).toEqual({ cpu: 1.5, memory_mib: 4096, disk_mib: 20480, gpu_count: 1 })
+    expect(
+      sanitizeQueueResources({ cpu: -1, memory_mib: '4096', disk_mib: Number.NaN, gpu_count: 2.7 })
+    ).toEqual({ cpu: 0, memory_mib: 0, disk_mib: 0, gpu_count: 0 })
   })
 
   it('keeps references short and timestamps bounded', () => {

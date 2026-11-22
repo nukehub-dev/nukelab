@@ -21,11 +21,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.container.driver import ContainerDriver, ContainerDriverError
 from app.core.time_utils import utc_now
+from app.models.environment_template import EnvironmentTemplate
 from app.models.server import Server
 from app.models.server_launch_intent import ServerLaunchIntent
 from app.models.server_launch_operation import ServerLaunchOperation
+from app.models.server_plan import ServerPlan
 from app.models.server_queue import ServerQueue
-from app.schemas.admin_queue import AdminQueueEntry, AdminQueuePage, AdminQueuePagination
+from app.models.user import User
+from app.schemas.admin_queue import (
+    AdminQueueEntry,
+    AdminQueuePage,
+    AdminQueuePagination,
+    AdminQueueResources,
+    AdminQueueSummary,
+)
 from app.schemas.server_queue import (
     QueueEntryResponse,
     QueuePageResponse,
@@ -39,6 +48,19 @@ logger = logging.getLogger(__name__)
 _ACTIVE_LAUNCH_STATES = ("prepared", "executing", "uncertain")
 _SAFE_REASON_RE = re.compile(r"[a-z][a-z0-9_]{0,63}\Z")
 _ADMIN_MAX_OFFSET = 1000
+_ADMIN_STATUSES = ("pending", "scheduled", "starting", "started", "failed", "cancelled")
+_DISPLAY_NAME_MAX = 120
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def _display_text(value: object) -> str | None:
+    """Return bounded display text without control characters."""
+    if not isinstance(value, str):
+        return None
+    cleaned = _CONTROL_CHAR_RE.sub("", value).strip()
+    if not cleaned:
+        return None
+    return cleaned[:_DISPLAY_NAME_MAX]
 
 
 @dataclass
@@ -111,6 +133,42 @@ _MESSAGES = {
         "resubmit only after support confirms this request cannot be recovered."
     ),
 }
+
+
+def _admin_entry(
+    entry: ServerQueue,
+    *,
+    owner_username: str | None,
+    environment_name: str | None,
+    plan_name: str | None,
+    position: int | None,
+) -> AdminQueueEntry:
+    """Assemble one operator-facing row from a joined queue record."""
+    return AdminQueueEntry(
+        id=entry.id,
+        owner_id=entry.user_id,
+        owner_username=_display_text(owner_username),
+        server_id=entry.server_id,
+        server_name=_display_text(entry.server_name) or "",
+        environment_id=entry.environment_id,
+        environment_name=_display_text(environment_name),
+        plan_id=entry.plan_id,
+        plan_name=_display_text(plan_name),
+        resources=AdminQueueResources(
+            cpu=entry.requested_cpu or 0,
+            memory_mib=ResourcePoolService._parse_memory(entry.requested_memory),
+            disk_mib=ResourcePoolService._parse_memory(entry.requested_disk),
+            gpu_count=entry.requested_gpu or 0,
+        ),
+        status=entry.status,
+        reason_code=_safe_reason_code(entry.reason_code),
+        position=position,
+        priority=entry.priority or 0,
+        requested_at=entry.requested_at,
+        started_at=entry.started_at,
+        failed_at=entry.failed_at,
+        expires_at=entry.expires_at,
+    )
 
 
 class QueueError(Exception):
@@ -237,7 +295,9 @@ class ServerQueueService:
         ``older_than`` accepts an explicit UTC cutoff. ``recovery_required``
         matches rows whose reason marks an unresolved launch. A ``starting``
         row is returned even when no operation is linked; this view never
-        claims, cancels, or requeues work.
+        claims, cancels, or requeues work. The summary applies the owner, age,
+        and recovery filters but not the status filter, so status counts stay
+        informative while a status chip is selected.
         """
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("Invalid admin queue limit")
@@ -245,55 +305,61 @@ class ServerQueueService:
             raise ValueError("Invalid admin queue offset")
         if age_days is not None and (type(age_days) is not int or not 0 <= age_days <= 3650):
             raise ValueError("Invalid admin queue age")
-        conditions = []
-        if statuses:
-            conditions.append(ServerQueue.status.in_(statuses))
+        filters = []
         if owner_id is not None:
-            conditions.append(ServerQueue.user_id == owner_id)
+            filters.append(ServerQueue.user_id == owner_id)
         requested_before = _requested_cutoff(age_days, older_than)
         if requested_before is not None:
-            conditions.append(ServerQueue.requested_at <= requested_before)
+            filters.append(ServerQueue.requested_at <= requested_before)
         if recovery_required is True:
-            conditions.append(ServerQueue.reason_code == "recovery_required")
+            filters.append(ServerQueue.reason_code == "recovery_required")
         elif recovery_required is False:
-            conditions.append(
+            filters.append(
                 or_(
                     ServerQueue.reason_code.is_(None),
                     ServerQueue.reason_code != "recovery_required",
                 )
             )
+        summary = await self._admin_summary(filters)
+
+        conditions = [*filters]
+        if statuses:
+            conditions.append(ServerQueue.status.in_(statuses))
         total = int(
             await self.db.scalar(select(func.count()).select_from(ServerQueue).where(*conditions))
             or 0
         )
-        entries = (
-            await self.db.scalars(
-                select(ServerQueue)
+        rows = (
+            await self.db.execute(
+                select(
+                    ServerQueue,
+                    User.username,
+                    EnvironmentTemplate.name,
+                    ServerPlan.name,
+                )
+                .outerjoin(User, User.id == ServerQueue.user_id)
+                .outerjoin(
+                    EnvironmentTemplate,
+                    EnvironmentTemplate.id == ServerQueue.environment_id,
+                )
+                .outerjoin(ServerPlan, ServerPlan.id == ServerQueue.plan_id)
                 .where(*conditions)
                 .order_by(ServerQueue.requested_at.asc().nulls_last(), ServerQueue.id.asc())
                 .offset(offset)
                 .limit(limit)
             )
         ).all()
+        entries = [row[0] for row in rows]
         positions = await self._pending_positions(entries)
         items = [
-            AdminQueueEntry(
-                id=entry.id,
-                owner_id=entry.user_id,
-                server_id=entry.server_id,
-                server_name=entry.server_name,
-                environment_id=entry.environment_id,
-                plan_id=entry.plan_id,
-                status=entry.status,
-                reason_code=_safe_reason_code(entry.reason_code),
+            _admin_entry(
+                entry,
+                owner_username=owner_username,
+                environment_name=environment_name,
+                plan_name=plan_name,
                 position=positions.get(entry.id) if entry.status == "pending" else None,
-                priority=entry.priority or 0,
-                requested_at=entry.requested_at,
-                started_at=entry.started_at,
-                failed_at=entry.failed_at,
-                expires_at=entry.expires_at,
             )
-            for entry in entries
+            for entry, owner_username, environment_name, plan_name in rows
         ]
         return AdminQueuePage(
             items=items,
@@ -303,6 +369,35 @@ class ServerQueueService:
                 total=total,
                 has_more=offset + len(items) < total,
             ),
+            summary=summary,
+        )
+
+    async def _admin_summary(self, filters: list) -> AdminQueueSummary:
+        """Aggregate status counts without the status filter.
+
+        All counts share the owner/age/recovery filters. ``total`` is the sum
+        of the six status counts; ``recovery_required`` is a reason-based
+        cross-status count and is not added to ``total`` again.
+        """
+        result = await self.db.execute(
+            select(
+                *[
+                    func.count().filter(ServerQueue.status == status).label(status)
+                    for status in _ADMIN_STATUSES
+                ],
+                func.count()
+                .filter(ServerQueue.reason_code == "recovery_required")
+                .label("recovery_required"),
+            )
+            .select_from(ServerQueue)
+            .where(*filters)
+        )
+        row = result.one()
+        counts = {status: int(getattr(row, status) or 0) for status in _ADMIN_STATUSES}
+        return AdminQueueSummary(
+            total=sum(counts.values()),
+            recovery_required=int(row.recovery_required or 0),
+            **counts,
         )
 
     async def cancel(self, queue_id: uuid.UUID, owner_id: uuid.UUID) -> ServerQueue:

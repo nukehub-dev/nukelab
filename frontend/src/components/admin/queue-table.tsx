@@ -5,9 +5,13 @@ import { AlertTriangle, Clock, Inbox, ListOrdered, ShieldCheck, Timer } from 'lu
 import { DataTable } from '../data/data-table'
 import { useIsDesktopViewport } from '../../hooks/use-is-desktop'
 import { Button } from '../ui/button'
+import { QueueResourceChips } from './queue-resources'
 import { QueueStatusPills } from './queue-status'
 import {
   isQueueRecoveryRequired,
+  queueEnvironmentLabel,
+  queueOwnerLabel,
+  queuePlanLabel,
   queueReasonPresentation,
   queueRelativeTimestampLabel,
   queueTimestampLabel,
@@ -36,12 +40,12 @@ interface AdminQueueTableProps {
 
 function QueueScopeCell({ entry }: { entry: AdminQueueEntry }) {
   return (
-    <div className="space-y-0.5 text-xs">
-      <div className="text-foreground">
-        Owner {shortQueueReference(entry.owner_id)} · Plan {shortQueueReference(entry.plan_id)}
+    <div className="max-w-64 space-y-0.5 text-xs">
+      <div className="break-words text-foreground">
+        Owner {queueOwnerLabel(entry)} · Plan {queuePlanLabel(entry)}
       </div>
-      <div className="text-muted-foreground">
-        Environment {shortQueueReference(entry.environment_id)}
+      <div className="break-words text-muted-foreground">
+        Environment {queueEnvironmentLabel(entry)}
         {entry.server_id
           ? ` · Server ${shortQueueReference(entry.server_id)}`
           : ' · No linked server'}
@@ -92,11 +96,13 @@ export function QueueMobileCard({ entry }: { entry: AdminQueueEntry }) {
       </div>
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span>Owner {shortQueueReference(entry.owner_id)}</span>
-        <span>Plan {shortQueueReference(entry.plan_id)}</span>
-        <span>Environment {shortQueueReference(entry.environment_id)}</span>
+        <span className="break-words">Owner {queueOwnerLabel(entry)}</span>
+        <span className="break-words">Plan {queuePlanLabel(entry)}</span>
+        <span className="break-words">Environment {queueEnvironmentLabel(entry)}</span>
         {entry.server_id && <span>Server {shortQueueReference(entry.server_id)}</span>}
       </div>
+
+      <QueueResourceChips resources={entry.resources} compact />
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1">
@@ -249,6 +255,12 @@ export function AdminQueueTable({
       header: () => columnHeader('Status'),
       enableSorting: false,
       cell: ({ row }) => <QueueStatusPills entry={row.original} />,
+    },
+    {
+      id: 'resources',
+      header: () => columnHeader('Resources'),
+      enableSorting: false,
+      cell: ({ row }) => <QueueResourceChips resources={row.original.resources} compact />,
     },
     {
       id: 'queue',

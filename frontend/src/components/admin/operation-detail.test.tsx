@@ -3,7 +3,11 @@
 
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { OperationDetailContent, OperationReconcileOutcome } from './operation-detail'
+import {
+  OperationDetailContent,
+  OperationReconcileOutcome,
+  OperationTargetSummary,
+} from './operation-detail'
 import { OperationErrorNotice } from './operation-error-notice'
 import { OperationStatusPills } from './operation-status'
 import type { AdminOperation, AdminOperationReconcileResult } from '../../types/admin-operations'
@@ -16,6 +20,9 @@ function operation(overrides: Partial<AdminOperation> = {}): AdminOperation {
     state: 'executing',
     action: 'create',
     owner_id: '22222222-2222-4222-8222-222222222222',
+    owner_username: 'alice',
+    target_type: 'server',
+    target_name: 'web-01',
     created_at: '2026-01-01T00:00:00',
     updated_at: '2026-01-01T00:01:00',
     finished_at: null,
@@ -64,6 +71,25 @@ describe('OperationStatusPills', () => {
   })
 })
 
+describe('OperationTargetSummary', () => {
+  it('uses the target name with kind and short ID as secondary identity', () => {
+    const html = renderToStaticMarkup(<OperationTargetSummary operation={operation()} />)
+
+    expect(html).toContain('web-01')
+    expect(html).toContain('Launch')
+    expect(html).toContain('11111111')
+  })
+
+  it('falls back to the operation kind when no target name is available', () => {
+    const html = renderToStaticMarkup(
+      <OperationTargetSummary operation={operation({ kind: 'backup', target_name: null })} />
+    )
+
+    expect(html).toContain('Backup')
+    expect(html).toContain('11111111')
+  })
+})
+
 describe('OperationDetailContent', () => {
   it('renders sanitized evidence without foreign paths or raw diagnostics', () => {
     const html = renderToStaticMarkup(
@@ -92,6 +118,29 @@ describe('OperationDetailContent', () => {
     expect(html).not.toContain('/srv/private/token')
     expect(html).not.toContain('unknown_counter')
     expect(html).toContain('no force or override control')
+  })
+
+  it('shows target and owner names with short-ID fallbacks only when names are missing', () => {
+    const named = renderToStaticMarkup(
+      <OperationDetailContent operation={operation()} canManage={false} />
+    )
+
+    expect(named).toContain('web-01')
+    expect(named).toContain('@alice')
+    expect(named).toContain('Target server')
+    expect(named).not.toContain('22222222')
+
+    const fallback = renderToStaticMarkup(
+      <OperationDetailContent
+        operation={operation({ target_name: null, target_type: null, owner_username: null })}
+        canManage={false}
+      />
+    )
+
+    expect(fallback).toContain('Target')
+    expect(fallback).toContain('22222222')
+    expect(fallback).toContain('Launch')
+    expect(fallback).not.toContain('@alice')
   })
 
   it('gates reconcile behind manage permission for an active operation', () => {

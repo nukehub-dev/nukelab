@@ -19,6 +19,8 @@ from app.models.server import Server
 from app.models.server_launch_operation import ServerLaunchOperation
 from app.models.server_launch_record import ServerLaunchRecord
 from app.models.server_queue import ServerQueue
+from app.models.volume import Volume
+from app.models.volume_backup import VolumeBackup
 from app.models.volume_operation import VolumeOperation
 from app.models.worker_heartbeat import WorkerHeartbeat
 from app.services.operation_reconciliation import ReconciliationService
@@ -30,7 +32,11 @@ from tests.services.test_operation_finalizer import (
     container_info,
     local_identity,
 )
-from tests.services.test_operation_reconciler import add_backup_row, add_minimal_launch
+from tests.services.test_operation_reconciler import (
+    add_backup_row,
+    add_minimal_launch,
+    add_restore_row,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -123,12 +129,21 @@ async def test_list_filters_pagination_and_sanitization(client, admin_token, db_
         str(backup.id),
     }
     recent = next(item for item in payload["items"] if item["id"] == str(recent_id))
+    launch_server = await db_session.get(Server, fixture.server_id, populate_existing=True)
     assert recent["state"] == "executing"
     assert recent["action"] == "create"
     assert recent["owner_id"] == str(test_user.id)
+    assert recent["owner_username"] == test_user.username
+    assert recent["target_type"] == "server"
+    assert recent["target_name"] == launch_server.name
     assert recent["recovery_required"] is False
     assert recent["heartbeat_age_seconds"] is not None
     assert recent["liveness"] is None
+
+    backup_item = next(item for item in payload["items"] if item["id"] == str(backup.id))
+    assert backup_item["owner_username"] == test_user.username
+    assert backup_item["target_type"] == "volume"
+    assert backup_item["target_name"] == "Source"
 
     text = json.dumps(payload)
     for forbidden in (
@@ -146,8 +161,6 @@ async def test_list_filters_pagination_and_sanitization(client, admin_token, db_
         mount["volume_name"],
         mount["mount_path"],
         str(fixture.volume_id),
-        operation.username,
-        test_user.username,
     ):
         assert forbidden not in text
 
@@ -218,11 +231,15 @@ async def test_detail_inspects_active_rows_without_leaking_payloads(
     )
     assert response.status_code == 200
     data = response.json()
+    launch_server = await db_session.get(Server, fixture.server_id, populate_existing=True)
     assert data["kind"] == "launch"
     assert data["id"] == str(fixture.operation_id)
     assert data["state"] == "executing"
     assert data["action"] == "create"
     assert data["owner_id"] == str(test_user.id)
+    assert data["owner_username"] == test_user.username
+    assert data["target_type"] == "server"
+    assert data["target_name"] == launch_server.name
     assert data["recovery_required"] is False
     assert data["liveness"] == "alive"
     assert data["proof_source"] == "worker_heartbeat"
@@ -243,8 +260,6 @@ async def test_detail_inspects_active_rows_without_leaking_payloads(
         mount["volume_name"],
         mount["mount_path"],
         str(fixture.volume_id),
-        operation.username,
-        test_user.username,
     ):
         assert forbidden not in text
 
@@ -272,6 +287,124 @@ async def test_detail_terminal_foreign_and_missing_rows(client, admin_token, db_
 
     invalid = await client.get(f"/api/admin/operations/unknown/{uuid.uuid4()}", headers=headers)
     assert invalid.status_code == 422
+
+
+async def test_list_and_detail_names_cover_all_operation_kinds(
+    client, admin_token, db_session, test_user
+):
+    launch = await add_launch(db_session, test_user)
+    launch_server = await db_session.get(Server, launch.server_id, populate_existing=True)
+    backup = await _backup(db_session, test_user)
+    restore = await add_restore_row(db_session, test_user, backup, status="completed")
+    fallback_volume = Volume(
+        name=f"fallback-source-{uuid.uuid4().hex}",
+        display_name="Fallback display",
+        owner_id=test_user.id,
+        visibility="private",
+        status="active",
+        size_bytes=0,
+        max_size_bytes=1024**3,
+    )
+    db_session.add(fallback_volume)
+    await db_session.flush()
+    fallback_backup = VolumeBackup(
+        volume_name=fallback_volume.name,
+        source_volume_id=fallback_volume.id,
+        source_display_name=None,
+        user_id=test_user.id,
+        status="failed",
+    )
+    missing_backup = VolumeBackup(
+        volume_name=f"missing-source-{uuid.uuid4().hex}",
+        source_volume_id=None,
+        source_display_name=None,
+        user_id=test_user.id,
+        status="failed",
+    )
+    db_session.add_all([fallback_backup, missing_backup])
+    await db_session.commit()
+    headers = auth(admin_token)
+
+    listed = await client.get("/api/admin/operations?limit=100", headers=headers)
+    assert listed.status_code == 200
+    items = {item["id"]: item for item in listed.json()["items"]}
+
+    launch_item = items[str(launch.operation_id)]
+    assert launch_item["owner_username"] == test_user.username
+    assert launch_item["target_type"] == "server"
+    assert launch_item["target_name"] == launch_server.name
+
+    backup_item = items[str(backup.id)]
+    assert backup_item["owner_username"] == test_user.username
+    assert backup_item["target_type"] == "volume"
+    assert backup_item["target_name"] == "Source"
+
+    restore_item = items[str(restore.id)]
+    assert restore_item["owner_username"] == test_user.username
+    assert restore_item["target_type"] == "volume"
+    assert restore_item["target_name"] == "Restored"
+
+    fallback_item = items[str(fallback_backup.id)]
+    assert fallback_item["target_type"] == "volume"
+    assert fallback_item["target_name"] == "Fallback display"
+
+    missing_item = items[str(missing_backup.id)]
+    assert missing_item["target_type"] == "volume"
+    assert missing_item["target_name"] is None
+
+    restore_detail = await client.get(
+        f"/api/admin/operations/restore/{restore.id}", headers=headers
+    )
+    assert restore_detail.status_code == 200
+    assert restore_detail.json()["owner_username"] == test_user.username
+    assert restore_detail.json()["target_type"] == "volume"
+    assert restore_detail.json()["target_name"] == "Restored"
+
+    fallback_detail = await client.get(
+        f"/api/admin/operations/backup/{fallback_backup.id}", headers=headers
+    )
+    assert fallback_detail.status_code == 200
+    assert fallback_detail.json()["target_type"] == "volume"
+    assert fallback_detail.json()["target_name"] == "Fallback display"
+
+    missing_detail = await client.get(
+        f"/api/admin/operations/backup/{missing_backup.id}", headers=headers
+    )
+    assert missing_detail.status_code == 200
+    assert missing_detail.json()["target_type"] == "volume"
+    assert missing_detail.json()["target_name"] is None
+
+    reconciled = await client.post(
+        f"/api/admin/operations/restore/{restore.id}/reconcile",
+        headers=headers,
+        json={"reason": "confirm the terminal restore is closed"},
+    )
+    assert reconciled.status_code == 200
+    assert reconciled.json()["applied"] is False
+    assert reconciled.json()["owner_username"] == test_user.username
+    assert reconciled.json()["target_type"] == "volume"
+    assert reconciled.json()["target_name"] == "Restored"
+
+
+async def test_operation_names_are_sanitized_and_bounded(
+    client, admin_token, db_session, test_user
+):
+    launch = await add_launch(db_session, test_user)
+    server = await db_session.get(Server, launch.server_id, populate_existing=True)
+    server.name = "  L\x01" + "x" * 150 + "\t  "
+    backup = await _backup(db_session, test_user, status="failed")
+    backup.source_display_name = "  B\n" + "y" * 150 + "  "
+    await db_session.commit()
+
+    response = await client.get("/api/admin/operations?limit=100", headers=auth(admin_token))
+    assert response.status_code == 200
+    items = {item["id"]: item for item in response.json()["items"]}
+    assert items[str(launch.operation_id)]["target_name"] == "L" + "x" * 119
+    assert items[str(backup.id)]["target_name"] == "B" + "y" * 119
+    assert len(items[str(launch.operation_id)]["target_name"]) == 120
+    assert len(items[str(backup.id)]["target_name"]) == 120
+    assert "\x01" not in response.text
+    assert "\n" not in response.text
 
 
 @pytest.mark.parametrize(
@@ -373,6 +506,10 @@ async def test_proof_backed_failure_applies_once_and_repeat_is_noop(
     assert data["proof_source"] == "graceful_marker"
     assert data["runtime_state"] == "absent"
     assert data["evidence_reason_code"] == "runtime_absent"
+    assert data["owner_username"] == test_user.username
+    assert data["target_type"] == "server"
+    owner_server = await db_session.get(Server, fixture.server_id, populate_existing=True)
+    assert data["target_name"] == owner_server.name
 
     operation = await db_session.get(
         ServerLaunchOperation, fixture.operation_id, populate_existing=True
@@ -421,6 +558,9 @@ async def test_proof_backed_failure_applies_once_and_repeat_is_noop(
     assert repeated_data["state"] == "failed"
     assert repeated_data["previous_state"] == "failed"
     assert repeated_data["terminal_state"] is None
+    assert repeated_data["owner_username"] == test_user.username
+    assert repeated_data["target_type"] == "server"
+    assert repeated_data["target_name"] == owner_server.name
 
     await db_session.refresh(operation)
     assert operation.state == "failed"
@@ -480,6 +620,9 @@ async def test_proof_backed_volume_failure_releases_once(
     assert data["proof_source"] == "runtime_inspection"
     assert data["runtime_state"] == "absent"
     assert data["evidence_reason_code"] == "helper_absent"
+    assert data["owner_username"] == test_user.username
+    assert data["target_type"] == "volume"
+    assert data["target_name"] == "Source"
 
     await db_session.refresh(backup)
     guard = await db_session.scalar(

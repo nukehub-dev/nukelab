@@ -8,13 +8,19 @@ import type {
   AdminQueueEntry,
   AdminQueueFilters,
   AdminQueuePage,
+  AdminQueueResources,
   AdminQueueStatus,
+  AdminQueueSummary,
 } from '../types/admin-queue'
 
 export const ADMIN_QUEUE_READ_PERMISSIONS = [
   PERMISSIONS.SERVERS_READ_ALL,
   PERMISSIONS.ADMIN_ACCESS,
 ] as const
+
+/** Owner labels come from the user directory, so the picker needs this grant. */
+export const ADMIN_QUEUE_OWNER_PICKER_PERMISSION = PERMISSIONS.USERS_READ
+export const ADMIN_QUEUE_ANY_OWNER_LABEL = 'Any owner'
 
 export interface AdminQueueAccess {
   canRead: boolean
@@ -120,8 +126,8 @@ export function shortQueueReference(value: unknown): string {
   return isQueueReference(value) ? value.slice(0, 8) : 'Unknown'
 }
 
-export function safeQueueServerName(value: unknown): string {
-  if (typeof value !== 'string') return 'Unnamed request'
+function safeQueueDisplayText(value: unknown, maximumLength = 120): string | null {
+  if (typeof value !== 'string') return null
   const cleaned = Array.from(value)
     .filter((character) => {
       const code = character.codePointAt(0) ?? 0
@@ -129,8 +135,147 @@ export function safeQueueServerName(value: unknown): string {
     })
     .join('')
     .trim()
-    .slice(0, 120)
-  return cleaned || 'Unnamed request'
+  if (!cleaned) return null
+  return Array.from(cleaned).slice(0, maximumLength).join('')
+}
+
+function safeQueueUsername(value: unknown): string | null {
+  const username = safeQueueDisplayText(value, 64)
+  if (!username) return null
+  return username.replace(/^@+/, '') || null
+}
+
+export function safeQueueServerName(value: unknown): string {
+  return safeQueueDisplayText(value) ?? 'Unnamed request'
+}
+
+/** Owner names are display-only; IDs remain the filter and API identity. */
+export function queueOwnerLabel(
+  entry: Pick<AdminQueueEntry, 'owner_id' | 'owner_username'>
+): string {
+  const username = safeQueueUsername(entry.owner_username)
+  return username ? `@${username}` : shortQueueReference(entry.owner_id)
+}
+
+export function queuePlanLabel(entry: Pick<AdminQueueEntry, 'plan_id' | 'plan_name'>): string {
+  return safeQueueDisplayText(entry.plan_name) ?? shortQueueReference(entry.plan_id)
+}
+
+export function queueEnvironmentLabel(
+  entry: Pick<AdminQueueEntry, 'environment_id' | 'environment_name'>
+): string {
+  return safeQueueDisplayText(entry.environment_name) ?? shortQueueReference(entry.environment_id)
+}
+
+export interface AdminQueueOwnerCandidate {
+  id: string
+  username?: string | null
+  display_name?: string | null
+  avatar_url?: string | null
+}
+
+export interface AdminQueueOwnerOption {
+  value: string
+  label: string
+  image?: string
+}
+
+function safeAvatarUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed && trimmed.length <= 2048 ? trimmed : undefined
+}
+
+/** Formats one directory user as `Display Name (@username)`. */
+export function queueOwnerOptionLabel(candidate: AdminQueueOwnerCandidate): string | null {
+  const username = safeQueueUsername(candidate.username)
+  const display = safeQueueDisplayText(candidate.display_name, 120) ?? username
+  if (!display) return null
+  return username ? `${display} (@${username})` : display
+}
+
+/**
+ * Builds bounded owner-picker options. Only UUID values can reach the queue
+ * filter, so directory rows without a valid user ID are omitted.
+ */
+export function queueOwnerOptions(
+  candidates: readonly AdminQueueOwnerCandidate[]
+): AdminQueueOwnerOption[] {
+  const options: AdminQueueOwnerOption[] = [{ value: '', label: ADMIN_QUEUE_ANY_OWNER_LABEL }]
+  for (const candidate of candidates) {
+    if (!isQueueReference(candidate.id)) continue
+    const label = queueOwnerOptionLabel(candidate)
+    if (!label) continue
+    const image = safeAvatarUrl(candidate.avatar_url)
+    options.push(image ? { value: candidate.id, label, image } : { value: candidate.id, label })
+  }
+  return options
+}
+
+export function adminQueueOwnerPickerAllowed(
+  hasPermission: (permission: string) => boolean
+): boolean {
+  return hasPermission(ADMIN_QUEUE_OWNER_PICKER_PERMISSION)
+}
+
+/** Keeps owner filtering UUID-only for both the picker and the manual input. */
+export function queueOwnerFilterValue(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed && isQueueReference(trimmed) ? trimmed : null
+}
+
+function boundedCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0
+  return Math.min(1_000_000_000, Math.max(0, Math.floor(value)))
+}
+
+function boundedResourceNumber(value: unknown, maximum: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0
+  return Math.min(maximum, Math.max(0, value))
+}
+
+export function emptyQueueSummary(): AdminQueueSummary {
+  return {
+    total: 0,
+    pending: 0,
+    scheduled: 0,
+    starting: 0,
+    started: 0,
+    failed: 0,
+    cancelled: 0,
+    recovery_required: 0,
+  }
+}
+
+export function sanitizeQueueSummary(value: unknown): AdminQueueSummary {
+  const summary =
+    value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {}
+  return {
+    total: boundedCount(summary.total),
+    pending: boundedCount(summary.pending),
+    scheduled: boundedCount(summary.scheduled),
+    starting: boundedCount(summary.starting),
+    started: boundedCount(summary.started),
+    failed: boundedCount(summary.failed),
+    cancelled: boundedCount(summary.cancelled),
+    recovery_required: boundedCount(summary.recovery_required),
+  }
+}
+
+export function sanitizeQueueResources(value: unknown): AdminQueueResources {
+  const resources =
+    value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {}
+  return {
+    cpu: boundedResourceNumber(resources.cpu, 1024),
+    memory_mib: boundedInteger(resources.memory_mib, 0, 100_000_000) ?? 0,
+    disk_mib: boundedInteger(resources.disk_mib, 0, 100_000_000) ?? 0,
+    gpu_count: boundedInteger(resources.gpu_count, 0, 1024) ?? 0,
+  }
 }
 
 function safeTimestamp(value: unknown): string | null {
@@ -155,10 +300,14 @@ export function sanitizeQueueEntry(entry: AdminQueueEntry): AdminQueueEntry {
   return {
     id: typeof entry.id === 'string' ? entry.id : '',
     owner_id: typeof entry.owner_id === 'string' ? entry.owner_id : '',
+    owner_username: safeQueueUsername(entry.owner_username),
     server_id: typeof entry.server_id === 'string' ? entry.server_id : null,
     server_name: safeQueueServerName(entry.server_name),
     environment_id: typeof entry.environment_id === 'string' ? entry.environment_id : '',
+    environment_name: safeQueueDisplayText(entry.environment_name),
     plan_id: typeof entry.plan_id === 'string' ? entry.plan_id : '',
+    plan_name: safeQueueDisplayText(entry.plan_name),
+    resources: sanitizeQueueResources(entry.resources),
     status: entry.status,
     reason_code: safeQueueReasonCode(entry.reason_code),
     position,
@@ -174,6 +323,7 @@ export function sanitizeQueuePage(page: AdminQueuePage): AdminQueuePage {
   const pagination = page?.pagination
   return {
     items: Array.isArray(page?.items) ? page.items.map(sanitizeQueueEntry) : [],
+    summary: sanitizeQueueSummary(page?.summary),
     pagination: {
       limit: boundedInteger(pagination?.limit, 1, 100) ?? 50,
       offset: boundedInteger(pagination?.offset, 0, 1000) ?? 0,

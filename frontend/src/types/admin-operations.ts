@@ -5,6 +5,7 @@ export type AdminOperationKind = 'launch' | 'backup' | 'restore'
 export type AdminOperationLiveness = 'alive' | 'stopped' | 'ambiguous'
 export type AdminOperationRuntimeState = 'present' | 'absent' | 'ambiguous'
 export type AdminOperationTerminalState = 'succeeded' | 'failed' | 'recovery_required'
+export type AdminOperationTargetType = 'server' | 'volume'
 
 export interface AdminOperation {
   kind: AdminOperationKind
@@ -12,6 +13,9 @@ export interface AdminOperation {
   state: string
   action: string | null
   owner_id: string | null
+  owner_username: string | null
+  target_type: AdminOperationTargetType | null
+  target_name: string | null
   created_at: string | null
   updated_at: string | null
   finished_at: string | null

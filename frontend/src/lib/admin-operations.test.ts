@@ -21,10 +21,14 @@ import {
   isAdminOperationActive,
   normalizeOperationReason,
   operationLivenessPresentation,
+  operationOwnerLabel,
   operationProofSourceLabel,
   operationReasonValidationError,
   operationRuntimePresentation,
   operationStatePresentation,
+  operationTargetLabel,
+  operationTargetName,
+  operationTargetTypeLabel,
   reconcileAdminOperation,
   sanitizeOperationCounters,
   sanitizeOperationDiagnostics,
@@ -38,6 +42,9 @@ function operation(overrides: Partial<AdminOperation> = {}): AdminOperation {
     state: 'executing',
     action: 'create',
     owner_id: '22222222-2222-4222-8222-222222222222',
+    owner_username: 'alice',
+    target_type: 'server',
+    target_name: 'web-01',
     created_at: '2026-01-01T00:00:00',
     updated_at: '2026-01-01T00:01:00',
     finished_at: null,
@@ -303,6 +310,31 @@ describe('operation presentation and sanitization', () => {
     })
     expect(operationProofSourceLabel('worker_heartbeat_missing')).toBe('Worker heartbeat missing')
     expect(operationProofSourceLabel('/srv/private/path')).toBe('Unavailable')
+  })
+
+  it('shows target and owner names with short-reference fallbacks', () => {
+    expect(operationTargetName(operation())).toBe('web-01')
+    expect(operationTargetLabel(operation())).toBe('web-01')
+    expect(operationOwnerLabel(operation())).toBe('@alice')
+    expect(operationTargetTypeLabel('server')).toBe('Server')
+    expect(operationTargetTypeLabel('volume')).toBe('Volume')
+    expect(operationTargetTypeLabel(null)).toBeNull()
+
+    const fallback = operation({
+      target_name: null,
+      target_type: null,
+      owner_username: null,
+    })
+    expect(operationTargetName(fallback)).toBeNull()
+    expect(operationTargetLabel(fallback)).toBe('Launch')
+    expect(operationOwnerLabel(fallback)).toBe('22222222')
+
+    const unsafe = operation({
+      target_name: '  bad\u0007target  ',
+      owner_username: '@bad\u0007owner',
+    })
+    expect(operationTargetLabel(unsafe)).toBe('badtarget')
+    expect(operationOwnerLabel(unsafe)).toBe('@badowner')
   })
 
   it('keeps only bounded allowlisted diagnostics and counters', () => {
