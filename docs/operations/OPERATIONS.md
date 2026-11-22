@@ -379,6 +379,13 @@ a background task that cannot run leaves its durable row for the next tick.
 migration fails, the command prints the exact restore command. Do not use
 `--no-backup` unless you have already taken an equivalent snapshot.
 
+On a first start against an empty database, `celery-worker` can log a
+`Worker journal schema is incompatible` critical while the backend is still
+creating the schema. The worker retries the handshake and the reconciliation
+task refuses journal work until the schema is ready. If the message persists
+after backend health and `alembic heads` shows one current head, stop the worker
+and investigate before admitting launch, backup, or restore work.
+
 Check the revision graph before deploying:
 
 ```bash

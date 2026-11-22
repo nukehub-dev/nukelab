@@ -827,14 +827,13 @@ verifies the runtime identity and volume data.
 - Static Compose audit (2026-11-22) parsed `compose.yml` and compared 48 spawn/runtime keys between `backend` and `celery-worker`: none are missing from `celery-worker`. `CONTAINER_HARDENING_ENABLED`, `DEV_MODE`, `APP_URL`/`PUBLIC_URL`, server-auth enablement/TTL/algorithm/rotation/rate-limit/audit, container-runtime, GPU, resource-pool, queue, registry and recovery expressions match. `SERVER_AUTH_SECRETS_DIR` is present on both containers and the shipped environment files set the same `/run/server-secrets` value; only the unset fallback differs (`/run/secrets` on the backend, `/run/server-secrets` on the worker), a pre-existing default inconsistency outside this finding.
 - Spawn-path audit: the only application call to `create_container` is `backend/app/container/spawner.py`; API launches, queue dispatch, scheduled start/restart, health auto-restart and owner/admin bulk start all reach it through `ServerLaunchService`/`ServerLifecycleService`. `backend/app/container/docker_driver.py` reads hardening settings when it builds the container config, so a correctly configured worker applies the same policy as the API.
 - `VOLUME_STORAGE_PATH=/tmp/nukelab-volumes-tahmid ./nukelabctl test backend tests/security/test_container_isolation.py -q` — 7 passed, 3 skipped (live-runtime isolation tests are opt-in). The new settings regression proves an explicit hardening enable survives the dev-mode default.
-- `frontend/e2e/combined-recovery.spec.ts` contains a queue-admitted container hardening assertion (`inspectContainerHardening` expects uid/gid 65532, `CapDrop: ["ALL"]`, read-only rootfs and `no-new-privileges`); it was not executed for this retest.
+- Live disposable-stack retest (2026-11-22): the combined real-stack suite queue-admitted a recreated server and directly inspected the running container. Container `a354261bae62` reported `user=65532:65532`, `CapDrop=["ALL"]`, read-only rootfs, and `no-new-privileges:true`; source and restored server containers showed the same values. The full combined suite passed 45/45 and the workspace suite passed 1/1.
 
-**Carried step:** Run the combined queue-admission scenario on an isolated
-disposable stack, then inspect the queue-admitted container with
-`./nukelabctl verify-hardening <container>` (or `docker inspect`) and repeat for a
-scheduled start and a health-restart spawn. Static parity and mocked driver
-tests cannot prove the running worker receives the environment or that the
-actual container is hardened.
+**Carried step:** Separately live-inspect a scheduled-start spawn and a
+health-restart spawn on an isolated stack. Both use the same `celery-worker`
+environment and the shared `spawner.py` → `docker_driver.py` path that the live
+queue-admission test exercised; the static parity audit covers their settings,
+but those two admission paths were not individually inspected at runtime.
 
 ### PENT-NKL-019: Admin bulk lifecycle bypassed cross-user grant and audit
 
