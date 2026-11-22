@@ -44,7 +44,12 @@ section.
   scans.
 - Operators get a read-only cross-owner queue view, and owners get deduplicated
   recovery attention/completion notifications plus a bounded daily reminder
-  for unresolved recovery-required work.
+  for unresolved recovery-required work. Queue rows include sanitized
+  owner/environment/plan names, requested resources and status summaries; the
+  owner filter uses a directory picker when the operator can read users.
+- Recovery operations show sanitized target and owner names, and environment
+  revision history supports loaded-page portability/revocation filters, search,
+  and copyable full IDs, fingerprints and manifest digests.
 - Recovery metrics and alerts cover worker-heartbeat freshness, recovery-scan
   health, stalled or recovery-required operations, and registry-verification
   gaps. Scan freshness is persisted so the backend scrape reports work that ran
@@ -65,6 +70,8 @@ section.
 
 ### Changed
 
+- Mobile page content and the bottom navigation dock respect iOS safe-area
+  insets, so the last controls remain scrollable above the dock.
 - Recovery scans now use partial indexes matching the active launch, backup and
   restore selection order. On a 100k/50k/50k seeded journal the three-query
   p95 dropped from 16.9 ms to 2.4 ms, so the 30-second scan no longer reads

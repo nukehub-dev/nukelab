@@ -336,7 +336,11 @@ host telemetry. Set `RESOURCE_POOL_CPU`, `RESOURCE_POOL_MEMORY_MIB` and
   `starting` with `recovery_required`.
 - **Administration → Queue** (`/admin/queue`) is a read-only cross-owner view. It
   requires `servers:read_all` plus `ADMIN_ACCESS` and a JWT session. There is no
-  admin cancel, retry, or requeue action.
+  admin cancel, retry, or requeue action. Rows show bounded owner/environment/plan
+  display names and requested CPU, memory, disk and GPU; the summary counts each
+  status while ignoring the status chip but honoring owner/age/recovery filters.
+  The owner picker is available only with `users:read`; otherwise the exact-UUID
+  filter remains.
 
 Monitor queue depth, expired requests and worker/Beat health. See
 [SERVER-LIFECYCLE.md](../architecture/SERVER-LIFECYCLE.md) for admission and
@@ -561,7 +565,10 @@ toolchain references under `require`, checks the exact local platform digest
 (pulling by digest under `on_demand`), captures or reuses the active revision, and
 audits the result. Revoke is idempotent, has no un-revoke, and requires explicit
 confirmation before removing the last selectable revision. Reads require
-`environment:read` plus `ADMIN_ACCESS`.
+`environment:read` plus `ADMIN_ACCESS`. The panel filters the loaded page by
+All/Registry verified/Local only/Revoked and searches IDs, fingerprints, images
+and verified references; copy controls copy full identifiers and digests without
+truncation. Server pagination is unchanged by these loaded-page filters.
 
 Portable fingerprints are computed only for registry-verified configurations. A
 cross-install portable manifest matches active revisions by that fingerprint
