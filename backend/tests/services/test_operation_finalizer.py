@@ -31,6 +31,7 @@ from app.models.volume_restore import VolumeRestore
 from app.models.worker_heartbeat import WorkerHeartbeat
 from app.services.operation_finalizer import OperationFinalizer
 from app.services.operation_reconciliation import (
+    PROOF_RECOVERY_ARTIFACT,
     Liveness,
     OperationKind,
     ReconcileDecision,
@@ -1225,6 +1226,35 @@ async def test_restore_success_uses_hook_without_attaching_destination(db_sessio
     assert restore.reserved_bytes == 0
     assert destination.status == "active"
     assert destination.size_bytes == 4
+    assert hooks.calls == [
+        ("restore", fixture.restore_id, fixture.fencing_token, TerminalState.SUCCEEDED)
+    ]
+    assert await finalizer.finalize(decision) is False
+    assert len(hooks.calls) == 1
+    assert driver.mutations == []
+
+
+@pytest.mark.asyncio
+async def test_restore_success_adopts_restoring_destination_with_complete_proof(
+    db_session, test_user
+):
+    fixture = await add_restore(db_session, test_user)
+    destination = await db_session.get(
+        Volume, fixture.destination_volume_id, populate_existing=True
+    )
+    assert destination is not None and destination.status == "restoring"
+    driver = FakeDriver()
+    artifacts = FakeArtifactInspector(metadata=completion_metadata())
+    decision = await inspect(db_session, driver, "restore", fixture.restore_id, artifacts)
+    assert decision.terminal_state is TerminalState.SUCCEEDED
+    assert decision.proof_source == PROOF_RECOVERY_ARTIFACT
+    hooks = RecordingVolumeHooks(db_session, complete_restore=True)
+    finalizer = OperationFinalizer(db_session, driver, volume_hooks=hooks)
+
+    assert await finalizer.finalize(decision) is True
+    restore = await db_session.get(VolumeRestore, fixture.restore_id, populate_existing=True)
+    assert restore.status == "completed"
+    assert restore.reserved_bytes == 0
     assert hooks.calls == [
         ("restore", fixture.restore_id, fixture.fencing_token, TerminalState.SUCCEEDED)
     ]

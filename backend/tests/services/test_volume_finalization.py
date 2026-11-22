@@ -816,8 +816,8 @@ async def test_reconciler_completes_proof_backed_restore_and_second_scan_is_noop
         db_session,
         test_user.id,
         backup,
-        destination_status="active",
-        destination_size=METADATA["logical_bytes"],
+        destination_status="restoring",
+        destination_size=0,
     )
     artifacts = FakeArtifacts(METADATA)
     driver = ReadOnlyDriver()

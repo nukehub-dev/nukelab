@@ -876,11 +876,15 @@ class ReconciliationService:
         )
         if volume is None:
             return _invalid_runtime("destination_missing")
-        if volume.status != "active":
+        # The helper may finish immediately before the executor dies. A
+        # `restoring` destination is activated by the completion hook from the
+        # verified metadata; requiring `active` here would strand a completed
+        # restore as recovery_required.
+        if volume.status not in ("restoring", "active"):
             return _invalid_runtime(
                 "destination_not_complete", {"destination_status": volume.status}
             )
-        if volume.size_bytes != metadata.get("logical_bytes"):
+        if volume.status == "active" and volume.size_bytes != metadata.get("logical_bytes"):
             return _invalid_runtime(
                 "destination_size_mismatch",
                 {

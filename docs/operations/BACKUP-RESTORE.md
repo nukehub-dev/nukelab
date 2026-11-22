@@ -346,9 +346,9 @@ and outstanding recovery operations first.
 Pending work survives broker delivery failure and is scanned for redelivery.
 Backup and restore execution refreshes the fenced operation heartbeat. Proof-backed
 completion is applied by the recovery reconciler only after completion metadata,
-archive checksum, helper termination and, for restore, an active destination of
-the recorded size are verified; the volume service still owns the completion
-primitive.
+archive checksum and helper termination are verified. A `restoring` destination is
+activated from the verified metadata; an already-active destination must match the
+recorded size. The volume service still owns the completion primitive.
 
 `recovery_required` means runtime termination or cleanup could not be proved.
 Retain the artifact, destination and operation guard while investigating. Admin →

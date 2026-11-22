@@ -195,9 +195,10 @@ liveness and proven runtime absence; a live executor is never failed from runtim
 health alone. A termination succeeds only when the runtime is absent and the
 predecessor is verified gone.
 Backup success requires helper termination plus completion metadata and an archive
-checksum; restore success also requires an active destination of the recorded
-size. Proof-backed volume success still goes through the recovery service's
-completion hook.
+checksum. Restore success requires the same verified completion metadata and
+helper termination; a `restoring` destination is activated from that metadata,
+while an already-active destination must match the recorded size. Proof-backed
+volume success still goes through the recovery service's completion hook.
 
 `operation_finalizer.py` is the only mutation boundary. It re-reads the journal
 row under admission and a row lock, verifies fence, identity and active state, and
