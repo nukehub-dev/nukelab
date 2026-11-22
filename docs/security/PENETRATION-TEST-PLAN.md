@@ -257,7 +257,7 @@ Phase 10: Remediation Support & Retest
 | CICD-04c | Cosign signature verification | `.github/workflows/security.yml` / downstream consumers | Future requirement once Cosign signing exists: verify with `cosign verify --certificate-identity-regexp` and enforce policy in deployment workflows |
 | CICD-05 | Workflow permissions | `.github/workflows/*.yml` | Minimal `permissions`, no `pull_request_target` abuse |
 | CICD-06 | Base image pinning | Dockerfiles | All external base images pinned by digest; verified strictly by the `Base Image Pinning` job in `.github/workflows/security.yml` and included in `Security Gate` |
-| CICD-07 | SBOM generation | CI artifacts | CycloneDX/SPDX SBOM produced per release |
+| CICD-07 | SBOM generation | CI artifacts | Deterministic CycloneDX SBOM produced for every published release image and attached as a build attestation; the release workflow verifies the SBOM and provenance predicates |
 
 ### 5.9 Phase 9 — WebSocket & Real-Time Channel Testing
 
