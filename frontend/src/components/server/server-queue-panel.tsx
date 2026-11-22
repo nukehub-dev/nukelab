@@ -471,7 +471,7 @@ function QueueTimeline({ entry }: { entry: ServerQueueEntry }) {
         : 'Time unavailable'
       : entry.status === 'starting'
         ? entry.reason_code === 'recovery_required'
-          ? 'Operator verification required'
+          ? 'Needs review'
           : 'In progress'
         : entry.status === 'failed'
           ? 'Did not complete'

@@ -25,6 +25,7 @@ import { OperationStatusPills } from '../components/admin/operation-status'
 import { OperationDetailDrawer } from '../components/admin/operation-detail'
 import { useAdminOperations } from '../hooks/use-admin-operations'
 import { useDataTable } from '../hooks/use-data-table'
+import { useIsDesktopViewport } from '../hooks/use-is-desktop'
 import { usePageGuard } from '../hooks/use-page-guard'
 import {
   ADMIN_OPERATION_READ_PERMISSIONS,
@@ -120,6 +121,7 @@ function AdminOperationsContent() {
   const hasAllPermissions = useAuthStore((state) => state.hasAllPermissions)
   const access = adminOperationAccess(hasAllPermissions)
   const density = useThemeStore((state) => state.density)
+  const isDesktop = useIsDesktopViewport()
 
   const { state: tableState, setPage, setLimit } = useDataTable({ defaultLimit: 20 })
   const [kindFilter, setKindFilter] = useState<KindFilter>('all')
@@ -147,6 +149,10 @@ function AdminOperationsContent() {
   const stateOptions = stateOptionsFor(kindFilter)
   const recoveryCount = operations.filter((operation) => operation.recovery_required).length
   const ambiguousCount = operations.filter((operation) => operation.liveness === 'ambiguous').length
+  const activeCount = operations.filter(
+    (operation) =>
+      !['succeeded', 'completed', 'failed', 'deleted', 'cancelled'].includes(operation.state)
+  ).length
 
   const clearFilters = () => {
     setKindFilter('all')
@@ -180,7 +186,12 @@ function AdminOperationsContent() {
             <div className="rounded-md bg-primary/10 p-1.5 text-primary">
               <Icon className="h-3.5 w-3.5" />
             </div>
-            <span className="text-sm font-medium">{kindLabel(operation.kind)}</span>
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">{kindLabel(operation.kind)}</p>
+              <p className="font-mono text-[10px] text-muted-foreground">
+                {shortOperationId(operation.id)}
+              </p>
+            </div>
           </div>
         )
       },
@@ -196,9 +207,12 @@ function AdminOperationsContent() {
       header: 'Action',
       enableSorting: false,
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
-          {operationActionLabel(row.original.action)}
-        </span>
+        <div className="space-y-0.5 text-sm text-muted-foreground">
+          <div>{operationActionLabel(row.original.action)}</div>
+          <div className="font-mono text-[10px]">
+            Owner {row.original.owner_id ? row.original.owner_id.slice(0, 8) : 'unknown'}
+          </div>
+        </div>
       ),
     },
     {
@@ -288,6 +302,12 @@ function AdminOperationsContent() {
           <span>Age: {operation.created_at ? formatRelativeTime(operation.created_at) : '—'}</span>
           <span>Heartbeat: {formatHeartbeatAge(operation.heartbeat_age_seconds)}</span>
         </div>
+        {operation.recovery_required && (
+          <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            Operator review required. The row and its protections stay in place until proof supports
+            a terminal transition.
+          </p>
+        )}
         <div className="text-xs text-muted-foreground">
           Updated: {operation.updated_at ? formatDate(operation.updated_at) : '—'}
         </div>
@@ -318,7 +338,7 @@ function AdminOperationsContent() {
     <>
       <ResourcePageLayout
         title="Recovery Operations"
-        subtitle="Review launch, backup, and restore evidence and reconcile only proof-backed outcomes"
+        subtitle="Proof-backed launch, backup, and restore evidence"
         icon={Wrench}
         backTo="/admin"
         stats={[
@@ -347,12 +367,12 @@ function AdminOperationsContent() {
             bgColor: ambiguousCount > 0 ? 'bg-amber-500/10' : 'bg-emerald-500/10',
           },
           {
-            title: 'Visible',
-            value: operations.length,
-            subtitle: 'Current page',
+            title: 'Active',
+            value: activeCount,
+            subtitle: 'On this page',
             icon: Clock,
-            iconColor: 'text-violet-400',
-            bgColor: 'bg-violet-500/10',
+            iconColor: activeCount > 0 ? 'text-blue-400' : 'text-emerald-400',
+            bgColor: 'bg-blue-500/10',
           },
         ]}
         actions={[
@@ -363,6 +383,17 @@ function AdminOperationsContent() {
           },
         ]}
       >
+        <div className="bubble flex items-start gap-3 p-4">
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Proof-only reconciliation</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Reconcile reruns the read-only inspector and applies only a proof-backed outcome.
+              Ambiguous evidence leaves the row protected; there is no force or override control.
+            </p>
+          </div>
+        </div>
+
         <div className="bubble space-y-3 p-4">
           <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
             <Filter className="h-3.5 w-3.5" />
@@ -459,6 +490,7 @@ function AdminOperationsContent() {
             emptyState={emptyState}
             mobileCardRenderer={mobileCardRenderer}
             enableRowSelection={false}
+            defaultMobileView={!isDesktop}
             density={density}
           />
         )}

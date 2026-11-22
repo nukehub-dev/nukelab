@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react'
 import { Activity, AlertTriangle, Clock, Filter, ListOrdered, ShieldCheck } from 'lucide-react'
 import { ResourcePageLayout } from '../layout/resource-page-layout'
 import { Button } from '../ui/button'
+import { Input } from '../ui/input'
 import { Select, SelectItem } from '../ui/select'
 import { AdminQueueTable } from './queue-table'
 import { useAdminQueue } from '../../hooks/use-admin-queue'
@@ -89,6 +90,7 @@ export function AdminQueuePageContent() {
   const pageCount = Math.max(1, Math.ceil(total / tableState.limit))
   const recoveryCount = entries.filter((entry) => isQueueRecoveryRequired(entry.reason_code)).length
   const startingCount = entries.filter((entry) => entry.status === 'starting').length
+  const pendingCount = entries.filter((entry) => entry.status === 'pending').length
 
   const clearFilters = () => {
     setSelectedStatuses([])
@@ -109,7 +111,7 @@ export function AdminQueuePageContent() {
   return (
     <ResourcePageLayout
       title="Server Queue"
-      subtitle="Read-only visibility into waiting, starting, and completed server requests"
+      subtitle="Read-only waiting, starting, and completed requests"
       icon={ListOrdered}
       backTo="/admin"
       stats={[
@@ -138,12 +140,12 @@ export function AdminQueuePageContent() {
           bgColor: recoveryCount > 0 ? 'bg-amber-500/10' : 'bg-emerald-500/10',
         },
         {
-          title: 'Visible',
-          value: entries.length,
-          subtitle: 'Current page',
-          icon: ShieldCheck,
-          iconColor: 'text-violet-400',
-          bgColor: 'bg-violet-500/10',
+          title: 'Pending',
+          value: pendingCount,
+          subtitle: 'On this page',
+          icon: Clock,
+          iconColor: pendingCount > 0 ? 'text-blue-400' : 'text-emerald-400',
+          bgColor: 'bg-blue-500/10',
         },
       ]}
       actions={[
@@ -234,7 +236,7 @@ export function AdminQueuePageContent() {
           </div>
           <div className="space-y-1">
             <span className="text-xs text-muted-foreground">Older than (UTC date)</span>
-            <input
+            <Input
               type="date"
               value={olderThanDate}
               data-testid="queue-older-than-filter"
@@ -244,12 +246,11 @@ export function AdminQueuePageContent() {
                 setAgeFilter('all')
                 setPage(1)
               }}
-              className="h-9 w-full rounded-lg border border-input bg-input/80 px-3 text-sm shadow-sm backdrop-blur-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
             />
           </div>
           <div className="space-y-1">
             <span className="text-xs text-muted-foreground">Owner ID</span>
-            <input
+            <Input
               type="text"
               value={ownerFilter}
               placeholder="Owner UUID"
@@ -260,7 +261,6 @@ export function AdminQueuePageContent() {
                 setOwnerFilter(event.target.value)
                 setPage(1)
               }}
-              className="h-9 w-full rounded-lg border border-input bg-input/80 px-3 text-sm shadow-sm backdrop-blur-sm focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
             />
             {!ownerIdValid && (
               <p className="text-[11px] text-amber-400">

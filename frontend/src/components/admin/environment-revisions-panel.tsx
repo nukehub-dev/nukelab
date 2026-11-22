@@ -160,6 +160,13 @@ export function EnvironmentRevisionsPanel({
   const { verifyArtifacts, revokeRevision } = useEnvironmentRevisionActions(environment.id)
 
   const revisions = revisionsQuery.data?.items ?? []
+  const verifiedCount = revisions.filter(
+    (revision) => revision.portability === 'registry_verified' && !revision.revoked
+  ).length
+  const localOnlyCount = revisions.filter(
+    (revision) => revision.portability === 'local_only' && !revision.revoked
+  ).length
+  const revokedCount = revisions.filter((revision) => revision.revoked).length
   const pagination = revisionsQuery.data?.pagination
   const listError = revisionsQuery.isError
     ? environmentRevisionErrorInfo(revisionsQuery.error)
@@ -274,6 +281,18 @@ export function EnvironmentRevisionsPanel({
             </div>
           ) : (
             <>
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-emerald-400">
+                  Verified {verifiedCount}
+                </span>
+                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-amber-400">
+                  Local only {localOnlyCount}
+                </span>
+                <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-red-400">
+                  Revoked {revokedCount}
+                </span>
+                <span className="text-muted-foreground">On this page</span>
+              </div>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-muted-foreground">
                   Newest first · immutable history · revoked revisions stay visible

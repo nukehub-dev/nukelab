@@ -6,6 +6,8 @@ import {
   AlertTriangle,
   Ban,
   Box,
+  ChevronDown,
+  ChevronUp,
   Clock,
   Folder,
   Fingerprint,
@@ -277,6 +279,16 @@ export function EnvironmentRevisionCard({
   highlighted = false,
   onRevoke,
 }: EnvironmentRevisionCardProps) {
+  const [configurationOpen, setConfigurationOpen] = useState(false)
+  const configuration = revision.configuration
+  const configurationSummary = [
+    configuration.packages.length ? `${configuration.packages.length} packages` : null,
+    configuration.ports.length ? `${configuration.ports.length} ports` : null,
+    configuration.volumes.length ? `${configuration.volumes.length} volumes` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
   return (
     <Card
       variant="bubble"
@@ -324,7 +336,35 @@ export function EnvironmentRevisionCard({
           {revision.toolchain && <ImageSummary label="Toolchain" image={revision.toolchain} />}
         </div>
 
-        <ConfigurationSummary configuration={revision.configuration} />
+        <div className="border-t border-border/50 pt-3">
+          <button
+            type="button"
+            onClick={() => setConfigurationOpen((open) => !open)}
+            aria-expanded={configurationOpen}
+            className="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <span className="inline-flex min-w-0 items-center gap-1.5">
+              <Box className="h-3.5 w-3.5 shrink-0" />
+              <span className="font-medium">Configuration</span>
+              {configurationSummary && (
+                <span className="truncate text-[11px] text-muted-foreground">
+                  {configurationSummary}
+                </span>
+              )}
+            </span>
+            <span className="inline-flex shrink-0 items-center gap-1">
+              {configurationOpen ? 'Hide' : 'Show'}
+              {configurationOpen ? (
+                <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+            </span>
+          </button>
+          <div className={cn('mt-2', !configurationOpen && 'hidden')}>
+            <ConfigurationSummary configuration={revision.configuration} />
+          </div>
+        </div>
         <Limitations limitations={revision.limitations} />
       </CardContent>
     </Card>

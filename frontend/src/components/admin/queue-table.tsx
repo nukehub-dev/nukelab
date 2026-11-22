@@ -1,12 +1,14 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { AlertTriangle, Inbox, ListOrdered, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Clock, Inbox, ListOrdered, ShieldCheck, Timer } from 'lucide-react'
 import { DataTable } from '../data/data-table'
+import { useIsDesktopViewport } from '../../hooks/use-is-desktop'
 import { Button } from '../ui/button'
 import { QueueStatusPills } from './queue-status'
 import {
   isQueueRecoveryRequired,
+  queueReasonPresentation,
   queueRelativeTimestampLabel,
   queueTimestampLabel,
   sanitizeQueueEntry,
@@ -32,42 +34,39 @@ interface AdminQueueTableProps {
   density?: 'compact' | 'comfortable'
 }
 
-function QueueReferenceLine({ entry }: { entry: AdminQueueEntry }) {
+function QueueScopeCell({ entry }: { entry: AdminQueueEntry }) {
   return (
     <div className="space-y-0.5 text-xs">
-      <div className="text-foreground">Owner {shortQueueReference(entry.owner_id)}</div>
-      <div className="text-muted-foreground">
-        {entry.server_id ? `Server ${shortQueueReference(entry.server_id)}` : 'No linked server'}
+      <div className="text-foreground">
+        Owner {shortQueueReference(entry.owner_id)} · Plan {shortQueueReference(entry.plan_id)}
       </div>
-    </div>
-  )
-}
-
-function QueueScopeLine({ entry }: { entry: AdminQueueEntry }) {
-  return (
-    <div className="space-y-0.5 text-xs">
-      <div className="text-foreground">Environment {shortQueueReference(entry.environment_id)}</div>
-      <div className="text-muted-foreground">Plan {shortQueueReference(entry.plan_id)}</div>
+      <div className="text-muted-foreground">
+        Environment {shortQueueReference(entry.environment_id)}
+        {entry.server_id
+          ? ` · Server ${shortQueueReference(entry.server_id)}`
+          : ' · No linked server'}
+      </div>
     </div>
   )
 }
 
 function QueuePositionLine({ entry }: { entry: AdminQueueEntry }) {
+  const queued = entry.status === 'pending' || entry.status === 'scheduled'
   const starting = entry.status === 'starting'
   return (
     <div className="space-y-0.5 text-xs">
       <div className="inline-flex items-center gap-1 text-foreground">
         <ListOrdered className="h-3 w-3" />
-        {entry.position !== null ? `Position ${entry.position}` : 'No queue position'}
+        {queued && entry.position !== null ? `Position ${entry.position}` : 'Not queued'}
       </div>
-      <div className="text-muted-foreground">Priority {entry.priority}</div>
+      {queued && <div className="text-muted-foreground">Priority {entry.priority}</div>}
       {starting && (
         <div className="flex items-start gap-1 text-amber-400/90">
           <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
           <span>
             {isQueueRecoveryRequired(entry.reason_code)
-              ? 'Awaiting operator verification; no admin cancel or retry is available.'
-              : 'No admin cancel or retry is available for starting requests.'}
+              ? 'Operator verification required; read-only.'
+              : 'Starting; no admin cancel or retry.'}
           </span>
         </div>
       )}
@@ -75,50 +74,70 @@ function QueuePositionLine({ entry }: { entry: AdminQueueEntry }) {
   )
 }
 
-function QueueTimeline({ entry }: { entry: AdminQueueEntry }) {
-  return (
-    <div className="space-y-0.5 text-xs" data-testid={`queue-timeline-${entry.id || 'unknown'}`}>
-      <div className="text-foreground">
-        Requested {queueRelativeTimestampLabel(entry.requested_at)}
-      </div>
-      <div className="text-muted-foreground">{queueTimestampLabel(entry.requested_at)}</div>
-      <div className="text-muted-foreground">Started {queueTimestampLabel(entry.started_at)}</div>
-      <div className="text-muted-foreground">Failed {queueTimestampLabel(entry.failed_at)}</div>
-      <div className="text-muted-foreground">Expires {queueTimestampLabel(entry.expires_at)}</div>
-    </div>
-  )
-}
-
 export function QueueMobileCard({ entry }: { entry: AdminQueueEntry }) {
+  const queued = entry.status === 'pending' || entry.status === 'scheduled'
+  const showRecovery = isQueueRecoveryRequired(entry.reason_code)
   return (
     <div className="space-y-3 p-4" data-testid={`admin-queue-card-${entry.id || 'unknown'}`}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{entry.server_name}</p>
-          <p className="font-mono text-[10px] text-muted-foreground">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-sm font-medium">{entry.server_name}</p>
+            <QueueStatusPills entry={entry} />
+          </div>
+          <p className="mt-1 font-mono text-[10px] text-muted-foreground">
             Request {shortQueueReference(entry.id)}
           </p>
         </div>
-        <QueueStatusPills entry={entry} />
       </div>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <QueueReferenceLine entry={entry} />
-        <QueueScopeLine entry={entry} />
-      </div>
-      <QueuePositionLine entry={entry} />
+
       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span className="col-span-2">
-          Requested {queueRelativeTimestampLabel(entry.requested_at)} ·{' '}
-          {queueTimestampLabel(entry.requested_at)}
-        </span>
-        <span>Started {queueTimestampLabel(entry.started_at)}</span>
-        <span>Failed {queueTimestampLabel(entry.failed_at)}</span>
-        <span>Expires {queueTimestampLabel(entry.expires_at)}</span>
+        <span>Owner {shortQueueReference(entry.owner_id)}</span>
+        <span>Plan {shortQueueReference(entry.plan_id)}</span>
+        <span>Environment {shortQueueReference(entry.environment_id)}</span>
+        {entry.server_id && <span>Server {shortQueueReference(entry.server_id)}</span>}
       </div>
-      <p className="text-[11px] text-muted-foreground">
-        Read-only request metadata. Request payloads, mounts, tokens, and environment values are
-        never shown here.
-      </p>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1">
+          <Clock className="h-3 w-3" />
+          Requested {queueRelativeTimestampLabel(entry.requested_at)}
+        </span>
+        {entry.expires_at && (
+          <span className="inline-flex items-center gap-1">
+            <Timer className="h-3 w-3" />
+            Expires {queueTimestampLabel(entry.expires_at)}
+          </span>
+        )}
+        {queued && entry.position !== null && entry.position > 0 && (
+          <span className="inline-flex items-center gap-1 font-medium text-foreground">
+            <ListOrdered className="h-3 w-3" />
+            Position {entry.position}
+          </span>
+        )}
+        {entry.started_at && (
+          <span className="inline-flex items-center gap-1">
+            Started {queueTimestampLabel(entry.started_at)}
+          </span>
+        )}
+      </div>
+
+      {showRecovery ? (
+        <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+          Awaiting operator verification; no admin cancel or retry is available, and the linked
+          operation remains protected.
+        </p>
+      ) : entry.status === 'failed' && entry.reason_code ? (
+        <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+          {queueReasonPresentation(entry.reason_code)?.label ?? 'Request failed'}
+        </p>
+      ) : (
+        entry.status === 'starting' && (
+          <p className="text-xs text-muted-foreground">
+            Starting work cannot be cancelled. Resolve it through operation reconciliation.
+          </p>
+        )
+      )}
     </div>
   )
 }
@@ -178,6 +197,7 @@ export function AdminQueueTable({
   onRetry,
   density = 'comfortable',
 }: AdminQueueTableProps) {
+  const isDesktop = useIsDesktopViewport()
   const items = entries.map(sanitizeQueueEntry)
 
   if (isError) {
@@ -210,10 +230,16 @@ export function AdminQueueTable({
       header: () => columnHeader('Request'),
       enableSorting: false,
       cell: ({ row }) => (
-        <div className="max-w-56 space-y-0.5">
+        <div className="max-w-64 space-y-0.5">
           <div className="truncate text-sm font-medium">{row.original.server_name}</div>
           <div className="font-mono text-[10px] text-muted-foreground">
             Request {shortQueueReference(row.original.id)}
+          </div>
+          <div className="text-[10px] text-muted-foreground">
+            Requested {queueRelativeTimestampLabel(row.original.requested_at)}
+            {row.original.expires_at
+              ? ` · Expires ${queueRelativeTimestampLabel(row.original.expires_at)}`
+              : ''}
           </div>
         </div>
       ),
@@ -226,27 +252,15 @@ export function AdminQueueTable({
     },
     {
       id: 'queue',
-      header: () => columnHeader('Position / priority'),
+      header: () => columnHeader('Position'),
       enableSorting: false,
       cell: ({ row }) => <QueuePositionLine entry={row.original} />,
     },
     {
-      id: 'references',
-      header: () => columnHeader('Owner / server'),
-      enableSorting: false,
-      cell: ({ row }) => <QueueReferenceLine entry={row.original} />,
-    },
-    {
       id: 'scope',
-      header: () => columnHeader('Plan / environment'),
+      header: () => columnHeader('Owner / scope'),
       enableSorting: false,
-      cell: ({ row }) => <QueueScopeLine entry={row.original} />,
-    },
-    {
-      id: 'timeline',
-      header: () => columnHeader('Timeline'),
-      enableSorting: false,
-      cell: ({ row }) => <QueueTimeline entry={row.original} />,
+      cell: ({ row }) => <QueueScopeCell entry={row.original} />,
     },
   ]
 
@@ -277,6 +291,7 @@ export function AdminQueueTable({
       emptyState={<QueueEmptyState hasFilters={hasFilters} onClearFilters={onClearFilters} />}
       mobileCardRenderer={(entry) => <QueueMobileCard entry={entry} />}
       enableRowSelection={false}
+      defaultMobileView={!isDesktop}
       density={density}
     />
   )
