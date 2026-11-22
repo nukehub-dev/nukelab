@@ -65,7 +65,7 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 
 - Backend unit/service/API tests and the coverage floor are wired into CI. Recovery inspection, finalization, reconciliation, queue recovery, registry verification and notification suites are part of the backend suite. Real daemon fixtures are separately opt-in with `--run-container-integration`; their presence does not establish browser or production acceptance.
 - Frontend CI runs Vitest plus the required Vite-only mocked-browser, disposable real-stack and workspace/IDE gateway browser jobs; the combined provenance/recovery/recreation acceptance run is enabled with `E2E_COMBINED=1`. Image publishing depends on those checks.
-- The combined provenance/offline-recovery/queued-recreation scenario is part of the local disposable-stack suite. A real-stack worker-crash exercise remains a release-verification gap; the recovery paths use proof-backed inspection rather than time-based takeover.
+- The combined provenance/offline-recovery/queued-recreation scenario passes on a local disposable Docker stack, and a real SIGKILL crash drill covers API launch, queue launch, backup, restore and stop. The recovery paths use proof-backed inspection rather than time-based takeover; GitHub-hosted runs remain the release evidence.
 - Load-test tooling exists; its presence does not establish current production capacity.
 
 ## Capability review
@@ -76,7 +76,7 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 | Reproducible environments | Complete | Approved immutable revisions/caches and verified generations; registry policy, exact platform-digest proof, optional digest pulls, portable fingerprints, sanitized export, recreation APIs/UI and combined real-runtime acceptance | Operator registry credentials/allowlist and preserved local-only artifacts; remote CI execution of the combined suite |
 | Database backup/restore | Complete | `scripts/manage.d/backup.sh`, `restore.sh`, `db-migrate.sh`; pre-migration snapshots; backend schema guard | Automated recovery drills and broader disaster-recovery policy |
 | User volume backup/restore | Complete | Owner-scoped offline private-volume admission/API/tasks/UI, bounded helper capture/restore, retention, restore pins, writer exclusion and proof-backed reconciliation (`volume_backup_service.py`, `operation_reconciler.py`, `services/volume-helper/`); combined real-stack restore and corrupt-artifact drill | Remote CI execution and operator-managed off-host storage policy |
-| Resource queue experience | Complete | Typed 202 acceptance, atomic API/worker admission, owner queue UI/pending cancellation, read-only admin queue view, `starting`-request mapping with orphan proof, GPU-aware waiting and rotating bounded dispatch | Remote CI execution and a real-stack queue-crash exercise |
+| Resource queue experience | Complete | Typed 202 acceptance, atomic API/worker admission, owner queue UI/pending cancellation, read-only admin queue view, `starting`-request mapping with orphan proof, GPU-aware waiting and rotating bounded dispatch; queue-admitted launch SIGKILL drill passed | Remote CI execution |
 | Batch scientific jobs | Future | Existing schedules support server start/stop/restart; Celery runs platform tasks | User command submissions, job records, exit status, logs, artifacts, retries, and parameter sweeps |
 | Workload secrets | Future | Platform signing keys, OAuth token encryption, and template environment variables already exist | Scoped credential storage, authorization, redaction, and workload injection; template variables are ordinary JSON, not a secret store |
 | Deployment automation | Partial | Tagged pulls, explicit restart workflow, migration snapshots, schema guard; rollback via pinned image plus snapshot restore | Automated health verification and traffic cutover; zero-downtime deployment is not implemented |
@@ -87,9 +87,9 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 
 Queue reliability, reproducible environments, private offline volume recovery, registry verification and frontend test CI are implemented. Remaining work is verification, operations and the deferred capabilities below.
 
-1. **Exercise recovery operations (In Progress)** — Run worker-crash and helper-interruption drills against a disposable stack, including admin reconcile and `./nukelabctl doctor`.
+1. **Release verification (In Progress)** — Run the prepared 2.3.0 branch through GitHub-hosted `CI Gate`/`Security Gate`, protect the release tag, and verify published image/SBOM attestations.
 2. **Operate registry verification (In Progress)** — Configure registry credentials/allowlists, verify revisions, and retain exact-digest artifacts needed for `preload_only` deployments.
-3. **Data recovery drills (In Progress)** — Verify database restore and private-volume recovery in an isolated environment, including the 2.3.0 rollback path with a pinned image and snapshot stamp.
+3. **Data recovery drills (In Progress)** — Verify the production rollback path in the target environment with a pinned image and snapshot stamp; the disposable database and private-volume drills have passed locally.
 4. **Batch jobs** — Add a minimal command-based job lifecycle, then parameter sweeps after single jobs are reliable.
 5. **Scoped workload secrets** — Separate credentials from ordinary template configuration; choose the storage/integration approach during design.
 6. **Public-launch readiness** — Independent penetration assessment and a verified deployment/recovery procedure.

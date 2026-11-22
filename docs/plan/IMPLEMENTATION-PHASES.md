@@ -92,8 +92,9 @@ This document records the original v2.0 implementation plan and current delivery
 
 ### Remaining delivery gaps
 
-- Remote-runner execution of the combined acceptance suite: release verification; the individual required frontend browser jobs are wired into CI
-- Real-stack worker-crash and helper-interruption exercises: release verification; unit/service recovery coverage exists
+- Remote-runner execution of the combined acceptance suite: the local disposable-stack combined and workspace suites pass; GitHub-hosted runs still provide the release evidence
+- GitHub repository enforcement: `CI Gate`/`Security Gate` required checks, protected signed tags, and signed-commit enforcement are maintainer-owned settings
+- Podman parity: registry pulls, hardening and crash recovery are verified on Docker 29.9.2; Podman remains untested
 - Automated deployment health verification and traffic cutover: Future; `update` prepares images and instructs the operator to restart, and rollback is an operator procedure using a pinned image plus snapshot restore
 - Scheduled base-image digest refresh: the weekly review opens or updates a tracked issue, but updating digests remains a reviewed pull request
 

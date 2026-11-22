@@ -131,13 +131,13 @@ Container Registry instead:
 2. Pin the version you want to deploy in `.env`:
 
    ```env
-   NUKELAB_VERSION=2.2.0
+   NUKELAB_VERSION=2.3.0
    ```
 
    Or pin only the image tag:
 
    ```env
-   NUKELAB_IMAGE_TAG=2.2.0
+   NUKELAB_IMAGE_TAG=2.3.0
    ```
 
    See `.env.example` for the full description of both variables.
