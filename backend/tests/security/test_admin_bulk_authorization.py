@@ -6,7 +6,10 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlalchemy import select
 
+from app.models.activity_log import ActivityLog
+from app.models.notification import Notification
 from app.models.server import Server
 
 
@@ -87,3 +90,51 @@ async def test_admin_bulk_requires_reason_and_audit_for_foreign_servers(
     assert accepted.json()["results"]["success"] == [sid]
     audit.assert_awaited_once()
     action.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_admin_bulk_writes_cross_user_audit_and_owner_notification(
+    client, admin_token, admin_user, test_user, db_session
+):
+    server = Server(
+        name="audited-bulk-target",
+        user_id=test_user.id,
+        status="stopped",
+        container_id="audited-bulk-container",
+    )
+    db_session.add(server)
+    await db_session.commit()
+    reason = "Cross-user maintenance with owner notification"
+
+    with patch("app.api.servers._perform_server_start", new_callable=AsyncMock) as action:
+        response = await client.post(
+            "/api/admin/servers/bulk-action",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"action": "start", "server_ids": [str(server.id)], "reason": reason},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["results"]["success"] == [str(server.id)]
+    action.assert_awaited_once()
+    activity = await db_session.scalar(
+        select(ActivityLog)
+        .where(
+            ActivityLog.action == "server.bulk_start",
+            ActivityLog.target_id == server.id,
+            ActivityLog.actor_id == admin_user.id,
+        )
+        .execution_options(populate_existing=True)
+    )
+    assert activity is not None
+    assert activity.details["reason"] == reason
+    notification = await db_session.scalar(
+        select(Notification)
+        .where(
+            Notification.user_id == test_user.id,
+            Notification.action_url == f"/servers/{server.id}",
+        )
+        .execution_options(populate_existing=True)
+    )
+    assert notification is not None
+    assert notification.extra_data["event_key"] == "server_accessed"
+    assert reason in notification.message
