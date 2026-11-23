@@ -208,7 +208,8 @@ Prefer `require_permissions` for simple endpoint-level checks. Use `PermissionCh
 ./nukelabctl test backend
 ```
 
-- Coverage floor is **94%** (`--cov-fail-under=94` in `test backend --coverage`, run by CI). The suite currently sits at ~96%; keep it at or above the floor — raise the floor, never lower it.
+- Coverage floor is **94%** (`--cov-fail-under=94` in `test backend --coverage`, run by CI). Keep the suite at or above the floor — raise the floor, never lower it.
+- HTTP server tests must not depend on external registry availability. The shared `server_api_runtime` fixture pins the verification policy off and mocks exact-digest pulls, so the suite behaves the same with `REGISTRY_VERIFICATION_POLICY=prefer` in CI and `off` locally.
 
 ## Child NAD Index
 

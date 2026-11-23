@@ -4,12 +4,14 @@
 import base64
 import json
 import os
+from pathlib import Path
 
 import pytest
 
 from app.services.registry_config import (
     CREDENTIAL_HELPERS_UNSUPPORTED,
     CREDENTIALS_FILE_MALFORMED,
+    CREDENTIALS_FILE_UNREADABLE,
     RegistryCredentialProvider,
     parse_allowed_hosts,
 )
@@ -55,6 +57,10 @@ class TestAllowedHosts:
     def test_malformed_entries_raise_a_clear_error(self, value):
         with pytest.raises(ValueError, match="REGISTRY_ALLOWED_HOSTS"):
             parse_allowed_hosts(value)
+
+    def test_non_string_value_raises_a_clear_error(self):
+        with pytest.raises(ValueError, match="comma-separated string"):
+            parse_allowed_hosts(None)  # type: ignore[arg-type]
 
 
 class TestCredentialProvider:
@@ -279,3 +285,158 @@ class TestCredentialProvider:
         assert password not in repr(provider)
         assert password not in repr(provider.status())
         assert password not in str(provider.status().limitations)
+
+    def test_non_string_path_is_rejected(self):
+        with pytest.raises(TypeError, match="credentials_file"):
+            RegistryCredentialProvider(123)  # type: ignore[arg-type]
+
+    def test_invalid_registry_names_are_anonymous(self, tmp_path):
+        path = tmp_path / "config.json"
+        _write(path, {"auths": {"ghcr.io": {"auth": _auth("alice", "secret")}}})
+        provider = RegistryCredentialProvider(str(path))
+
+        for registry in ("", "bad host", "ftp://ghcr.io", "https://user@ghcr.io"):
+            assert provider.credentials_for(registry) is None
+
+    def test_unreadable_path_is_anonymous_with_a_limitation(self, tmp_path, monkeypatch):
+        path = tmp_path / "config.json"
+        original = Path.stat
+
+        def denied(self, *args, **kwargs):
+            if self == path:
+                raise PermissionError("denied")
+            return original(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "stat", denied)
+        provider = RegistryCredentialProvider(str(path))
+
+        assert provider.credentials_for("ghcr.io") is None
+        assert provider.status().limitations == (CREDENTIALS_FILE_UNREADABLE,)
+
+    def test_directory_path_is_anonymous_with_a_limitation(self, tmp_path):
+        directory = tmp_path / "credentials"
+        directory.mkdir()
+        provider = RegistryCredentialProvider(str(directory))
+
+        assert provider.credentials_for("ghcr.io") is None
+        assert provider.status().limitations == (CREDENTIALS_FILE_UNREADABLE,)
+
+    def test_oversized_file_is_malformed(self, tmp_path):
+        path = tmp_path / "config.json"
+        path.write_bytes(b"{" + b" " * (1024 * 1024) + b"}")
+        provider = RegistryCredentialProvider(str(path))
+
+        assert provider.credentials_for("ghcr.io") is None
+        assert provider.status().limitations == (CREDENTIALS_FILE_MALFORMED,)
+
+    def test_non_object_document_is_malformed(self, tmp_path):
+        path = tmp_path / "config.json"
+        _write(path, ["ghcr.io"])
+        provider = RegistryCredentialProvider(str(path))
+
+        assert provider.credentials_for("ghcr.io") is None
+        assert provider.status().limitations == (CREDENTIALS_FILE_MALFORMED,)
+
+    def test_credential_helper_fields_with_wrong_types_are_malformed(self, tmp_path):
+        path = tmp_path / "config.json"
+        _write(path, {"credsStore": 1, "credHelpers": ["ghcr.io"]})
+        provider = RegistryCredentialProvider(str(path))
+
+        assert provider.credentials_for("ghcr.io") is None
+        assert set(provider.status().limitations) == {
+            CREDENTIAL_HELPERS_UNSUPPORTED,
+            CREDENTIALS_FILE_MALFORMED,
+        }
+
+    def test_missing_auths_is_anonymous(self, tmp_path):
+        path = tmp_path / "config.json"
+        _write(path, {"credsStore": ""})
+        provider = RegistryCredentialProvider(str(path))
+
+        assert provider.credentials_for("ghcr.io") is None
+        assert provider.status().limitations == ()
+
+    def test_auth_entries_are_bounded(self, tmp_path):
+        path = tmp_path / "config.json"
+        _write(
+            path,
+            {
+                "auths": {
+                    f"registry-{index}.example.com": {"username": "u", "password": "p"}
+                    for index in range(1025)
+                }
+            },
+        )
+        provider = RegistryCredentialProvider(str(path))
+
+        assert provider.credentials_for("registry-0.example.com") is not None
+        assert CREDENTIALS_FILE_MALFORMED in provider.status().limitations
+
+    def test_invalid_registry_keys_and_entries_are_skipped(self, tmp_path):
+        path = tmp_path / "config.json"
+        _write(
+            path,
+            {
+                "auths": {
+                    "": {"username": "empty-key", "password": "p"},
+                    "bad host": {"username": "bad-key", "password": "p"},
+                    "null.example.com": None,
+                    "string.example.com": "not-an-entry",
+                    "ghcr.io": {"username": "alice", "password": "valid"},
+                }
+            },
+        )
+        provider = RegistryCredentialProvider(str(path))
+
+        credentials = provider.credentials_for("ghcr.io")
+        assert credentials is not None
+        assert credentials.username == "alice"
+        assert CREDENTIALS_FILE_MALFORMED in provider.status().limitations
+
+    def test_malformed_auth_fields_are_skipped(self, tmp_path):
+        path = tmp_path / "config.json"
+        _write(
+            path,
+            {
+                "auths": {
+                    "non-string.example.com": {"auth": 123},
+                    "empty.example.com": {"auth": ""},
+                    "not-base64.example.com": {"auth": "!!!not-base64!!!"},
+                    "oversized.example.com": {"auth": "A" * 16385},
+                    "oversized-decoded.example.com": {
+                        "auth": base64.b64encode(b"a" * 8193).decode()
+                    },
+                    "no-colon.example.com": {"auth": base64.b64encode(b"alice").decode()},
+                    "bad-utf8.example.com": {"auth": base64.b64encode(b"\xff\xff").decode()},
+                    "empty-user.example.com": {"auth": base64.b64encode(b":").decode()},
+                    "ghcr.io": {"username": "alice", "password": "valid"},
+                }
+            },
+        )
+        provider = RegistryCredentialProvider(str(path))
+
+        credentials = provider.credentials_for("ghcr.io")
+        assert credentials is not None
+        assert credentials.username == "alice"
+        assert CREDENTIALS_FILE_MALFORMED in provider.status().limitations
+
+    def test_invalid_registry_key_shapes_are_skipped(self, tmp_path):
+        path = tmp_path / "config.json"
+        _write(
+            path,
+            {
+                "auths": {
+                    "ftp://ghcr.io": {"username": "a", "password": "p"},
+                    "https://": {"username": "b", "password": "p"},
+                    "https://user@ghcr.io": {"username": "c", "password": "p"},
+                    "\u0001ghcr.io": {"username": "d", "password": "p"},
+                    "ghcr.io": {"username": "alice", "password": "valid"},
+                }
+            },
+        )
+        provider = RegistryCredentialProvider(str(path))
+
+        credentials = provider.credentials_for("ghcr.io")
+        assert credentials is not None
+        assert credentials.username == "alice"
+        assert CREDENTIALS_FILE_MALFORMED in provider.status().limitations

@@ -1472,3 +1472,319 @@ def test_runtime_artifact_inspector_verifies_archive_checksum(monkeypatch, tmp_p
     )
     archive.unlink()
     assert inspector.backup_archive_matches(backup_id=backup_id, metadata=metadata) is False
+
+
+@pytest.mark.asyncio
+async def test_observe_liveness_bounds_kind_and_operation_id(db_session):
+    service = ReconciliationService(db_session, FakeDriver())
+
+    with pytest.raises(ValueError, match="Unsupported operation kind"):
+        await service.observe_liveness("unknown", uuid.uuid4())
+    with pytest.raises(ValueError, match="Invalid operation id"):
+        await service.observe_liveness("launch", "not-a-uuid")
+
+    assert await service.observe_liveness("launch", uuid.uuid4()) is Liveness.AMBIGUOUS
+
+
+def test_artifact_maximum_rejects_invalid_bounds_and_clamps(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.services import operation_reconciliation as module
+
+    monkeypatch.setattr(settings, "volume_backup_max_logical_bytes", 1000)
+    invalid = SimpleNamespace(max_logical_bytes=0, max_size_bytes=-1)
+    assert module._artifact_maximum(invalid, OperationKind.BACKUP) is None
+    assert module._artifact_maximum(invalid, OperationKind.RESTORE) is None
+
+    bounded = SimpleNamespace(max_logical_bytes=500, max_size_bytes=5000)
+    assert module._artifact_maximum(bounded, OperationKind.BACKUP) == 500
+    assert module._artifact_maximum(bounded, OperationKind.RESTORE) == 1000
+
+
+def test_freshness_requires_a_timestamp():
+    from app.services import operation_reconciliation as module
+
+    assert module._is_fresh(None, utc_now()) is False
+
+
+def test_verified_digest_requires_repository_proof(monkeypatch):
+    from app.schemas.environment_manifest import ImageIdentity
+    from app.services import operation_reconciliation as module
+
+    approved = ImageIdentity.model_validate(verified_identity())
+    local = {"repository_digests": [VERIFIED_REFERENCE]}
+    assert module._verified_digest_is_local(approved, local) is True
+    assert module._verified_digest_is_local(approved, {"repository_digests": "bad"}) is False
+    assert module._verified_digest_is_local(approved, {"repository_digests": [1]}) is False
+    assert (
+        module._verified_digest_is_local(
+            approved,
+            {"repository_digests": ["other.example/runtime@" + MANIFEST_DIGEST]},
+        )
+        is False
+    )
+    monkeypatch.setattr(
+        module,
+        "parse_reference",
+        lambda value: (_ for _ in ()).throw(ValueError("bad reference")),
+    )
+    assert module._verified_digest_is_local(approved, local) is False
+
+
+@pytest.mark.asyncio
+async def test_runtime_image_verification_distinguishes_each_failure(db_session, test_user):
+    from types import SimpleNamespace
+
+    rows = await add_launch(db_session, test_user)
+    driver = FakeDriver()
+    service = ReconciliationService(db_session, driver)
+    operation = SimpleNamespace(revision_id=rows.revision.id)
+
+    assert await service._verify_runtime_image(operation, {}) == "runtime_image_unresolved"
+    assert (
+        await service._verify_runtime_image(operation, {"Image": "missing"})
+        == "runtime_image_unresolved"
+    )
+    assert (
+        await service._verify_runtime_image(operation, {"Image": 42}) == "runtime_image_unresolved"
+    )
+
+    driver.images[LOCAL_ID] = local_identity()
+    assert await service._verify_runtime_image(operation, {"Image": LOCAL_ID}) is None
+
+    driver.images[LOCAL_ID] = local_identity(local_id=OTHER_ID)
+    assert (
+        await service._verify_runtime_image(operation, {"Image": LOCAL_ID})
+        == "runtime_image_mismatch"
+    )
+
+    driver.images[LOCAL_ID] = local_identity(architecture="arm64")
+    assert (
+        await service._verify_runtime_image(operation, {"Image": LOCAL_ID})
+        == "runtime_platform_mismatch"
+    )
+
+    operation.revision_id = None
+    assert await service._verify_runtime_image(operation, {"Image": LOCAL_ID}) == "revision_missing"
+
+    invalid = EnvironmentRevision(
+        template_id=rows.revision.template_id,
+        fingerprint="f" * 64,
+        template_fingerprint="e" * 64,
+        configuration={},
+        runtime_identity={},
+        revoked=True,
+    )
+    db_session.add(invalid)
+    await db_session.flush()
+    operation.revision_id = invalid.id
+    assert await service._verify_runtime_image(operation, {"Image": LOCAL_ID}) == "revision_invalid"
+
+
+@pytest.mark.asyncio
+async def test_generation_verification_follows_recorded_history(db_session, test_user):
+    from types import SimpleNamespace
+
+    rows = await add_launch(db_session, test_user)
+    service = ReconciliationService(db_session, FakeDriver())
+    operation = SimpleNamespace(server_id=rows.server.id, action="create", generation=1)
+
+    assert await service._verify_generation(operation) is None
+
+    operation.generation = 2
+    assert await service._verify_generation(operation) == "generation_mismatch"
+    operation.generation = None
+    assert await service._verify_generation(operation) == "generation_missing"
+
+    operation.action = "restart"
+    operation.generation = 1
+    assert await service._verify_generation(operation) is None
+    operation.generation = 2
+    assert await service._verify_generation(operation) == "generation_mismatch"
+
+    db_session.add(
+        ServerLaunchRecord(
+            server_id=rows.server.id,
+            user_id=test_user.id,
+            revision_id=rows.revision.id,
+            generation=1,
+            manifest={},
+            actual_runtime_identity=local_identity(),
+        )
+    )
+    await db_session.flush()
+    assert await service._verify_generation(operation) is None
+    operation.generation = 3
+    assert await service._verify_generation(operation) == "generation_mismatch"
+
+
+@pytest.mark.asyncio
+async def test_predecessor_observation_distinguishes_running_stopped_and_ambiguous(
+    db_session, test_user
+):
+    from types import SimpleNamespace
+
+    rows = await add_launch(db_session, test_user)
+    driver = FakeDriver()
+    service = ReconciliationService(db_session, driver)
+    operation = SimpleNamespace(previous_container_id=None, server_id=rows.server.id)
+
+    assert await service._predecessor_observation(operation) == "absent"
+
+    container_id = f"predecessor-{uuid.uuid4().hex}"
+    operation.previous_container_id = container_id
+    driver.containers[container_id] = container_info(
+        f"other-{uuid.uuid4().hex}",
+        server_id=rows.server.id,
+        launch_id=uuid.uuid4(),
+    )
+    assert await service._predecessor_observation(operation) == "ambiguous"
+
+    driver.containers[container_id] = {
+        "Id": container_id,
+        "Config": {"Labels": {}},
+        "State": {"Running": True},
+    }
+    assert await service._predecessor_observation(operation) == "ambiguous"
+
+    driver.containers[container_id] = {
+        "Id": container_id,
+        "Config": {"Labels": {"nukelab.server.id": str(rows.server.id)}},
+        "State": {"Running": True},
+    }
+    assert await service._predecessor_observation(operation) == "running"
+
+    driver.containers[container_id]["State"] = {"Running": False}
+    assert await service._predecessor_observation(operation) == "stopped"
+
+    driver.containers[container_id]["State"] = {}
+    assert await service._predecessor_observation(operation) == "ambiguous"
+
+
+@pytest.mark.asyncio
+async def test_helper_observation_requires_exact_labels_and_exit_state(db_session, test_user):
+    rows = await add_backup(db_session, test_user)
+    driver = FakeDriver()
+    service = ReconciliationService(db_session, driver)
+    name = f"nukelab-recovery-{rows.backup.id}"
+
+    assert (
+        await service._helper_observation(rows.backup, OperationKind.BACKUP, rows.backup.id)
+        == "absent"
+    )
+
+    helper_id = f"helper-{uuid.uuid4().hex}"
+    driver.named[name] = helper_id
+    driver.containers[helper_id] = {
+        "Id": f"other-{uuid.uuid4().hex}",
+        "Config": {"Labels": {}},
+        "State": {"Running": False, "ExitCode": 0},
+    }
+    assert (
+        await service._helper_observation(rows.backup, OperationKind.BACKUP, rows.backup.id)
+        == "unavailable"
+    )
+
+    labels = {
+        "nukelab.recovery.operation": str(rows.backup.id),
+        "nukelab.recovery.fence": str(rows.backup.fencing_token),
+        "nukelab.recovery.backup": str(rows.backup.id),
+    }
+    driver.containers[helper_id] = {
+        "Id": helper_id,
+        "Config": {"Labels": dict(labels)},
+        "State": {"Running": True},
+    }
+    assert (
+        await service._helper_observation(rows.backup, OperationKind.BACKUP, rows.backup.id)
+        == "running"
+    )
+
+    driver.containers[helper_id]["State"] = {"Running": "no"}
+    assert (
+        await service._helper_observation(rows.backup, OperationKind.BACKUP, rows.backup.id)
+        == "unavailable"
+    )
+
+    driver.containers[helper_id]["State"] = {"Running": False, "ExitCode": 1}
+    assert (
+        await service._helper_observation(rows.backup, OperationKind.BACKUP, rows.backup.id)
+        == "failed"
+    )
+
+    driver.containers[helper_id]["State"] = {"Running": False, "ExitCode": 0}
+    assert (
+        await service._helper_observation(rows.backup, OperationKind.BACKUP, rows.backup.id)
+        == "exited"
+    )
+
+    labels["nukelab.recovery.fence"] = str(uuid.uuid4())
+    driver.containers[helper_id]["Config"]["Labels"] = dict(labels)
+    assert (
+        await service._helper_observation(rows.backup, OperationKind.BACKUP, rows.backup.id)
+        == "identity_mismatch"
+    )
+
+
+@pytest.mark.asyncio
+async def test_launch_container_listing_rejects_malformed_runtime_items(db_session):
+    driver = FakeDriver()
+    service = ReconciliationService(db_session, driver)
+    driver.containers["bad"] = "not-a-container"
+    assert await service._launch_containers(uuid.uuid4()) is None
+
+    driver.containers["bad"] = {"Id": "bad", "Config": {"Labels": {}}}
+    assert await service._launch_containers(uuid.uuid4()) == []
+
+
+def test_runtime_inspector_bounds_and_metadata_errors(monkeypatch, tmp_path):
+    from app.services import operation_reconciliation as module
+
+    monkeypatch.setattr(settings, "volume_backup_storage_path", str(tmp_path))
+    monkeypatch.setattr(module.VolumeRecoveryRuntime, "_storage", lambda self: tmp_path)
+    inspector = module._RuntimeArtifactInspector(FakeDriver())
+
+    monkeypatch.setattr(
+        module.VolumeRecoveryRuntime,
+        "_limits",
+        lambda self, value: (_ for _ in ()).throw(ValueError("invalid")),
+    )
+    with pytest.raises(module.ArtifactInspectionUnavailable, match="Invalid artifact bounds"):
+        inspector.read_completion(
+            kind=OperationKind.BACKUP,
+            operation_id=uuid.uuid4(),
+            backup_id=uuid.uuid4(),
+            fencing_token=uuid.uuid4(),
+            maximum=1,
+        )
+
+    monkeypatch.setattr(module.VolumeRecoveryRuntime, "_limits", lambda self, value: value)
+    monkeypatch.setattr(
+        module.VolumeRecoveryRuntime,
+        "_metadata",
+        lambda self, *args: (_ for _ in ()).throw(FileNotFoundError()),
+    )
+    assert (
+        inspector.read_completion(
+            kind=OperationKind.BACKUP,
+            operation_id=uuid.uuid4(),
+            backup_id=uuid.uuid4(),
+            fencing_token=uuid.uuid4(),
+            maximum=1,
+        )
+        is None
+    )
+
+    monkeypatch.setattr(
+        module.VolumeRecoveryRuntime,
+        "_metadata",
+        lambda self, *args: (_ for _ in ()).throw(OSError()),
+    )
+    with pytest.raises(module.ArtifactInspectionUnavailable, match="unreadable"):
+        inspector.read_completion(
+            kind=OperationKind.BACKUP,
+            operation_id=uuid.uuid4(),
+            backup_id=uuid.uuid4(),
+            fencing_token=uuid.uuid4(),
+            maximum=1,
+        )

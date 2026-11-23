@@ -6,7 +6,8 @@
 import asyncio
 import copy
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import delete, func, select
@@ -29,9 +30,16 @@ from app.models.volume_backup import VolumeBackup
 from app.models.volume_operation import VolumeOperation
 from app.models.volume_restore import VolumeRestore
 from app.models.worker_heartbeat import WorkerHeartbeat
-from app.services.operation_finalizer import OperationFinalizer
+from app.schemas.environment_manifest import ImageIdentity
+from app.services.operation_finalizer import (
+    OperationFinalizer,
+    _generation_matches,
+    _matches_approved,
+)
 from app.services.operation_reconciliation import (
+    PROOF_LAUNCH_RUNTIME,
     PROOF_RECOVERY_ARTIFACT,
+    PROOF_RUNTIME_INSPECTION,
     Liveness,
     OperationKind,
     ReconcileDecision,
@@ -1357,3 +1365,278 @@ async def test_concurrent_finalize_produces_exactly_one_transition():
             assert records == 1
     finally:
         await _cleanup_committed_launch(fixture, owner_id)
+
+
+def _decision(
+    *,
+    kind=OperationKind.LAUNCH,
+    operation_id=None,
+    liveness=Liveness.ALIVE,
+    proof_source=PROOF_LAUNCH_RUNTIME,
+    runtime_state=RuntimeState.PRESENT,
+    terminal_state=TerminalState.SUCCEEDED,
+    reason_code="runtime_verified",
+    detail=None,
+):
+    return ReconcileDecision(
+        kind=kind,
+        operation_id=operation_id or uuid.uuid4(),
+        liveness=liveness,
+        proof_source=proof_source,
+        runtime_state=runtime_state,
+        terminal_state=terminal_state,
+        reason_code=reason_code,
+        detail=detail or {},
+    )
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"proof_source": "Invalid Source"},
+        {"reason_code": "Invalid Reason"},
+    ],
+)
+def test_reconcile_decision_bounds_proof_sources_and_reasons(changes):
+    with pytest.raises(ValueError):
+        _decision(**changes)
+
+
+def test_generation_must_follow_the_recorded_history():
+    assert _generation_matches("create", 1, 0) is True
+    assert _generation_matches("create", 2, 0) is False
+    assert _generation_matches("create", 1, 1) is False
+    assert _generation_matches("restart", 1, 0) is True
+    assert _generation_matches("restart", 2, 1) is True
+    assert _generation_matches("restart", 3, 1) is False
+    assert _generation_matches("restart", None, 1) is False
+    assert _generation_matches("restart", 0, 1) is False
+
+
+def test_approved_identity_requires_matching_platform_and_digest_proof():
+    approved = ImageIdentity.model_validate(verified_identity())
+    local_only = ImageIdentity.model_validate(local_identity())
+
+    assert _matches_approved(local_only, ImageIdentity.model_validate(local_identity())) is True
+    assert (
+        _matches_approved(
+            local_only, ImageIdentity.model_validate(local_identity(architecture="arm64"))
+        )
+        is False
+    )
+    assert (
+        _matches_approved(
+            local_only, ImageIdentity.model_validate(local_identity(local_id="sha256:" + "e" * 64))
+        )
+        is False
+    )
+
+    observed = ImageIdentity.model_validate(verified_identity())
+    assert _matches_approved(approved, observed) is True
+
+    assert (
+        _matches_approved(
+            approved,
+            ImageIdentity.model_validate(verified_identity() | {"repository_digests": []}),
+        )
+        is False
+    )
+    assert (
+        _matches_approved(
+            approved,
+            ImageIdentity.model_validate(
+                verified_identity()
+                | {
+                    "repository_digests": [
+                        "other.example/runtime@" + MANIFEST_DIGEST,
+                    ]
+                }
+            ),
+        )
+        is False
+    )
+
+
+def test_approved_identity_digest_parse_failures_are_not_proof(monkeypatch):
+    approved = ImageIdentity.model_validate(verified_identity())
+    observed = ImageIdentity.model_validate(verified_identity())
+    monkeypatch.setattr(
+        "app.services.operation_finalizer.parse_reference",
+        lambda value: (_ for _ in ()).throw(ValueError("bad reference")),
+    )
+
+    assert _matches_approved(approved, observed) is False
+
+
+@pytest.mark.asyncio
+async def test_finalize_rejects_decisions_without_proof_shapes(db_session):
+    finalizer = OperationFinalizer(db_session, FakeDriver())
+    valid = _decision()
+
+    assert await finalizer.finalize(object()) is False
+    assert await finalizer.finalize(replace(valid, operation_id="not-a-uuid")) is False
+    assert await finalizer.finalize(replace(valid, terminal_state=None)) is False
+    assert (
+        await finalizer.finalize(
+            replace(valid, liveness=Liveness.ALIVE, terminal_state=TerminalState.FAILED)
+        )
+        is False
+    )
+    assert (
+        await finalizer.finalize(
+            replace(
+                valid,
+                liveness=Liveness.AMBIGUOUS,
+                terminal_state=TerminalState.FAILED,
+                runtime_state=RuntimeState.ABSENT,
+            )
+        )
+        is False
+    )
+    assert (
+        await finalizer.finalize(
+            replace(
+                valid,
+                liveness=Liveness.STOPPED,
+                terminal_state=TerminalState.FAILED,
+                runtime_state=RuntimeState.PRESENT,
+            )
+        )
+        is False
+    )
+
+
+@pytest.mark.asyncio
+async def test_failed_transition_degrades_to_recovery_required(db_session, test_user, monkeypatch):
+    fixture = await add_launch(db_session, test_user)
+    finalizer = OperationFinalizer(db_session, FakeDriver())
+    decision = _decision(operation_id=fixture.operation_id)
+    monkeypatch.setattr(
+        finalizer, "_finalize_launch", AsyncMock(side_effect=RuntimeError("write failed"))
+    )
+
+    assert await finalizer.finalize(decision) is False
+
+    operation = await db_session.get(
+        ServerLaunchOperation, fixture.operation_id, populate_existing=True
+    )
+    server = await db_session.get(Server, fixture.server_id, populate_existing=True)
+    assert operation.state == "uncertain"
+    assert operation.reason_code == "recovery_required"
+    assert server.status_reason == "recovery_required"
+
+
+@pytest.mark.asyncio
+async def test_missing_volume_row_is_not_recreated_on_degrade(db_session, monkeypatch):
+    finalizer = OperationFinalizer(db_session, FakeDriver())
+    decision = _decision(
+        kind=OperationKind.BACKUP,
+        proof_source=PROOF_RECOVERY_ARTIFACT,
+        terminal_state=TerminalState.SUCCEEDED,
+    )
+    monkeypatch.setattr(
+        finalizer, "_finalize_volume", AsyncMock(side_effect=RuntimeError("write failed"))
+    )
+
+    assert await finalizer.finalize(decision) is False
+
+
+@pytest.mark.asyncio
+async def test_launch_proof_checks_every_runtime_identity_source(db_session, test_user):
+    fixture = await add_launch(db_session, test_user)
+    driver = FakeDriver()
+    driver.images[LOCAL_ID] = local_identity()
+    container_id = f"container-{uuid.uuid4().hex}"
+    driver.containers[container_id] = container_info(
+        container_id,
+        server_id=fixture.server_id,
+        launch_id=fixture.operation_id,
+    )
+    finalizer = OperationFinalizer(db_session, driver)
+    snapshot = await finalizer._load_launch(fixture.operation_id)
+    assert snapshot is not None
+    decision = _decision(operation_id=fixture.operation_id, detail={"container_id": container_id})
+
+    assert await finalizer._launch_proof(snapshot, decision) is not None
+
+    assert (
+        await finalizer._launch_proof(
+            snapshot, replace(decision, runtime_state=RuntimeState.ABSENT)
+        )
+        is None
+    )
+    assert (
+        await finalizer._launch_proof(
+            snapshot, replace(decision, proof_source=PROOF_RUNTIME_INSPECTION)
+        )
+        is None
+    )
+    assert await finalizer._launch_proof(replace(snapshot, revision_id=None), decision) is None
+    assert await finalizer._launch_proof(replace(snapshot, generation=None), decision) is None
+    assert await finalizer._launch_proof(replace(snapshot, request_payload={}), decision) is None
+    assert await finalizer._launch_proof(replace(snapshot, mounts=[]), decision) is None
+    assert await finalizer._launch_proof(snapshot, replace(decision, detail={})) is None
+    assert (
+        await finalizer._launch_proof(snapshot, replace(decision, detail={"container_id": 1}))
+        is None
+    )
+    assert (
+        await finalizer._launch_proof(
+            replace(snapshot, request_payload={"invalid": "payload"}), decision
+        )
+        is None
+    )
+    assert (
+        await finalizer._launch_proof(replace(snapshot, revision_id=uuid.uuid4()), decision) is None
+    )
+    assert await finalizer._launch_proof(replace(snapshot, generation=2), decision) is None
+    assert (
+        await finalizer._launch_proof(
+            snapshot, replace(decision, detail={"container_id": "missing"})
+        )
+        is None
+    )
+
+    driver.containers[container_id] = container_info(
+        f"other-{uuid.uuid4().hex}",
+        server_id=fixture.server_id,
+        launch_id=fixture.operation_id,
+    )
+    assert await finalizer._launch_proof(snapshot, decision) is None
+
+    driver.containers[container_id] = container_info(
+        container_id,
+        server_id=fixture.server_id,
+        launch_id=uuid.uuid4(),
+    )
+    assert await finalizer._launch_proof(snapshot, decision) is None
+
+    driver.containers[container_id] = {
+        **container_info(
+            container_id,
+            server_id=fixture.server_id,
+            launch_id=fixture.operation_id,
+        ),
+        "State": {"Running": False, "Status": "exited"},
+    }
+    assert await finalizer._launch_proof(snapshot, decision) is None
+
+    driver.containers[container_id] = container_info(
+        container_id,
+        server_id=fixture.server_id,
+        launch_id=fixture.operation_id,
+        health="unhealthy",
+    )
+    assert await finalizer._launch_proof(snapshot, decision) is None
+
+    driver.containers[container_id] = container_info(
+        container_id,
+        server_id=fixture.server_id,
+        launch_id=fixture.operation_id,
+    )
+    driver.ready = False
+    assert await finalizer._launch_proof(snapshot, decision) is None
+
+    driver.ready = True
+    driver.images.pop(LOCAL_ID)
+    assert await finalizer._launch_proof(snapshot, decision) is None

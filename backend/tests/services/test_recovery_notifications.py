@@ -402,3 +402,98 @@ async def test_notifier_exception_does_not_change_scan_counts(db_session, test_u
     assert operation.state == "failed"
     warning.assert_called_once()
     assert warning.call_args.kwargs["extra"]["error_class"] == "RuntimeError"
+
+
+def test_recovery_notification_labels_titles_and_aliases():
+    assert (
+        recovery_notifications._normalized_state(OperationKind.LAUNCH, "recovery_required")
+        == "uncertain"
+    )
+    assert (
+        recovery_notifications._normalized_state(OperationKind.LAUNCH, "completed") == "succeeded"
+    )
+    assert recovery_notifications._normalized_state(OperationKind.LAUNCH, None) is None
+    assert recovery_notifications._normalized_state(OperationKind.BACKUP, " FAILED ") == "failed"
+
+    assert (
+        recovery_notifications._decision_state(
+            decision(OperationKind.LAUNCH, uuid.uuid4(), TerminalState.RECOVERY_REQUIRED)
+        )
+        == "uncertain"
+    )
+    assert (
+        recovery_notifications._decision_state(
+            decision(OperationKind.BACKUP, uuid.uuid4(), TerminalState.SUCCEEDED)
+        )
+        == "completed"
+    )
+    assert (
+        recovery_notifications._decision_state(
+            decision(OperationKind.RESTORE, uuid.uuid4(), TerminalState.FAILED)
+        )
+        == "failed"
+    )
+
+    assert (
+        recovery_notifications._event_key(OperationKind.LAUNCH, "completed")
+        == recovery_notifications._LAUNCH_COMPLETED_EVENT_KEY
+    )
+    assert (
+        recovery_notifications._event_key(OperationKind.BACKUP, "completed")
+        == recovery_notifications._VOLUME_COMPLETED_EVENT_KEY
+    )
+    assert recovery_notifications._label(OperationKind.LAUNCH) == "server operation"
+    assert recovery_notifications._label(OperationKind.BACKUP) == "volume backup"
+    assert recovery_notifications._label(OperationKind.RESTORE) == "volume restore"
+    assert (
+        recovery_notifications._title(OperationKind.LAUNCH, "completed", "succeeded")
+        == "Server operation recovered"
+    )
+    assert (
+        recovery_notifications._title(OperationKind.LAUNCH, "reminder", "uncertain")
+        == "Server operation still needs attention"
+    )
+    assert (
+        recovery_notifications._title(OperationKind.LAUNCH, "attention", "failed")
+        == "Server launch failed"
+    )
+
+
+@pytest.mark.asyncio
+async def test_notifier_ignores_missing_targets_and_invalid_ids(db_session):
+    notifier = RecoveryNotifier(db_session)
+
+    assert (
+        await notifier.notify_applied(
+            decision(OperationKind.LAUNCH, uuid.uuid4(), TerminalState.FAILED)
+        )
+        is False
+    )
+    assert (
+        await notifier.notify_applied(
+            decision(OperationKind.BACKUP, uuid.uuid4(), TerminalState.SUCCEEDED)
+        )
+        is False
+    )
+    assert (
+        await notifier.notify_applied(
+            decision(OperationKind.RESTORE, uuid.uuid4(), TerminalState.FAILED)
+        )
+        is False
+    )
+    assert await notifier.notify_reminder(OperationKind.LAUNCH, uuid.uuid4()) is False
+    assert await notifier.notify_reminder(OperationKind.BACKUP, uuid.uuid4()) is False
+    assert (
+        await notifier.notify_applied(Mock(kind=OperationKind.LAUNCH, operation_id="not-a-uuid"))
+        is False
+    )
+
+
+@pytest.mark.asyncio
+async def test_safe_rollback_swallows_database_failures():
+    notifier = RecoveryNotifier(Mock())
+    notifier.db.rollback = AsyncMock(side_effect=RuntimeError("connection lost"))
+
+    await notifier._safe_rollback()
+
+    notifier.db.rollback.assert_awaited_once()

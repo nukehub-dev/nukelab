@@ -659,3 +659,73 @@ async def test_concurrent_same_digest_pulls_serialize_and_recheck_proof(lock_eng
     assert first_identity.registry_verified is True
     assert second_identity.registry_verified is True
     assert first_identity.local_id == second_identity.local_id == LOCAL_ID
+
+
+def test_pull_policy_and_lock_timing_validation():
+    from app.services.registry_artifact_service import _validate_pull_policy
+
+    assert _validate_pull_policy("on_demand") == "on_demand"
+    assert _validate_pull_policy("preload_only") == "preload_only"
+    with pytest.raises(ValueError, match="pull policy"):
+        _validate_pull_policy("always")
+    with pytest.raises(ValueError, match="Lock timing"):
+        PostgresDigestPullLock(timeout_seconds=0)
+    with pytest.raises(ValueError, match="Lock timing"):
+        PostgresDigestPullLock(poll_interval_seconds=0)
+
+    service = RegistryArtifactService(driver=FakeDriver(), pull_policy="preload_only")
+    assert service.pull_policy == "preload_only"
+
+
+def test_canonical_reference_requires_an_exact_manifest_digest():
+    from types import SimpleNamespace
+
+    from app.services.registry_artifact_service import _canonical_reference
+
+    parsed = _canonical_reference(verified_image())
+    assert parsed.registry == "registry.example.com"
+    assert parsed.repository == "team/runtime"
+    assert parsed.reference == DIGEST
+
+    with pytest.raises(RegistryError) as invalid:
+        _canonical_reference(
+            SimpleNamespace(verified_reference="bad reference", manifest_digest=DIGEST)
+        )
+    assert invalid.value.code == REGISTRY_ARTIFACT_MISMATCH
+
+    with pytest.raises(RegistryError) as mismatch:
+        _canonical_reference(
+            SimpleNamespace(verified_reference=VERIFIED_REFERENCE, manifest_digest=OTHER_DIGEST)
+        )
+    assert mismatch.value.code == REGISTRY_ARTIFACT_MISMATCH
+
+
+def test_repository_digest_proof_skips_untrusted_entries():
+    from app.services.registry_artifact_service import _has_repository_digest
+    from app.services.registry_client import parse_reference
+
+    canonical = parse_reference(VERIFIED_REFERENCE)
+    assert _has_repository_digest([VERIFIED_REFERENCE], canonical, DIGEST) is True
+    assert _has_repository_digest("not-a-list", canonical, DIGEST) is False
+    assert _has_repository_digest([None, 1, ""], canonical, DIGEST) is False
+    assert _has_repository_digest(["bad reference"], canonical, DIGEST) is False
+    assert _has_repository_digest([f"{REPOSITORY}@{OTHER_DIGEST}"], canonical, DIGEST) is False
+    assert (
+        _has_repository_digest([f"other.example.com/team/runtime@{DIGEST}"], canonical, DIGEST)
+        is False
+    )
+
+
+def test_local_identity_conversion_rejects_invalid_metadata():
+    from app.services.registry_artifact_service import (
+        _identity_from_local,
+        _platform_matches,
+    )
+
+    verified = verified_image()
+    assert _platform_matches(local_image(), verified) is True
+    assert _platform_matches({"os": None, "architecture": "amd64"}, verified) is False
+
+    with pytest.raises(RegistryError) as invalid:
+        _identity_from_local(verified, {"local_id": None, "os": "linux", "architecture": "amd64"})
+    assert invalid.value.code == REGISTRY_ARTIFACT_MISMATCH

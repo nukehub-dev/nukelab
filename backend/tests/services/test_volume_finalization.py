@@ -841,3 +841,333 @@ async def test_reconciler_completes_proof_backed_restore_and_second_scan_is_noop
     assert volume.status == "active" and volume.size_bytes == METADATA["logical_bytes"]
     assert guard.state == "succeeded"
     assert driver.mutations == []
+
+
+@pytest.mark.asyncio
+async def test_executor_termination_requires_exact_helper_proof(db_session, test_user):
+    from app.container.driver import ContainerDriverError
+
+    backup, _ = await _backup_row(db_session, test_user.id)
+    driver = ReadOnlyDriver()
+    hooks = _hooks(db_session, FakeArtifacts(METADATA), driver)
+    name = "nukelab-recovery-" + str(backup.id)
+
+    async def lookup_failure(value):
+        raise RuntimeError("runtime unavailable")
+
+    driver.get_container_by_name = lookup_failure
+    assert (
+        await hooks._executor_terminated(
+            operation_id=backup.id,
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+        )
+        is False
+    )
+
+    async def non_string_identity(value):
+        return 123
+
+    driver.get_container_by_name = non_string_identity
+    assert (
+        await hooks._executor_terminated(
+            operation_id=backup.id,
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+        )
+        is False
+    )
+
+    async def named_helper(value):
+        assert value == name
+        return "helper"
+
+    driver.get_container_by_name = named_helper
+    assert (
+        await hooks._executor_terminated(
+            operation_id=backup.id,
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+        )
+        is True
+    )
+
+    async def unavailable(value):
+        raise ContainerDriverError("runtime unavailable", status=500)
+
+    driver.get_container_info = unavailable
+    assert (
+        await hooks._executor_terminated(
+            operation_id=backup.id,
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+        )
+        is False
+    )
+
+    async def unexpected(value):
+        raise RuntimeError("unexpected runtime failure")
+
+    driver.get_container_info = unexpected
+    assert (
+        await hooks._executor_terminated(
+            operation_id=backup.id,
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+        )
+        is False
+    )
+
+    async def container_lookup(identifier):
+        return dict(driver.containers[identifier])
+
+    driver.get_container_info = container_lookup
+    labels = {
+        "nukelab.recovery.operation": str(backup.id),
+        "nukelab.recovery.fence": str(backup.fencing_token),
+        "nukelab.recovery.backup": str(backup.id),
+    }
+    driver.containers["helper"] = {
+        "Id": "other-container",
+        "Config": {"Labels": labels},
+        "State": {"Running": False, "Status": "exited"},
+    }
+    assert (
+        await hooks._executor_terminated(
+            operation_id=backup.id,
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+        )
+        is False
+    )
+
+    driver.containers["helper"] = {
+        "Id": "helper",
+        "Config": {},
+        "State": {"Running": False, "Status": "exited"},
+    }
+    assert (
+        await hooks._executor_terminated(
+            operation_id=backup.id,
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+        )
+        is False
+    )
+
+    driver.containers["helper"] = {
+        "Id": "helper",
+        "Config": {"Labels": {**labels, "nukelab.recovery.fence": str(uuid.uuid4())}},
+        "State": {"Running": False, "Status": "exited"},
+    }
+    assert (
+        await hooks._executor_terminated(
+            operation_id=backup.id,
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+        )
+        is False
+    )
+
+    driver.containers["helper"] = {
+        "Id": "helper",
+        "Config": {"Labels": labels},
+        "State": {"Running": "no", "Status": "exited"},
+    }
+    assert (
+        await hooks._executor_terminated(
+            operation_id=backup.id,
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+        )
+        is False
+    )
+
+    driver.containers["helper"] = {
+        "Id": "helper",
+        "Config": {"Labels": labels},
+        "State": {"Running": False, "Status": "removing"},
+    }
+    assert (
+        await hooks._executor_terminated(
+            operation_id=backup.id,
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+        )
+        is False
+    )
+
+    driver.containers["helper"] = {
+        "Id": "helper",
+        "Config": {"Labels": labels},
+        "State": {"Running": False, "Status": "exited"},
+    }
+    assert (
+        await hooks._executor_terminated(
+            operation_id=backup.id,
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+        )
+        is True
+    )
+
+
+@pytest.mark.asyncio
+async def test_finish_hooks_reject_mismatched_operations_and_unknown_rows(db_session, test_user):
+    backup, _ = await _backup_row(db_session, test_user.id)
+    hooks = _hooks(db_session, FakeArtifacts(METADATA))
+    assert (
+        await hooks.finish_backup(
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+            decision=_decision(OperationKind.BACKUP, uuid.uuid4()),
+        )
+        is False
+    )
+    assert (
+        await hooks.finish_backup(
+            backup_id=uuid.uuid4(),
+            fencing_token=uuid.uuid4(),
+            decision=_decision(OperationKind.BACKUP, uuid.uuid4()),
+        )
+        is False
+    )
+
+    completed_backup = await _completed_backup(db_session, test_user.id)
+    restore, _ = await _restore_row(db_session, test_user.id, completed_backup)
+    assert (
+        await hooks.finish_restore(
+            restore_id=restore.id,
+            fencing_token=restore.fencing_token,
+            decision=_decision(OperationKind.BACKUP, restore.id),
+        )
+        is False
+    )
+    assert (
+        await hooks.finish_restore(
+            restore_id=restore.id,
+            fencing_token=restore.fencing_token,
+            decision=_decision(OperationKind.RESTORE, uuid.uuid4()),
+        )
+        is False
+    )
+    assert (
+        await hooks.finish_restore(
+            restore_id=uuid.uuid4(),
+            fencing_token=uuid.uuid4(),
+            decision=_decision(OperationKind.RESTORE, uuid.uuid4()),
+        )
+        is False
+    )
+
+
+@pytest.mark.asyncio
+async def test_restore_hook_rejects_invalid_backup_digest_and_bounds(db_session, test_user):
+    backup = await _completed_backup(db_session, test_user.id)
+    restore, _ = await _restore_row(db_session, test_user.id, backup)
+    hooks = _hooks(db_session, FakeArtifacts(METADATA))
+
+    backup.sha256 = "not-a-digest"
+    await db_session.flush()
+    assert (
+        await hooks.finish_restore(
+            restore_id=restore.id,
+            fencing_token=restore.fencing_token,
+            decision=_decision(OperationKind.RESTORE, restore.id),
+        )
+        is False
+    )
+
+    backup.sha256 = METADATA["sha256"]
+    restore.max_size_bytes = 0
+    await db_session.flush()
+    assert (
+        await hooks.finish_restore(
+            restore_id=restore.id,
+            fencing_token=restore.fencing_token,
+            decision=_decision(OperationKind.RESTORE, restore.id),
+        )
+        is False
+    )
+
+
+@pytest.mark.asyncio
+async def test_completion_and_archive_failures_are_not_proof(db_session, test_user, monkeypatch):
+    backup, _ = await _backup_row(db_session, test_user.id)
+    hooks = _hooks(db_session, FakeArtifacts(METADATA))
+
+    assert (
+        await hooks._completion(
+            kind=OperationKind.BACKUP,
+            operation_id=backup.id,
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+            maximum=0,
+        )
+        is None
+    )
+    assert (
+        await hooks._completion(
+            kind=OperationKind.BACKUP,
+            operation_id=backup.id,
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+            maximum=1024,
+        )
+        == METADATA
+    )
+    assert hooks._valid_metadata(["not", "a", "mapping"], maximum=1024) is False
+
+    async def failure(*args, **kwargs):
+        raise RuntimeError("artifact read failed")
+
+    monkeypatch.setattr(hooks, "_completion", failure)
+    assert (
+        await hooks.finish_backup(
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+            decision=_decision(OperationKind.BACKUP, backup.id),
+        )
+        is False
+    )
+
+    class RaisingArtifacts(FakeArtifacts):
+        def read_completion(self, **kwargs):
+            raise RuntimeError("artifact read failed")
+
+        def backup_archive_matches(self, *, backup_id, metadata):
+            raise RuntimeError("archive read failed")
+
+    raising = _hooks(db_session, RaisingArtifacts(METADATA))
+    assert (
+        await raising._completion(
+            kind=OperationKind.BACKUP,
+            operation_id=backup.id,
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+            maximum=1024,
+        )
+        is None
+    )
+    assert await raising._archive_matches(backup.id, METADATA) is False
+    assert (
+        await raising.finish_backup(
+            backup_id=backup.id,
+            fencing_token=backup.fencing_token,
+            decision=_decision(OperationKind.BACKUP, backup.id),
+        )
+        is False
+    )
+
+    completed_backup = await _completed_backup(db_session, test_user.id)
+    restore, _ = await _restore_row(db_session, test_user.id, completed_backup)
+    restore_hooks = _hooks(db_session, FakeArtifacts(METADATA))
+    monkeypatch.setattr(restore_hooks, "_executor_terminated", AsyncMock(return_value=False))
+    assert (
+        await restore_hooks.finish_restore(
+            restore_id=restore.id,
+            fencing_token=restore.fencing_token,
+            decision=_decision(OperationKind.RESTORE, restore.id),
+        )
+        is False
+    )
