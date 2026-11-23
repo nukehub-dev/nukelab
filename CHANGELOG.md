@@ -96,6 +96,10 @@ section.
   response bodies.
 - Refreshed frontend lockfile dependencies to clear all `npm audit` findings,
   including the seroval deserialization issue.
+- Updated the backend runtime base to Python 3.13.18 on Debian 13.7, PyJWT
+  2.14.0, and msgpack 1.2.3, and removed the unused pip/setuptools tools from
+  shipped backend and volume-helper images. Trivy now reports no fixed
+  HIGH/CRITICAL vulnerabilities in either image.
 
 ## [2.2.0] - 2026-11-20
 
