@@ -18,13 +18,21 @@ LABEL maintainer="NukeLab <nukehub.org>"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    ca-certificates \
-    nginx \
-    libnss-wrapper \
-    && rm -rf /var/lib/apt/lists/*
+# Install system dependencies. Debian 13 nginx must include the nginx2root
+# backports (DSA-6642-1); the epoch invalidates the cached apt layer when a
+# new security update must be picked up.
+ARG APT_SECURITY_EPOCH=2026-11-23
+RUN echo "apt security epoch: ${APT_SECURITY_EPOCH}" \
+    && apt-get update \
+    && apt-get install -y \
+        curl \
+        ca-certificates \
+        nginx \
+        libnss-wrapper \
+    && rm -rf /var/lib/apt/lists/* \
+    && dpkg --compare-versions \
+        "$(dpkg-query -W -f='${Version}' nginx)" \
+        ge "1.26.3-3+deb13u11"
 
 # Create non-root user used by hardened container runtime. Use a high UID/GID
 # to avoid collisions with distro default users. Do not create /home/nukelab;
