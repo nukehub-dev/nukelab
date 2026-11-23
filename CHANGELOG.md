@@ -83,11 +83,12 @@ section.
 
 ### Security
 
-- Updated the frontend nginx base to 1.31.9 and require Debian 13
-  `nginx >= 1.26.3-3+deb13u11` in the shared environment base. This picks up
-  the nginx2root and related DSA-6642-1 fixes (CVE-2026-123007,
+- Updated the frontend nginx base to 1.31.9 with Alpine package upgrades, moved
+  the shared environment base to Debian 13.7 and require
+  `nginx >= 1.26.3-3+deb13u11`, and rebuilt the auth sidecar with Go 1.27.4.
+  This picks up the nginx2root and related DSA-6642-1 fixes (CVE-2026-123007,
   CVE-2026-123633, CVE-2026-121810, CVE-2026-123634, CVE-2026-113425,
-  CVE-2026-118899).
+  CVE-2026-118899) plus current Go standard-library fixes.
 
 ## [2.2.0] - 2026-11-20
 

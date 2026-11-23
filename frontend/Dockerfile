@@ -17,6 +17,9 @@ RUN npm run build
 # Production stage
 FROM docker.io/library/nginx:alpine@sha256:fb4658584bd9a916ffb6f6e365f97c25cfdb2923801f551ea08356e695f14ff7
 
+# Pick up Alpine security updates published after the pinned base image.
+RUN apk upgrade --no-cache
+
 # Copy built assets
 COPY --from=builder /app/dist /usr/share/nginx/html
 

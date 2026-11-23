@@ -4,7 +4,7 @@ FROM ${AUTH_SIDECAR_IMAGE} AS auth-sidecar
 
 # Build the CPU mask library inline. The source lives at
 # resources/lib/nukelab/libnukelab_cpu.c relative to the repository root.
-FROM debian:13@sha256:3a953985c225a97dfb5a8f1ddc6a3ecefefc35ef51f537075e08941305045a1e AS cpu-lib-builder
+FROM debian:13@sha256:9c6e381421d0f48d1b8133e573f33c185ee16cbf505eda9c4a8a4791b25ea8a6 AS cpu-lib-builder
 RUN apt-get update && apt-get install -y \
     gcc \
     libc6-dev \
@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
 COPY resources/lib/nukelab/libnukelab_cpu.c /src/libnukelab_cpu.c
 RUN gcc -shared -fPIC -o /libnukelab_cpu.so /src/libnukelab_cpu.c -ldl
 
-FROM debian:13@sha256:3a953985c225a97dfb5a8f1ddc6a3ecefefc35ef51f537075e08941305045a1e
+FROM debian:13@sha256:9c6e381421d0f48d1b8133e573f33c185ee16cbf505eda9c4a8a4791b25ea8a6
 
 LABEL maintainer="NukeLab <nukehub.org>"
 
