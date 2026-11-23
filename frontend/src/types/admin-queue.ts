@@ -2,12 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 export type AdminQueueStatus =
-  | 'pending'
-  | 'scheduled'
-  | 'starting'
-  | 'started'
-  | 'failed'
-  | 'cancelled'
+  'pending' | 'scheduled' | 'starting' | 'started' | 'failed' | 'cancelled'
 
 export interface AdminQueueResources {
   cpu: number

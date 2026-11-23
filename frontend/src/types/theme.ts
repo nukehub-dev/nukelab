@@ -2,14 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 export type ApplicationTheme =
-  | 'default'
-  | 'graphite'
-  | 'ocean'
-  | 'amber'
-  | 'github'
-  | 'nord'
-  | 'everforest'
-  | 'rosepine'
+  'default' | 'graphite' | 'ocean' | 'amber' | 'github' | 'nord' | 'everforest' | 'rosepine'
 
 export const THEME_VALUES: ApplicationTheme[] = [
   'default',

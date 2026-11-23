@@ -142,7 +142,7 @@ Phase 10: Remediation Support & Retest
 | CFG-07 | Review request size limits | `backend/app/middleware/request_size_limit.py` | 10 MB default; chunked-transfer abort |
 | CFG-08 | Review path traversal prevention | `backend/app/core/filesystem.py::secure_path()` | `Path.resolve()` + `relative_to()` validation; whitelist for avatars |
 | CFG-09 | Review Docker spawner security options | `backend/app/container/spawner.py` | Non-root user, read-only root fs, no new privileges, capability drop, seccomp |
-| CFG-10 | Review Traefik TLS and middleware config | `infrastructure/traefik/traefik.yml`, `dynamic/*.yml` | TLS 1.3, no insecure dashboard, no browserXssFilter |
+| CFG-10 | Review Traefik TLS and middleware config | `infrastructure/traefik/traefik.yml`, `dynamic/*.yml` | TLS 1.3, no insecure dashboard, no browserXssFilter, supported release, alias-header deletion, bounded ForwardAuth response |
 | CFG-11 | Review environment variable and secret handling | `.env.example`, compose files, CI secrets | No hardcoded secrets; production validation refuses defaults |
 
 ### 5.3 Phase 3 — Authentication & Session Management

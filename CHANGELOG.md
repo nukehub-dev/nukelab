@@ -89,6 +89,13 @@ section.
   This picks up the nginx2root and related DSA-6642-1 fixes (CVE-2026-123007,
   CVE-2026-123633, CVE-2026-121810, CVE-2026-123634, CVE-2026-113425,
   CVE-2026-118899) plus current Go standard-library fixes.
+- Upgraded Traefik from the end-of-life 3.6 line to 3.7.19, including fixes for
+  the HTTP/1 opaque request-target routing/auth bypass, CONNECT connection-pool
+  poisoning, and ReplacePathRegex traversal advisories. Enabled
+  `global.aliasHeadersStrategy: delete` and bounded monitoring ForwardAuth
+  response bodies.
+- Refreshed frontend lockfile dependencies to clear all `npm audit` findings,
+  including the seroval deserialization issue.
 
 ## [2.2.0] - 2026-11-20
 

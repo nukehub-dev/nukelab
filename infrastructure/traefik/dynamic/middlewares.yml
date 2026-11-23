@@ -146,6 +146,9 @@ http:
       forwardAuth:
         address: "http://backend:8000/api/auth/verify-admin"
         trustForwardHeader: true
+        # The verifier only returns headers; bound the body so a compromised
+        # backend cannot exhaust proxy memory.
+        maxResponseBodySize: 65536
         authRequestHeaders:
           - "Authorization"
           - "Cookie"
