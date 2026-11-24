@@ -25,6 +25,7 @@ import {
   ExternalLink,
   Activity,
   ListChecks,
+  ListOrdered,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
@@ -61,6 +62,7 @@ interface AdminCategory {
   icon: React.ElementType
   href: string
   requiredPermission?: string
+  requiredPermissions?: string[]
   color: string
   external?: boolean
 }
@@ -91,12 +93,28 @@ const categories: AdminCategory[] = [
     color: 'bg-emerald-500/10 text-emerald-400',
   },
   {
+    label: 'Queue',
+    description: 'Read-only view of waiting, starting, and completed server requests',
+    icon: ListOrdered,
+    href: '/admin/queue',
+    requiredPermissions: [PERMISSIONS.SERVERS_READ_ALL, PERMISSIONS.ADMIN_ACCESS],
+    color: 'bg-sky-500/10 text-sky-400',
+  },
+  {
     label: 'Health',
     description: 'System services and container health monitoring',
     icon: HeartPulse,
     href: '/admin/health',
     requiredPermission: PERMISSIONS.ADMIN_ACCESS,
     color: 'bg-rose-500/10 text-rose-400',
+  },
+  {
+    label: 'Recovery Operations',
+    description: 'Review launch, backup, and restore evidence and reconcile proof-backed outcomes',
+    icon: Activity,
+    href: '/admin/operations',
+    requiredPermissions: [PERMISSIONS.OPERATIONS_READ_ALL, PERMISSIONS.ADMIN_ACCESS],
+    color: 'bg-amber-500/10 text-amber-400',
   },
   {
     label: 'Analytics',
@@ -240,7 +258,9 @@ function AdminIndexPage() {
   const hasPermission = useAuthStore((state) => state.hasPermission)
 
   const visibleCategories = categories.filter(
-    (c) => !c.requiredPermission || hasPermission(c.requiredPermission)
+    (c) =>
+      (c.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true) &&
+      (!c.requiredPermission || hasPermission(c.requiredPermission))
   )
 
   return (

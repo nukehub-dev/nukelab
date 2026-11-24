@@ -15,7 +15,7 @@
 | PENT-NKL-003 | Container root filesystem is writable | Backend Eng | 2026-06-28 | Closed | `backend/app/container/client.py`, `backend/app/config.py`, `environments/base/nginx.conf` | `ReadonlyRootfs: true` with tmpfs mounts; live retest passed |
 | PENT-NKL-004 | NoNewPrivileges not enforced on containers | Backend Eng | 2026-06-28 | Closed | `backend/app/container/client.py`, `backend/app/config.py` | `SecurityOpt: ["no-new-privileges:true"]` applied when hardening enabled; live retest passed |
 | PENT-NKL-005 | python-socketio DoS via withheld binary attachments | Backend Eng | 2026-06-28 | Closed | `backend/requirements.txt` | Upgraded to `python-socketio==5.16.2`; `./nukelabctl security` passes |
-| PENT-NKL-006 | External base images not pinned by digest | Platform Eng | 2026-06-29 | Closed | `backend/Dockerfile`, `environments/base/Dockerfile`, `frontend/Dockerfile`, `services/auth-sidecar/Dockerfile`, `services/volume-helper/Dockerfile` | Pinned all external base images by digest; `./nukelabctl security --check-base-images` passes. The optional check is not yet enforced by `.github/workflows/security.yml`. |
+| PENT-NKL-006 | External base images not pinned by digest | Platform Eng | 2026-06-29 | Closed | `backend/Dockerfile`, `environments/base/Dockerfile`, `frontend/Dockerfile`, `services/auth-sidecar/Dockerfile`, `services/volume-helper/Dockerfile` | Pinned all external base images by digest; `./nukelabctl security --check-base-images` passes. The `Base Image Pinning` job in `.github/workflows/security.yml` runs the strict check and is part of `Security Gate`; branch protection must require that gate for merge blocking. |
 | PENT-NKL-007 | Commits are not cryptographically signed | Platform Eng | 2026-07-12 | Open | `.github/workflows/security.yml` | Enable GPG or SSH commit signing for all maintainers and turn on branch-protection "Require signed commits" for `main`; CI job `signed-commits-check` is included and set to warn-only until enforcement is enabled |
 | PENT-NKL-008 | Auth sidecar ships vulnerable Go runtime and JWT library | Backend Eng | 2026-06-28 | Closed | `services/auth-sidecar/Dockerfile`, `services/auth-sidecar/go.mod` | Upgraded builder to `golang:1.25-alpine` and `golang-jwt/jwt/v5` to v5.2.2; Trivy reports 0 HIGH/CRITICAL findings |
 | PENT-NKL-009 | Auth sidecar mounts wrong server-auth public key volume | Backend Eng | 2026-06-28 | Closed | `backend/app/container/spawner.py`, `backend/tests/container/test_spawner.py` | Mount `nukelab-server-secrets` at `/etc/nukelab/auth`; end-to-end terminal access verified |
@@ -23,12 +23,12 @@
 | PENT-NKL-011 | Backend reports server running before container is ready | Backend Eng | 2026-06-28 | Closed | `backend/app/container/spawner.py`, `backend/app/container/client.py`, `backend/app/config.py`, `backend/tests/container/test_client.py`, `backend/tests/container/test_spawner.py` | Wait for container `/health` before returning `running`; live spawn shows terminal accessible immediately after status flip |
 | PENT-NKL-012 | Shared read-only volumes leak host storage size and usage | Platform Eng | 2026-07-19 | Closed | `environments/base/Dockerfile`, `backend/app/container/docker_driver.py`, `docs/operations/PRODUCTION-DEPLOYMENT.md` | Eliminated the `nukelab-cpu-lib` shared volume by baking `libnukelab_cpu.so` into `nukelab-environment-base`. XFS project quota for the remaining `nukelab-server-secrets` volume is a separate operator hardening recommendation in PRODUCTION-DEPLOYMENT.md, not a reopen condition. |
 | PENT-NKL-013 | User resource stats endpoint missing authorization check | Backend Eng | 2026-07-29 | Closed | `backend/tests/security/test_bola.py`, `backend/tests/api/users/test_user_detail_privacy.py` | Self/authorized roles allowed; other users denied |
-| PENT-NKL-014 | Delayed status observations could invalidate lifecycle reservations | Backend Eng | 2026-11-16 | Retest Ready | `backend/tests/security/test_server_status_fencing.py`, `backend/tests/security/test_health_observation_fencing.py` | Combined runtime retest pending |
-| PENT-NKL-015 | Logout runtime mutations bypassed lifecycle fencing | Backend Eng | 2026-11-16 | Retest Ready | `backend/tests/security/test_logout_lifecycle_fencing.py` | Combined runtime retest pending |
+| PENT-NKL-014 | Delayed status observations could invalidate lifecycle reservations | Backend Eng | 2026-11-16 | Carried | `backend/tests/security/test_server_status_fencing.py`, `backend/tests/security/test_health_observation_fencing.py` | Deterministic admission/fencing retest passed (16 tests plus 51 related health/operation/lifecycle tests); concurrent browser-read/lifecycle race on an isolated runtime remains carried |
+| PENT-NKL-015 | Logout runtime mutations bypassed lifecycle fencing | Backend Eng | 2026-11-16 | Carried | `backend/tests/security/test_logout_lifecycle_fencing.py`, `backend/tests/api/auth/` | Prepared/executing/uncertain claims and revocation ordering passed (4 + 91 tests); live logout/replacement race remains carried |
 | PENT-NKL-016 | Recreation preview omitted metadata read authorization | Backend Eng | 2026-11-17 | Closed | `backend/tests/security/test_provenance_recreation.py` | Preview requires read plus manage permission/scope; closed before release |
-| PENT-NKL-017 | Volume deletion mistook runtime failure for absence | Backend Eng | 2026-11-18 | Retest Ready | `backend/tests/security/test_volume_mutation_exclusion.py` | Isolated daemon failure retest remains required |
-| PENT-NKL-018 | Queue-admitted containers bypassed runtime hardening settings | Backend Eng | 2026-11-18 | Retest Ready | `compose.yml`, `frontend/e2e/combined-recovery.spec.ts` | Combined scenario verifies hardening; confirm server-auth/public-URL parity and scheduled/health spawns in the isolated retest |
-| PENT-NKL-019 | Admin bulk lifecycle bypassed cross-user grant and audit | Backend Eng | 2026-11-18 | Retest Ready | `backend/app/api/admin.py`, `backend/tests/security/test_admin_bulk_authorization.py` | Requires `SERVERS_WRITE_ALL`, cross-user reason and audit; limited-admin negative-permission regression is included. Isolated role retest remains required. |
+| PENT-NKL-017 | Volume deletion mistook runtime failure for absence | Backend Eng | 2026-11-18 | Carried | `backend/tests/security/test_volume_mutation_exclusion.py`, `backend/tests/container/test_docker_driver_coverage.py` | Daemon 404/error handling and retained guard/metadata/quota passed (23 + 101 tests); isolated real-daemon failure drill remains carried |
+| PENT-NKL-018 | Queue-admitted containers bypassed runtime hardening settings | Backend Eng | 2026-11-18 | Carried | `compose.yml`, `frontend/e2e/combined-recovery.spec.ts`, `backend/tests/security/test_container_isolation.py` | Static parity for 48 spawn/runtime keys, settings-default regression and a live queue-admitted container inspection passed (uid 65532, CapDrop ALL, read-only rootfs, no-new-privileges); individual scheduled/health-restart spawn inspection remains carried |
+| PENT-NKL-019 | Admin bulk lifecycle bypassed cross-user grant and audit | Backend Eng | 2026-11-18 | Closed | `backend/app/api/admin.py`, `backend/tests/security/test_admin_bulk_authorization.py` | Limited admin rejected before lifecycle; reason, audit and owner notification verified (3 + 105 tests) |
 
 ---
 
@@ -72,6 +72,13 @@ If a finding will not be remediated:
 | PENT-NKL-011 | 2026-06-28 | Security Eng | Pass | Added readiness probe in `backend/app/container/client.py`; spawned `readiness-test`; backend log shows `Container nukelab-server-readinesse2e-readiness-test is ready` before API returns `running`; immediate curl to server URL with access token returns HTTP 200 ttyd HTML; `./nukelabctl lint backend`, `./nukelabctl build backend` pass; container readiness unit tests pass |
 | PENT-NKL-006 | 2026-06-29 | Security Eng | Pass | `./scripts/security/check-base-image-pinning.sh --strict` reports 0 unpinned images; `./nukelabctl security --check-base-images` passes; Dockerfiles updated with `@sha256:` digests |
 | PENT-NKL-007 | 2026-06-29 | Security Eng | N/A | Process change; created `.github/workflows/security.yml` with signed-commits check in warn-only mode pending team adoption of GPG/SSH signing and branch-protection enforcement |
+| PENT-NKL-014 | 2026-11-22 | Security Eng | Pass (deterministic); runtime carried | `tests/security/test_server_status_fencing.py` + `tests/security/test_health_observation_fencing.py`: 16 passed; related health/operation/lifecycle suites: 51 passed; concurrent browser-read/lifecycle race on an isolated runtime not run |
+| PENT-NKL-015 | 2026-11-22 | Security Eng | Pass (deterministic); runtime carried | `tests/security/test_logout_lifecycle_fencing.py`: 4 passed; auth transport/logout suites: 91 passed; live logout/replacement race not run |
+| PENT-NKL-017 | 2026-11-22 | Security Eng | Pass (deterministic); runtime carried | `tests/security/test_volume_mutation_exclusion.py`: 23 passed; volume service + Docker driver suites: 101 passed; isolated real-daemon failure drill not run |
+| PENT-NKL-018 | 2026-11-22 | Security Eng | Pass (static + live queue admission); scheduled/health carried | Compose audit: all 48 spawn/runtime keys present on `celery-worker`; `tests/security/test_container_isolation.py`: 7 passed, 3 skipped; disposable-stack combined suite queue-admitted a server and inspected its container (`uid=65532:65532`, `CapDrop=["ALL"]`, read-only rootfs, `no-new-privileges:true`); 45 combined + 1 workspace Playwright tests passed; individual scheduled/health-restart spawn inspection not run |
+| PENT-NKL-019 | 2026-11-22 | Security Eng | Pass | `tests/security/test_admin_bulk_authorization.py`: 3 passed, including real audit/notification rows; `tests/api/admin/test_admin.py`: 105 passed |
+
+The full `backend/tests/security` suite passed on 2026-11-22: **293 passed, 4 skipped** (the four existing opt-in live-runtime tests).
 
 ## Commit Signing Setup Guide
 
@@ -122,20 +129,24 @@ The 339 unsigned commits already on `main` cannot be re-signed without rewriting
 
 ---
 
-**Pending:** PENT-NKL-007 (commit signing process), PENT-NKL-014 and PENT-NKL-015 (combined runtime retest), PENT-NKL-017 (isolated daemon failure retest), PENT-NKL-018 (server-auth/public-URL and scheduled/health spawn parity), and PENT-NKL-019 (isolated limited-admin retest; the negative-permission regression is in place). PENT-NKL-016 and the base-image digest pinning fix are closed; base-image pinning is verified manually and is not yet a blocking CI gate.
+**Pending:** PENT-NKL-007 (commit signing process) and the carried live-runtime steps for PENT-NKL-014, PENT-NKL-015, PENT-NKL-017 and PENT-NKL-018. Their deterministic/static retests pass; the exact unproven step is recorded in each finding detail. PENT-NKL-016, PENT-NKL-019 and the base-image digest pinning fix are closed; the strict `Base Image Pinning` workflow job is part of `Security Gate`, and merge blocking begins when the maintainer requires `Security Gate` in branch protection.
 
 ## Lifecycle status observation fencing
 
 PENT-NKL-014 is owned by Backend Eng. Status probes now apply only under admission
 with unchanged container/version and no active lifecycle journal. Health probes
 use the same authority checks and version-aware restart admission. Regression
-coverage is in `backend/tests/security/test_server_status_fencing.py`; an isolated
-combined runtime retest remains required before release acceptance.
+coverage is in `backend/tests/security/test_server_status_fencing.py` and
+`backend/tests/security/test_health_observation_fencing.py` (16 passed on
+2026-11-22). The concurrent browser-read/lifecycle race on an isolated runtime
+remains carried.
 
 PENT-NKL-015 is owned by Backend Eng. Logout stops now use verified termination,
-with an active-operation/GPU regression in
-`backend/tests/security/test_logout_lifecycle_fencing.py`. Combined runtime retest
-remains required.
+with prepared/executing/uncertain claim preservation, refresh-token revocation
+before lifecycle ownership, and failed-item isolation covered by
+`backend/tests/security/test_logout_lifecycle_fencing.py` (4 passed) plus the auth
+transport/logout suites (91 passed) on 2026-11-22. The live logout/replacement
+race remains carried.
 
 ## Provenance preview metadata authorization
 
@@ -149,6 +160,6 @@ scope. Final recreation rechecks current approval and uses ordinary admission.
 
 | Finding ID | Owner | Status | Evidence / retest |
 |---|---|---|---|
-| PENT-NKL-017 | Backend Eng | Remediated before release; isolated retest required | `docker_driver.py`, `volume_service.py`, `test_volume_mutation_exclusion.py`; inject daemon inspection/deletion failure and verify protected ownership and quota remain |
-| PENT-NKL-018 | Backend Eng | Retest ready | `compose.yml` worker env parity; combined browser/worker/runtime scenario; inspect a queue-admitted container with `./nukelabctl verify-hardening` and verify scheduled/health spawns |
-| PENT-NKL-019 | Backend Eng | Retest ready | `api/admin.py` requires write-all plus cross-user reason/audit; `tests/security/test_admin_bulk_authorization.py`; retest a limited admin role |
+| PENT-NKL-017 | Backend Eng | Carried (deterministic pass) | `docker_driver.py`, `volume_service.py`, `test_volume_mutation_exclusion.py` (23 passed) and volume-service/driver suites (101 passed). Daemon `404` is the only absence proof; non-404 inspect/delete failures retain metadata, guard and quota. Isolated real-daemon drill remains carried |
+| PENT-NKL-018 | Backend Eng | Carried (static + live queue admission) | `compose.yml` worker parity audit (all 48 spawn/runtime keys present), spawn-path audit and `test_container_isolation.py` (7 passed, 3 skipped); disposable-stack combined suite inspected a live queue-admitted container (uid 65532, CapDrop ALL, read-only rootfs, no-new-privileges). Separately inspect scheduled-start and health-restart spawns with `./nukelabctl verify-hardening` on an isolated stack |
+| PENT-NKL-019 | Backend Eng | Closed | `api/admin.py` requires write-all plus cross-user reason/audit; `tests/security/test_admin_bulk_authorization.py` (3 passed, including real audit/notification rows) and `tests/api/admin/test_admin.py` (105 passed). Limited-admin negative test is included |

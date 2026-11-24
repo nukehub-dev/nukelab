@@ -100,9 +100,20 @@ async def create_operation(
 
 
 async def claim_operation(
-    db: AsyncSession, operation_id: uuid.UUID, fencing_token: uuid.UUID
+    db: AsyncSession,
+    operation_id: uuid.UUID,
+    fencing_token: uuid.UUID,
+    *,
+    executor_id: uuid.UUID | None = None,
 ) -> ServerLaunchOperation | None:
     await acquire_admission_lock(db)
+    values = {
+        "state": "executing",
+        "updated_at": utc_now(),
+        "heartbeat_at": utc_now(),
+    }
+    if executor_id is not None:
+        values["executor_id"] = executor_id
     return await db.scalar(
         update(ServerLaunchOperation)
         .where(
@@ -110,7 +121,7 @@ async def claim_operation(
             ServerLaunchOperation.fencing_token == fencing_token,
             ServerLaunchOperation.state == "prepared",
         )
-        .values(state="executing", updated_at=utc_now())
+        .values(**values)
         .returning(ServerLaunchOperation)
         .execution_options(populate_existing=True)
     )

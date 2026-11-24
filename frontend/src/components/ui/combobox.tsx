@@ -23,6 +23,8 @@ interface ComboboxProps {
   triggerClassName?: string
   disabled?: boolean
   searchPlaceholder?: string
+  /** Optional server-side search callback for large option sources. */
+  onSearchChange?: (value: string) => void
 }
 
 const GAP = 4
@@ -65,6 +67,7 @@ export function Combobox({
   triggerClassName,
   disabled,
   searchPlaceholder = 'Search...',
+  onSearchChange,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
@@ -162,7 +165,10 @@ export function Combobox({
                 ref={inputRef}
                 type="text"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  onSearchChange?.(e.target.value)
+                }}
                 placeholder={searchPlaceholder}
                 className="w-full h-8 pl-9 pr-3 rounded-lg border border-input bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/50"
                 onClick={(e) => e.stopPropagation()}
@@ -185,6 +191,7 @@ export function Combobox({
                       onChange(option.value)
                       setOpen(false)
                       setSearch('')
+                      onSearchChange?.('')
                     }}
                     className={cn(
                       'relative flex w-full cursor-pointer select-none items-center gap-2 rounded-lg px-3 py-2 text-sm outline-none transition-colors',
@@ -223,7 +230,10 @@ export function Combobox({
         disabled={disabled}
         onClick={() => {
           setOpen(!open)
-          if (!open) setSearch('')
+          if (!open) {
+            setSearch('')
+            onSearchChange?.('')
+          }
         }}
         className={cn(
           'flex h-9 w-full items-center justify-between rounded-lg border border-input bg-input/80 px-3 py-1 text-sm shadow-sm transition-colors',

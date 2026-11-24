@@ -3,7 +3,9 @@
 
 """Provenance transport preserves saved identity and uses ordinary admission."""
 
+import hashlib
 import uuid
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -17,8 +19,86 @@ from app.models.environment_template import EnvironmentTemplate
 from app.models.server import Server
 from app.models.server_queue import ServerQueue
 from app.models.volume import Volume
+from app.schemas.environment_manifest import (
+    ImageIdentity,
+    ManifestResources,
+    VolumeRequirement,
+)
+from app.services.environment_revision_service import fingerprint, template_configuration
+from app.services.portable_environment import portable_environment_identity
+from app.services.server_provenance_service import build_manifest
 from tests.api.servers.test_servers_launch_boundary import auth
 from tests.api.servers.test_servers_launch_boundary import launch_api as launch_api
+
+PORTABLE_DIGEST = "sha256:" + "b" * 64
+
+
+def verified_identity(*, local_id):
+    return ImageIdentity(
+        requested_reference="approved:latest",
+        local_id=local_id,
+        repository_digests=[f"registry.example/approved@{PORTABLE_DIGEST}"],
+        os="linux",
+        architecture="amd64",
+        registry_verified=True,
+        verified_reference=f"registry.example/approved@{PORTABLE_DIGEST}",
+        manifest_digest=PORTABLE_DIGEST,
+        index_digest="sha256:" + "d" * 64,
+        descriptor_media_type="application/vnd.oci.image.manifest.v1+json",
+    )
+
+
+def portable_fingerprint(template):
+    runtime = verified_identity(local_id="sha256:" + "a" * 64)
+    return portable_environment_identity(
+        template_configuration(template), runtime, None
+    ).fingerprint
+
+
+async def add_portable_revision(db_session, template, *, local_id):
+    configuration = template_configuration(template)
+    runtime = verified_identity(local_id=local_id)
+    revision = EnvironmentRevision(
+        template_id=template.id,
+        fingerprint=hashlib.sha256(f"{local_id}:{uuid.uuid4().hex}".encode()).hexdigest(),
+        template_fingerprint=fingerprint(configuration),
+        portable_fingerprint=portable_environment_identity(
+            configuration, runtime, None
+        ).fingerprint,
+        configuration=configuration,
+        runtime_identity=runtime.model_dump(mode="json"),
+    )
+    db_session.add(revision)
+    await db_session.flush()
+    return revision
+
+
+def portable_manifest(fingerprint, *, username, local_id="sha256:" + "e" * 64):
+    source = SimpleNamespace(
+        id=uuid.uuid4(),
+        fingerprint="c" * 64,
+        portable_fingerprint=fingerprint,
+        runtime_identity=verified_identity(local_id=local_id).model_dump(mode="json"),
+        toolchain_identity=None,
+        configuration={"tool_mounts": [], "environment_variables": {}},
+    )
+    return build_manifest(
+        source,
+        template_label="Origin installation environment",
+        resources=ManifestResources(cpu=1.0, memory_mib=2048, disk_mib=10240),
+        volumes=[
+            VolumeRequirement(purpose="home", mount_path=f"/home/{username}", mode="read_write")
+        ],
+    )
+
+
+def manifest_recreation(exported, launch_api, *, name="cross-install"):
+    return {
+        "manifest": exported.model_dump(mode="json"),
+        "name": name,
+        "plan_id": str(launch_api.plan_id),
+        "volume_mounts": launch_api.body()["volume_mounts"],
+    }
 
 
 @pytest.fixture(autouse=True)
@@ -210,3 +290,110 @@ async def test_export_can_select_the_displayed_historical_generation(
         params={"launch_id": str(uuid.uuid4())},
     )
     assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_portable_manifest_recreates_with_the_destination_revision(
+    client, user_token, db_session, launch_api, server_api_runtime, monkeypatch
+):
+    template = await db_session.get(EnvironmentTemplate, launch_api.environment_id)
+    destination = await add_portable_revision(db_session, template, local_id="sha256:" + "f" * 64)
+    destination_identity = ImageIdentity.model_validate(destination.runtime_identity)
+    monkeypatch.setattr(
+        "app.services.server_launch_service.RegistryArtifactService.from_settings",
+        lambda driver: SimpleNamespace(ensure_local=AsyncMock(return_value=destination_identity)),
+    )
+    exported = portable_manifest(
+        destination.portable_fingerprint,
+        username=launch_api.username,
+        local_id="sha256:" + "e" * 64,
+    )
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/servers/recreate",
+        headers=auth(user_token),
+        json=manifest_recreation(exported, launch_api),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["environment_id"] == str(template.id)
+    assert server_api_runtime.create_container.call_args.kwargs["image"] == (
+        destination_identity.local_id
+    )
+    assert server_api_runtime.create_container.call_args.kwargs["image"] != (
+        exported.runtime.local_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_portable_manifest_preview_and_submit_recheck_current_approval(
+    client, user_token, db_session, launch_api, provenance_runtime
+):
+    template = await db_session.get(EnvironmentTemplate, launch_api.environment_id)
+    destination = await add_portable_revision(db_session, template, local_id="sha256:" + "f" * 64)
+    exported = portable_manifest(destination.portable_fingerprint, username=launch_api.username)
+    await db_session.commit()
+
+    preview = await client.post(
+        "/api/servers/recreate/validate",
+        headers=auth(user_token),
+        json={"manifest": exported.model_dump(mode="json")},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["environment_label"] == template.name
+
+    destination.revoked = True
+    await db_session.commit()
+    result = await client.post(
+        "/api/servers/recreate",
+        headers=auth(user_token),
+        json=manifest_recreation(exported, launch_api),
+    )
+    assert result.status_code == 409
+    assert result.json()["detail"]["code"] == "revision_unavailable"
+    provenance_runtime.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_portable_manifest_ambiguity_and_unavailability_are_distinct(
+    client, user_token, db_session, launch_api, provenance_runtime
+):
+    template = await db_session.get(EnvironmentTemplate, launch_api.environment_id)
+    await add_portable_revision(db_session, template, local_id="sha256:" + "f" * 64)
+    second_template = EnvironmentTemplate(
+        name="Second HTTP environment",
+        slug="second-http-environment",
+        image="approved:latest",
+        is_active=True,
+        is_public=True,
+    )
+    db_session.add(second_template)
+    await db_session.flush()
+    await add_portable_revision(db_session, second_template, local_id="sha256:" + "9" * 64)
+    fingerprint = portable_fingerprint(template)
+    await db_session.commit()
+
+    ambiguous = await client.post(
+        "/api/servers/recreate/validate",
+        headers=auth(user_token),
+        json={
+            "manifest": portable_manifest(fingerprint, username=launch_api.username).model_dump(
+                mode="json"
+            )
+        },
+    )
+    assert ambiguous.status_code == 409
+    assert ambiguous.json()["detail"]["code"] == "revision_ambiguous"
+
+    unavailable = await client.post(
+        "/api/servers/recreate/validate",
+        headers=auth(user_token),
+        json={
+            "manifest": portable_manifest("0" * 64, username=launch_api.username).model_dump(
+                mode="json"
+            )
+        },
+    )
+    assert unavailable.status_code == 409
+    assert unavailable.json()["detail"]["code"] == "revision_unavailable"
+    provenance_runtime.assert_not_awaited()

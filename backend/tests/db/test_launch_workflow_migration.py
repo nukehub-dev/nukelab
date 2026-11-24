@@ -19,7 +19,7 @@ from app.config import settings
 from app.db.base import Base
 
 PREVIOUS_REVISION = "34ce1a62ffe8"
-WORKFLOW_REVISION = "f6b29a41d7c8"
+HEAD_REVISION = "a4c9e2f7b1d3"
 NEW_TABLES = {
     "environment_revisions",
     "server_launch_records",
@@ -87,9 +87,12 @@ async def tables(name):
 
 def test_fresh_upgrade_downgrade_and_reupgrade(migration_database):
     config, name = migration_database
-    assert ScriptDirectory.from_config(config).get_heads() == [WORKFLOW_REVISION]
+    assert ScriptDirectory.from_config(config).get_heads() == [HEAD_REVISION]
     command.upgrade(config, "head")
     assert NEW_TABLES <= asyncio.run(tables(name))
+    command.downgrade(config, "-1")
+    command.downgrade(config, "-1")
+    command.downgrade(config, "-1")
     command.downgrade(config, "-1")
     assert "volume_restores" not in asyncio.run(tables(name))
     assert NEW_TABLES - {"volume_restores"} <= asyncio.run(tables(name))

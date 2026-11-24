@@ -59,6 +59,9 @@ ROLE_PERMISSIONS = {
         # Volumes (admin level)
         Permission.VOLUMES_READ_ALL,
         Permission.VOLUMES_WRITE_ALL,
+        # Operation recovery visibility and reconciliation
+        Permission.OPERATIONS_READ_ALL,
+        Permission.OPERATIONS_MANAGE_ALL,
         # Audit
         Permission.AUDIT_READ,
         # Admin dashboard

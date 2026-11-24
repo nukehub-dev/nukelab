@@ -42,6 +42,39 @@ def _map_error(e: aiodocker.DockerError) -> ContainerDriverError:
     return ContainerDriverError(getattr(e, "message", str(e)), status=getattr(e, "status", None))
 
 
+_MAX_DIGEST_REFERENCE_CHARS = 500
+_DIGEST_REFERENCE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]*@sha256:[a-f0-9]{64}\Z")
+
+
+def _valid_digest_reference(value: object) -> bool:
+    """Return True only for a bounded ``repo@sha256:<64 lowercase hex>`` value.
+
+    Repository path components must be non-empty and must not contain a tag.
+    A registry port is the only permitted colon outside the digest separator.
+    """
+    if not isinstance(value, str) or not value or len(value) > _MAX_DIGEST_REFERENCE_CHARS:
+        return False
+    if value != value.strip() or any(ord(char) < 33 or ord(char) == 127 for char in value):
+        return False
+    if "://" in value or "\\" in value or value.count("@") != 1:
+        return False
+    if not _DIGEST_REFERENCE_RE.fullmatch(value):
+        return False
+    name = value.rsplit("@", 1)[0]
+    parts = name.split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        return False
+    for index, part in enumerate(parts):
+        if ":" not in part:
+            continue
+        if index != 0 or part.count(":") > 1:
+            return False
+        port = part.rsplit(":", 1)[1]
+        if not port.isascii() or not port.isdigit() or not 1 <= int(port) <= 65535:
+            return False
+    return True
+
+
 class DockerDriver(ContainerDriver):
     # Toolchain volume composition.
     TOOLCHAIN_TARGET = "/toolchain-target"
@@ -70,6 +103,20 @@ class DockerDriver(ContainerDriver):
         """Pull Docker image"""
         try:
             await self.client.images.pull(image)
+        except aiodocker.DockerError as e:
+            raise _map_error(e) from e
+
+    async def pull_image_by_digest(self, reference: str) -> None:
+        """Pull exactly an immutable ``repo@sha256:<digest>`` reference.
+
+        The reference is validated before it reaches the runtime. Tags, URLs,
+        credentials, control characters, and malformed or overlong values are
+        rejected so a verified launch can never substitute a mutable tag.
+        """
+        if not _valid_digest_reference(reference):
+            raise ImageResolutionError("invalid_digest_reference")
+        try:
+            await self.client.images.pull(reference)
         except aiodocker.DockerError as e:
             raise _map_error(e) from e
 

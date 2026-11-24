@@ -7,6 +7,7 @@ Rate limiting tests — HTTP middleware + WebSocket message throttling.
 Uses a mock Redis to avoid requiring a real Redis server in tests.
 """
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -14,21 +15,33 @@ import pytest_asyncio
 
 from app.config import settings
 from app.core.roles import ROLE_RATE_LIMITS as ROLE_LIMITS
+from app.middleware import rate_limit as rate_limit_module
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.websocket.metrics_socket import _check_ws_message_rate_limit
+
+# A fixed clock keeps every request in one rate-limit bucket. Without it, a
+# burst that crosses a wall-clock window boundary resets the counter and the
+# test intermittently falls through to the endpoint's 401.
+FIXED_RATE_LIMIT_TIME = 1_700_000_000.0
 
 # ─── Fixtures ──────────────────────────────────────────────────────────────
 
 
 @pytest.fixture(autouse=True)
-def reset_maintenance_mode():
+def reset_maintenance_mode(monkeypatch):
     """Ensure maintenance mode is off before each rate limit test.
 
     test_system.py enables maintenance mode and may not reset it in all
     failure paths, which would cause our tests to get 503 instead of 429.
+    The middleware clock is pinned so a burst cannot straddle two buckets.
     """
     settings.maintenance_mode = False
     settings.rate_limit_enabled = True
+    monkeypatch.setattr(
+        rate_limit_module,
+        "time",
+        SimpleNamespace(time=lambda: FIXED_RATE_LIMIT_TIME),
+    )
     yield
 
 
@@ -228,9 +241,14 @@ class TestRateLimitMiddleware:
             assert response.status_code in (200, 404)
 
     @pytest.mark.asyncio
-    async def test_strict_multiplier_on_admin_endpoints(self, client, user_token, mock_redis):
+    async def test_strict_multiplier_on_admin_endpoints(
+        self, client, user_token, mock_redis, monkeypatch
+    ):
         """Admin endpoints should use the strict multiplier (0.5x)."""
         settings.rate_limit_enabled = True
+        # Keep this burst inside one fixed window; under a loaded full suite
+        # 60+ requests can otherwise straddle the 60-second boundary.
+        monkeypatch.setattr(settings, "rate_limit_window_seconds", 3600)
         strict_limit = int(ROLE_LIMITS["user"] * settings.rate_limit_strict_multiplier)
 
         with patch.object(RateLimitMiddleware, "_get_redis", return_value=mock_redis):

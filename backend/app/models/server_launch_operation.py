@@ -21,6 +21,12 @@ class ServerLaunchOperation(Base):
             unique=True,
             postgresql_where=text("state IN ('prepared', 'executing', 'uncertain')"),
         ),
+        Index(
+            "ix_server_launch_operations_recovery_scan",
+            text("COALESCE(heartbeat_at, created_at)"),
+            "id",
+            postgresql_where=text("state IN ('prepared', 'executing', 'uncertain')"),
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -33,6 +39,8 @@ class ServerLaunchOperation(Base):
     action = Column(String(20), nullable=False)
     state = Column(String(20), nullable=False, default="prepared")
     fencing_token = Column(UUID(as_uuid=True), nullable=False, default=uuid.uuid4)
+    executor_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    heartbeat_at = Column(DateTime, nullable=True)
     revision_id = Column(
         UUID(as_uuid=True),
         ForeignKey("environment_revisions.id", ondelete="RESTRICT"),
@@ -56,6 +64,13 @@ class ServerLaunchOperation(Base):
 
 @event.listens_for(ServerLaunchOperation, "before_update")
 def _immutable_operation(mapper, connection, target):
-    mutable = {"state", "reason_code", "updated_at", "finished_at"}
+    mutable = {
+        "state",
+        "reason_code",
+        "updated_at",
+        "finished_at",
+        "executor_id",
+        "heartbeat_at",
+    }
     if any(attr.history.has_changes() for attr in inspect(target).attrs if attr.key not in mutable):
         raise ValueError("Server operation intent is immutable")

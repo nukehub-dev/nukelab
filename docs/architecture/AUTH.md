@@ -95,7 +95,10 @@ servers:read_all        - View all servers
 servers:write_all       - Manage all server records
 servers:access_others   - Mint a NukeIDE access token for another user's server
 environment:create      - Create environment templates
+environment:update      - Verify or revoke environment revisions
 plan:update             - Edit plans, subject to the last-usable-plan guard
+operations:read_all     - View recovery operations
+operations:manage_all   - Reconcile recovery operations with proof
 audit:read              - View audit logs
 admin:access            - Open the administration area
 ```

@@ -9,6 +9,10 @@ ${BOLD}Usage:${RESET} ./nukelabctl doctor
 Run non-destructive checks and report whether the host environment is ready
 to run NukeLab.
 
+Also reports read-only recovery-journal and registry-verification preflight
+state. A stopped stack or unreachable database is reported as unavailable,
+not as a failure.
+
 ${BOLD}Examples:${RESET}
   ./nukelabctl doctor
   ./nukelabctl doctor --verbose
@@ -200,6 +204,11 @@ _doctor_check_disk() {
     fi
 }
 
+# Recovery and registry preflight live in a sourced, read-only helper so
+# this module stays focused on host checks.
+# shellcheck source=../doctor/preflight.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../doctor/preflight.sh"
+
 cmd_doctor() {
     step "NukeLab environment check"
 
@@ -213,7 +222,13 @@ cmd_doctor() {
     _doctor_check_socket
     _doctor_check_disk
 
+    _doctor_load_schema
+    _doctor_check_recovery_preflight
+    _doctor_check_registry_preflight
+
     echo ""
+    _doctor_info "Recovery preflight summary: config=${_DOCTOR_RECOVERY_STATE} journal=${_DOCTOR_RECOVERY_JOURNAL_STATE} volume_recovery=${_DOCTOR_VOLUME_RECOVERY_STATE}"
+    _doctor_info "Registry preflight summary: policy=${_DOCTOR_REGISTRY_STATE} journal=${_DOCTOR_REGISTRY_JOURNAL_STATE}"
     if [ "$_DOCTOR_FAIL" -eq 0 ] && [ "$_DOCTOR_WARN" -eq 0 ]; then
         ok "All checks passed"
     elif [ "$_DOCTOR_FAIL" -eq 0 ]; then

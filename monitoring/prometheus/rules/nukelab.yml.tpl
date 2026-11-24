@@ -132,3 +132,85 @@ groups:
         annotations:
           summary: "Postgres database predicted to exceed 80% of filesystem within 24 hours"
           description: "Database {{ $labels.datname }} on {{ $labels.instance }} is predicted to reach {{ $value | humanizePercentage }} of the host filesystem in 24h."
+
+  - name: nukelab-recovery
+    rules:
+      - alert: NukeLabRecoveryNoFreshWorkers
+        # Keep the staleness threshold in sync with WORKER_HEARTBEAT_STALE_SECONDS
+        # (default 20s); freshness itself is classified by the backend.
+        expr: |
+          sum(nukelab_worker_heartbeats{state="fresh"}) == 0
+          and
+          sum(nukelab_workers_registered) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No fresh NukeLab recovery worker heartbeats"
+          description: "Every registered backend/celery-worker executor is stale or stopped. In-flight launch/backup/restore work may still be running without a live heartbeat; do not treat this as termination proof. Review Admin > Operations and Admin > Environment revisions, then run ./nukelabctl doctor."
+
+      - alert: NukeLabRecoveryWorkerHeartbeatsStale
+        expr: |
+          sum(nukelab_worker_heartbeats{state="stale"}) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NukeLab recovery worker heartbeats are stale"
+          description: "{{ $value }} registered executor heartbeat(s) exceeded WORKER_HEARTBEAT_STALE_SECONDS. A stale heartbeat is an inspection trigger, not proof that an operation stopped. Review Admin > Operations and Admin > Environment revisions, then run ./nukelabctl doctor."
+
+      - alert: NukeLabRecoveryScanStale
+        # RECOVERY_SCAN_INTERVAL_SECONDS defaults to 30s; 60s is two missed
+        # intervals before the 1m "for" window adds confirmation time.
+        expr: |
+          nukelab_recovery_scan_last_success_timestamp_seconds > 0
+          and
+          time() - nukelab_recovery_scan_last_success_timestamp_seconds > 60
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NukeLab recovery scan has not completed successfully"
+          description: "No error-free recovery scan has completed within two configured scan intervals. Durable journal rows remain pending for the next pass. Review Admin > Operations and Admin > Environment revisions, then run ./nukelabctl doctor."
+
+      - alert: NukeLabOperationsRecoveryRequired
+        expr: |
+          sum(nukelab_operations_recovery_required) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NukeLab operations require recovery"
+          description: "{{ $value }} active launch/backup/restore operation(s) need operator attention and are not retried automatically. Review Admin > Operations and Admin > Environment revisions, then run ./nukelabctl doctor."
+
+      - alert: NukeLabOperationsStalled
+        expr: |
+          sum(nukelab_operations_stalled) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NukeLab recovery operations are stalled"
+          description: "{{ $value }} active operation(s) have an operation heartbeat older than OPERATION_HEARTBEAT_STALE_SECONDS. A stalled live worker is observed, not failed or released automatically. Review Admin > Operations and Admin > Environment revisions, then run ./nukelabctl doctor."
+
+      - alert: NukeLabRegistryVerificationGaps
+        # Local-only revisions under require, or unverified active templates
+        # under off, mean normal launches may not have portable registry proof.
+        expr: |
+          (
+            nukelab_registry_verification_policy{policy="require"} == 1
+            and on()
+            (sum(nukelab_registry_local_only_revisions) > 0)
+          )
+          or
+          (
+            nukelab_registry_verification_policy{policy="off"} == 1
+            and on()
+            (sum(nukelab_registry_templates_without_verified_revision) > 0)
+          )
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NukeLab registry verification has coverage gaps"
+          description: "Active templates or revisions are local-only under the {{ $labels.policy }} registry verification policy. Verify artifacts from Admin > Environment revisions and inspect Admin > Operations, then run ./nukelabctl doctor."

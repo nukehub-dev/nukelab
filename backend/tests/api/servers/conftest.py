@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy import select
 
+from app.config import settings
 from app.container.driver import ContainerDriver, ContainerDriverError
 from app.models.server import Server
 from app.models.volume import Volume
@@ -28,10 +29,11 @@ def server_api_runtime(monkeypatch, db_session):
             if isinstance(reference, str) and reference.startswith("sha256:")
             else "sha256:" + hashlib.sha256(str(reference).encode()).hexdigest()
         )
+        digests = [reference] if isinstance(reference, str) and "@sha256:" in reference else []
         return {
             "requested_reference": str(reference),
             "local_id": local,
-            "repository_digests": [],
+            "repository_digests": digests,
             "os": "linux",
             "architecture": "amd64",
             "registry_verified": False,
@@ -73,6 +75,7 @@ def server_api_runtime(monkeypatch, db_session):
         resolve_image=AsyncMock(side_effect=identity),
         image_exists=AsyncMock(return_value=True),
         pull_image=AsyncMock(),
+        pull_image_by_digest=AsyncMock(),
         get_container_info=AsyncMock(side_effect=inspect),
         create_container=AsyncMock(side_effect=create),
         start_container=AsyncMock(side_effect=start),
@@ -139,6 +142,10 @@ def server_api_runtime(monkeypatch, db_session):
             return "unknown"
         return "running" if info["State"]["Running"] else "stopped"
 
+    # These HTTP tests exercise the launch API, not registry I/O. Pin the
+    # policy so a developer or CI environment with ``prefer``/``require`` does
+    # not make the suite depend on Docker Hub reachability.
+    monkeypatch.setattr(settings, "registry_verification_policy", "off")
     monkeypatch.setattr("app.api.servers.spawner.get_status", runtime_status)
     monkeypatch.setattr("app.api.servers.get_driver", acquire)
     yield driver

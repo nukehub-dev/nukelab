@@ -2,15 +2,25 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import asyncio
+import os
+import random
 import threading
+import time
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.config import settings
 from app.core.logging import get_logger
 from app.core.time_utils import utc_now
-from app.worker import celery_app
+from app.services.operation_reconciler import OperationReconciler
+from app.services.recovery_notifications import (
+    RECOVERY_REMINDER_BATCH_LIMIT,
+    send_recovery_reminders,
+)
+from app.services.volume_finalization import VolumeFinalizationHooks
+from app.worker import celery_app, ensure_journal_schema
 
 logger = get_logger(__name__)
 import contextlib
@@ -23,6 +33,32 @@ from app.services.operation_runner import operation_resources, run_operation
 from app.services.server_queue_dispatch_service import run_queue_dispatch
 from app.services.server_termination_service import ServerTerminationService
 from app.services.system_metrics_collector import SystemMetricsCollector
+
+# The recovery scan is scheduled every ``RECOVERY_SCAN_INTERVAL_SECONDS`` but
+# each delivery waits a bounded random delay so simultaneous workers do not
+# inspect the same rows in lockstep.
+RECOVERY_SCAN_JITTER_SECONDS = 5.0
+
+
+def _volume_finalization_hooks(session_factory, driver):
+    """Build volume completion hooks without blocking launch/queue recovery.
+
+    Volume success still requires the recovery service's completion primitive.
+    When recovery storage is disabled or the hooks cannot be built, the
+    reconciler runs without them and volume rows stay protected.
+    """
+    if not settings.volume_backup_storage_path:
+        return None
+    if not os.path.isdir(settings.volume_backup_storage_path):
+        return None
+    try:
+        return VolumeFinalizationHooks(session_factory, driver)
+    except Exception as exc:
+        logger.warning(
+            "Volume finalization hooks unavailable",
+            extra={"error_class": type(exc).__name__},
+        )
+        return None
 
 
 def _run_async(coro):
@@ -239,6 +275,36 @@ def remind_stale_credit_requests(self):
         return _run_async(_remind())
     except Exception as e:
         return f"Error reminding stale credit requests: {e}"
+
+
+@celery_app.task(bind=True)
+def remind_recovery_required_operations(self):
+    """Remind owners about recovery rows that are still unresolved.
+
+    At most one reminder is sent per operation per 24 hours, and each sweep
+    inspects a bounded batch. A broker or database failure leaves the durable
+    journal rows untouched for the next scheduled run.
+    """
+
+    async def _remind():
+        async with AsyncSessionLocal() as db:
+            report = await send_recovery_reminders(
+                db,
+                limit=RECOVERY_REMINDER_BATCH_LIMIT,
+            )
+            return (
+                f"Recovery reminders: scanned={report.scanned}, sent={report.sent}, "
+                f"skipped={report.skipped}"
+            )
+
+    try:
+        return _run_async(_remind())
+    except Exception as exc:
+        logger.warning(
+            "Recovery reminder sweep deferred",
+            extra={"error_class": type(exc).__name__},
+        )
+        return "Recovery reminder sweep deferred"
 
 
 @celery_app.task(bind=True)
@@ -1048,12 +1114,15 @@ def check_autovacuum_health(self):
 
 @celery_app.task(bind=True)
 def update_prometheus_business_metrics(self):
-    """Update Prometheus gauges for business-level metrics.
+    """Update Prometheus gauges for business and recovery-level metrics.
 
     Runs every 60s via Celery Beat. Updates:
     - nukelab_users_total
     - nukelab_servers_total (by status)
     - nukelab_nuke_balance_total
+    - nukelab_workers_registered / nukelab_worker_heartbeats
+    - nukelab_operations_active / recovery_required / stalled
+    - nukelab_registry_verification_policy and local-only revision counts
     """
     if not settings.prometheus_enabled:
         return "Prometheus disabled; skipping business metrics update"
@@ -1077,6 +1146,17 @@ def update_prometheus_business_metrics(self):
             result = await db.execute(select(Server.status, func.count()).group_by(Server.status))
             server_counts = dict(result.all())
 
+            recovery_snapshot = None
+            try:
+                from app.services.recovery_metrics import collect_recovery_metrics
+
+                recovery_snapshot = await collect_recovery_metrics(db)
+            except Exception as exc:
+                logger.warning(
+                    "Recovery metrics collection failed",
+                    extra={"error_class": type(exc).__name__},
+                )
+
         from app.core.prometheus_metrics import (
             set_nuke_balance_total,
             set_servers_total,
@@ -1091,6 +1171,17 @@ def update_prometheus_business_metrics(self):
         for status in known_statuses:
             set_servers_total(status, server_counts.get(status, 0))
 
+        if recovery_snapshot is not None:
+            try:
+                from app.services.recovery_metrics import publish_recovery_metrics
+
+                publish_recovery_metrics(recovery_snapshot)
+            except Exception as exc:
+                logger.warning(
+                    "Recovery metrics publication failed",
+                    extra={"error_class": type(exc).__name__},
+                )
+
         return (
             f"Business metrics updated: users={users_total}, "
             f"nuke={nuke_total}, servers={dict(server_counts)}"
@@ -1098,8 +1189,12 @@ def update_prometheus_business_metrics(self):
 
     try:
         return _run_async(_update())
-    except Exception as e:
-        return f"Error updating business metrics: {e}"
+    except Exception as exc:
+        logger.warning(
+            "Business metrics update failed",
+            extra={"error_class": type(exc).__name__},
+        )
+        return f"Error updating business metrics: {type(exc).__name__}"
 
 
 @celery_app.task(bind=True)
@@ -1334,6 +1429,9 @@ def dispatch_volume_recovery(self):
         async with operation_resources() as resources:
             db = resources.db
             service = VolumeBackupService(db, VolumeRecoveryRuntime(resources.driver))
+            recovered = await service.recover_stale_deletions(limit=20)
+            if recovered:
+                logger.info("Recovered stale backup deletions", extra={"count": recovered})
             expired = await service.retention_candidates(limit=20)
             for identifier in expired:
                 try:
@@ -1381,3 +1479,55 @@ def dispatch_volume_recovery(self):
         return f"Dispatched {dispatched} volume recovery operations"
 
     return run_operation(dispatch, timeout_seconds=settings.volume_backup_timeout_seconds)
+
+
+@celery_app.task(bind=True)
+def reconcile_operations(self, jitter: bool = True):
+    """Inspect active journal rows and apply only proof-backed outcomes.
+
+    The task is deliberately idempotent and owns its DB/driver resources for
+    one event loop. A broker or database failure leaves the durable rows for
+    the next beat tick; no reservation is released from age or heartbeat
+    absence alone.
+    """
+    if not ensure_journal_schema():
+        logger.critical("Operation reconciliation refused: incompatible journal schema")
+        return "Operation reconciliation blocked: incompatible journal schema"
+
+    if jitter:
+        time.sleep(random.uniform(0.0, RECOVERY_SCAN_JITTER_SECONDS))
+
+    async def reconcile():
+        async with operation_resources() as resources:
+            session_factory = async_sessionmaker(resources.db.bind, expire_on_commit=False)
+            hooks = _volume_finalization_hooks(session_factory, resources.driver)
+            if hooks is None:
+                reconciler = OperationReconciler(session_factory, resources.driver)
+            else:
+                reconciler = OperationReconciler(
+                    session_factory, resources.driver, volume_hooks=hooks
+                )
+            return await reconciler.scan(limit=settings.recovery_scan_batch_size)
+
+    # A pass is bounded by row count. Give runtime inspection a small multiple
+    # of the beat interval before the joined loop is cancelled; the next tick
+    # retries any rows the cancelled pass did not reach.
+    timeout_seconds = min(
+        float(settings.server_launch_timeout_seconds),
+        max(30.0, float(settings.recovery_scan_interval_seconds) * 4.0),
+    )
+    try:
+        report = run_operation(reconcile, timeout_seconds=timeout_seconds)
+    except Exception as exc:
+        logger.warning(
+            "Operation reconciliation scan deferred",
+            extra={"error_class": type(exc).__name__},
+        )
+        return "Operation reconciliation deferred"
+
+    logger.info("Operation reconciliation task complete", extra=report.as_dict())
+    return (
+        f"Reconciled {report.scanned} operations: {report.finalized} finalized, "
+        f"{report.deferred} deferred, {report.recovery_required} recovery required, "
+        f"{report.errors} errors"
+    )

@@ -15,6 +15,7 @@ from app.models.volume import Volume
 from app.models.volume_backup import VolumeBackup
 from app.models.volume_operation import VolumeOperation
 from app.models.volume_restore import VolumeRestore
+from app.services.operation_reconciliation import Liveness
 from app.services.volume_backup_service import BackupError, RecoveryPolicy, VolumeBackupService
 from app.services.volume_operation_service import VolumeOperationError, acquire_volume_operations
 from app.services.volume_recovery_runtime import RuntimeRecoveryError
@@ -603,6 +604,69 @@ async def test_delete_claim_blocks_duplicate_delivery_and_new_restore(
     assert (await recovery.execute_delete(backup.id)).status == "deleted"
     assert (await recovery.request_delete(owner, backup.id)).status == "deleted"
     recovery.runtime.delete_artifact.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_stale_delete_claim_recovers_only_after_stopped_proof(
+    db_session, test_user, recovery, monkeypatch
+):
+    owner = test_user.id
+    _, backup = await complete(db_session, recovery, owner)
+    await recovery.request_delete(owner, backup.id)
+    row = await db_session.get(VolumeBackup, backup.id)
+    row.helper_identity = "delete:" + str(uuid4())
+    row.executor_id = uuid4()
+    row.heartbeat_at = utc_now() - timedelta(minutes=5)
+    await db_session.commit()
+
+    async def alive(_self, _kind, _operation_id):
+        return Liveness.ALIVE
+
+    async def ambiguous(_self, _kind, _operation_id):
+        return Liveness.AMBIGUOUS
+
+    async def stopped(_self, _kind, _operation_id):
+        return Liveness.STOPPED
+
+    monkeypatch.setattr(
+        "app.services.volume_backup_service.ReconciliationService.observe_liveness", alive
+    )
+    assert await recovery.recover_stale_deletions() == 0
+    monkeypatch.setattr(
+        "app.services.volume_backup_service.ReconciliationService.observe_liveness", ambiguous
+    )
+    assert await recovery.recover_stale_deletions() == 0
+    recovery.runtime.delete_artifact.assert_not_awaited()
+
+    monkeypatch.setattr(
+        "app.services.volume_backup_service.ReconciliationService.observe_liveness", stopped
+    )
+    assert await recovery.recover_stale_deletions() == 1
+    recovered = await db_session.get(VolumeBackup, backup.id, populate_existing=True)
+    assert recovered.status == "deleted"
+    assert recovered.reserved_bytes == 0
+    assert recovered.helper_identity is None
+    assert recovered.executor_id is None
+    recovery.runtime.delete_artifact.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_stale_delete_without_executor_identity_stays_protected(
+    db_session, test_user, recovery
+):
+    owner = test_user.id
+    _, backup = await complete(db_session, recovery, owner)
+    await recovery.request_delete(owner, backup.id)
+    row = await db_session.get(VolumeBackup, backup.id)
+    row.helper_identity = "delete:" + str(uuid4())
+    row.executor_id = None
+    await db_session.commit()
+
+    assert await recovery.recover_stale_deletions() == 0
+    protected = await db_session.get(VolumeBackup, backup.id, populate_existing=True)
+    assert protected.status == "deleting"
+    assert protected.helper_identity.startswith("delete:")
+    recovery.runtime.delete_artifact.assert_not_awaited()
 
 
 @pytest.mark.asyncio

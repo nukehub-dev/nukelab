@@ -9,10 +9,18 @@ from pathlib import PurePosixPath
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 ShortText = Annotated[str, Field(min_length=1, max_length=500)]
 Fingerprint = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
+_PLATFORM_VARIANT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,31}\Z")
 
 
 class ManifestModel(BaseModel):
@@ -30,6 +38,23 @@ class ImageIdentity(ManifestModel):
     manifest_digest: ShortText | None = None
     index_digest: ShortText | None = None
     descriptor_media_type: ShortText | None = None
+    variant: ShortText | None = None
+
+    @field_validator("variant")
+    @classmethod
+    def safe_variant(cls, value):
+        if value is not None:
+            value = value.lower()
+            if not _PLATFORM_VARIANT_RE.fullmatch(value):
+                raise ValueError("Invalid OCI platform variant")
+        return value
+
+    @model_serializer(mode="wrap")
+    def _omit_null_variant(self, handler):
+        data = handler(self)
+        if isinstance(data, dict) and data.get("variant") is None:
+            data.pop("variant", None)
+        return data
 
     @field_validator("requested_reference", "verified_reference")
     @classmethod
@@ -89,6 +114,7 @@ class EnvironmentManifest(ManifestModel):
     schema_version: Literal["nukelab.environment/v1"] = "nukelab.environment/v1"
     revision_id: UUID
     revision_fingerprint: Fingerprint
+    portable_fingerprint: Fingerprint | None = None
     template_label: Annotated[str, Field(min_length=1, max_length=255)]
     runtime: ImageIdentity
     toolchain: ImageIdentity | None = None
@@ -110,11 +136,23 @@ class EnvironmentManifest(ManifestModel):
 
     @model_validator(mode="after")
     def truthful_portability(self):
-        if self.portability == "registry_verified" and not all(
-            image.registry_verified for image in (self.runtime, self.toolchain) if image
-        ):
-            raise ValueError("Unverified artifacts cannot be portable")
+        if self.portability == "registry_verified":
+            if self.portable_fingerprint is None:
+                raise ValueError("Registry-verified manifests require a portable fingerprint")
+            if not all(
+                image.registry_verified for image in (self.runtime, self.toolchain) if image
+            ):
+                raise ValueError("Unverified artifacts cannot be portable")
+        elif self.portable_fingerprint is not None:
+            raise ValueError("Local-only manifests cannot advertise a portable fingerprint")
         return self
+
+    @model_serializer(mode="wrap")
+    def _omit_null_portable_fingerprint(self, handler):
+        data = handler(self)
+        if isinstance(data, dict) and data.get("portable_fingerprint") is None:
+            data.pop("portable_fingerprint", None)
+        return data
 
     @classmethod
     def parse_import(cls, raw: bytes | str):

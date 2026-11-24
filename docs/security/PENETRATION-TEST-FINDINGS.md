@@ -18,6 +18,7 @@
 | In Progress | Fix actively being developed |
 | Retest Ready | Fix deployed, awaiting retest |
 | Retested | Retest passed |
+| Carried | Deterministic/static retest passed; a named live-runtime step remains unproven and tracked |
 | Closed | Retested and accepted |
 | Risk Accepted | Not fixed; documented risk acceptance |
 | False Positive | Finding invalidated after review |
@@ -41,12 +42,12 @@
 | PENT-NKL-011 | Backend reports server running before container is ready | Medium | Backend / Container Orchestration | Closed | Security Eng | Backend Eng | 2026-06-28 | 2026-06-28 |
 | PENT-NKL-012 | Shared read-only volumes leak host storage size and usage | Low | Container Security / Information Disclosure | Closed | Security Eng | Platform Eng | 2026-07-15 | 2026-08-22 |
 | PENT-NKL-013 | User resource stats endpoint missing authorization check | Medium | API1:2023 BOLA / Information Disclosure | Closed | Security Eng | Backend Eng | 2026-07-29 | 2026-07-29 |
-| PENT-NKL-014 | Delayed status observations could invalidate lifecycle reservations | Medium | Backend / Lifecycle Fencing | Retest Ready | Security Eng | Backend Eng | 2026-11-16 | |
-| PENT-NKL-015 | Logout runtime mutations bypassed lifecycle fencing | Medium | Backend / Lifecycle Fencing | Retest Ready | Security Eng | Backend Eng | 2026-11-16 | |
+| PENT-NKL-014 | Delayed status observations could invalidate lifecycle reservations | Medium | Backend / Lifecycle Fencing | Carried | Security Eng | Backend Eng | 2026-11-16 | |
+| PENT-NKL-015 | Logout runtime mutations bypassed lifecycle fencing | Medium | Backend / Lifecycle Fencing | Carried | Security Eng | Backend Eng | 2026-11-16 | |
 | PENT-NKL-016 | Recreation preview omitted metadata read authorization | Medium | API1:2023 BOLA / Provenance | Closed | Security Eng | Backend Eng | 2026-11-17 | 2026-11-17 |
-| PENT-NKL-017 | Volume deletion mistook runtime failure for absence | Medium | Backend / Volume Recovery | Retest Ready | Security Eng | Backend Eng | 2026-11-18 | |
-| PENT-NKL-018 | Queue-admitted containers bypassed runtime hardening settings | Medium | Container Security / Configuration | Retest Ready | Security Eng | Backend Eng | 2026-11-18 | |
-| PENT-NKL-019 | Admin bulk lifecycle bypassed cross-user grant and audit | High | Broken Access Control / Audit | Retest Ready | Security Eng | Backend Eng | 2026-11-18 | |
+| PENT-NKL-017 | Volume deletion mistook runtime failure for absence | Medium | Backend / Volume Recovery | Carried | Security Eng | Backend Eng | 2026-11-18 | |
+| PENT-NKL-018 | Queue-admitted containers bypassed runtime hardening settings | Medium | Container Security / Configuration | Carried | Security Eng | Backend Eng | 2026-11-18 | |
+| PENT-NKL-019 | Admin bulk lifecycle bypassed cross-user grant and audit | High | Broken Access Control / Audit | Closed | Security Eng | Backend Eng | 2026-11-18 | 2026-11-22 |
 
 ---
 
@@ -105,13 +106,13 @@ Specific code-level or config fix.
 
 ## Statistics
 
-| Severity | Open | In Progress | Retest Ready | Retested | Closed | Risk Accepted |
-|----------|------|-------------|--------------|----------|--------|---------------|
-| Critical | 0 | 0 | 0 | 0 | 0 | 0 |
-| High | 0 | 0 | 1 | 0 | 3 | 0 |
-| Medium | 1 | 0 | 4 | 0 | 9 | 0 |
-| Low | 0 | 0 | 0 | 0 | 1 | 0 |
-| Informational | 0 | 0 | 0 | 0 | 0 | 0 |
+| Severity | Open | In Progress | Retest Ready | Retested | Carried | Closed | Risk Accepted |
+|----------|------|-------------|--------------|----------|---------|--------|---------------|
+| Critical | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| High | 0 | 0 | 0 | 0 | 0 | 4 | 0 |
+| Medium | 1 | 0 | 0 | 0 | 4 | 9 | 0 |
+| Low | 0 | 0 | 0 | 0 | 0 | 1 | 0 |
+| Informational | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 
 ---
 
@@ -668,15 +669,15 @@ Endpoint now mirrors `GET /users/{user_id}`: self-view allowed; other users requ
 
 **CVSS 3.1:** 4.3 (`AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:N`)
 
-**Status:** Retest Ready
+**Status:** Carried
 
 **Opened:** 2026-11-16
+
+**Retested:** 2026-11-22
 
 **Owner:** Backend Eng
 
 **Component:** `backend/app/api/servers.py`
-
-Combined runtime retest remains pending.
 
 A read-side runtime probe could finish after another lifecycle action reserved or
 replaced a server. Applying that stale result could mark protected work stopped
@@ -690,10 +691,16 @@ Health probes also compare sampled container/version under admission before
 persisting results and hand that version to restart admission; failure streaks
 are scoped to each runtime container.
 
-Retest `backend/tests/security/test_server_status_fencing.py` and
-`backend/tests/security/test_health_observation_fencing.py`, including delayed
-observations during generation, container and journal changes. Also rehearse
-concurrent browser reads and lifecycle actions against an isolated runtime.
+**Evidence:**
+
+- `VOLUME_STORAGE_PATH=/tmp/nukelab-volumes-tahmid ./nukelabctl test backend tests/security/test_server_status_fencing.py tests/security/test_health_observation_fencing.py -q` — 16 passed. Covers reserved `starting`/`stopping` observations, delayed observations during row-version, container and active-journal changes, probe failure preserving loaded rows, database failure propagation, paused-runtime resource accounting, stale health probes for replacement/metadata/active-operation changes, old-container failure-streak isolation and version-aware restart admission.
+- `VOLUME_STORAGE_PATH=/tmp/nukelab-volumes-tahmid ./nukelabctl test backend tests/services/test_health_check_service.py tests/services/test_server_operations.py tests/services/test_server_lifecycle_service.py -q` — 51 passed. Confirms the surrounding health, operation-journal and lifecycle admission paths.
+- Delayed observations are applied only while the sampled container identity and row version still match and no active launch operation exists; otherwise the loaded response state is retained.
+
+**Carried step:** Rehearse concurrent browser reads against lifecycle actions on an
+isolated disposable runtime. The deterministic admission/fencing paths are
+proven, but the combined browser/runtime race was not run against a live daemon
+for this retest.
 
 ### PENT-NKL-015: Logout runtime mutations bypassed lifecycle fencing
 
@@ -701,13 +708,13 @@ concurrent browser reads and lifecycle actions against an isolated runtime.
 
 **CVSS 3.1:** 4.3 (`AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:N`)
 
-**Status:** Retest Ready
+**Status:** Carried
 
 **Opened:** 2026-11-16
 
-**Owner:** Backend Eng
+**Retested:** 2026-11-22
 
-Combined runtime retest remains pending.
+**Owner:** Backend Eng
 
 Logout's optional server shutdown used direct runtime calls and independent GPU
 release. A concurrent replacement could finish before logout wrote its stale
@@ -716,8 +723,15 @@ verified termination and preserves active/uncertain claims. Token revocation
 commits before lifecycle transaction ownership; one failed server does not block
 logout or subsequent items.
 
-Retest `backend/tests/security/test_logout_lifecycle_fencing.py` and auth API
-transport regressions, then race logout against replacement on an isolated daemon.
+**Evidence:**
+
+- `VOLUME_STORAGE_PATH=/tmp/nukelab-volumes-tahmid ./nukelabctl test backend tests/security/test_logout_lifecycle_fencing.py -q` — 4 passed. Covers prepared, executing and uncertain operation claims with GPU allocations retained and no driver mutation, plus refresh-token revocation visible before server termination runs.
+- `VOLUME_STORAGE_PATH=/tmp/nukelab-volumes-tahmid ./nukelabctl test backend tests/api/auth/test_auth_validation.py tests/api/auth/test_auth.py tests/api/auth/test_auth_helpers.py tests/api/auth/test_auth_edge_cases.py -q` — 91 passed. Covers logout delegation, failed-item isolation, access-token denylisting, refresh-token revocation and cookie/transport cleanup.
+
+**Carried step:** Race logout against a replacement start on an isolated
+disposable daemon. The deterministic fencing, claim-preservation and token
+revocation ordering paths are proven, but the live replacement race was not run
+for this retest.
 
 ### PENT-NKL-016: Recreation preview omitted metadata read authorization
 
@@ -753,15 +767,15 @@ cannot preview; authorized final creation retains its normal management boundary
 
 **CVSS 3.1:** 4.9 (`AV:N/AC:L/PR:H/UI:N/S:U/C:N/I:H/A:N`)
 
-**Status:** Retest Ready
+**Status:** Carried
 
 **Opened:** 2026-11-18
+
+**Retested:** 2026-11-22
 
 **Owner:** Backend Eng
 
 **Component:** `backend/app/container/docker_driver.py`, `backend/app/services/volume_service.py`
-
-Isolated failure retest remains required.
 
 The runtime adapter swallowed deletion errors and returned no volume for every
 inspection failure. Database cleanup could consequently discard ownership and
@@ -771,10 +785,16 @@ and removes metadata only after verified runtime absence. Only a daemon `404`
 means absence; other errors retain a protected operation and require recovery.
 Account deletion also requires explicit resource cleanup.
 
-Retest `backend/tests/security/test_volume_mutation_exclusion.py` and the driver
-regressions, including daemon failure and ambiguous post-delete inspection.
-An isolated daemon failure drill must confirm physical data, ownership records
-and reservations remain protected until absence is established.
+**Evidence:**
+
+- `VOLUME_STORAGE_PATH=/tmp/nukelab-volumes-tahmid ./nukelabctl test backend tests/security/test_volume_mutation_exclusion.py -q` — 23 passed. Covers retained guard, metadata and quota on daemon delete failure, pre- and post-delete inspection failure, post-delete inspection that still finds the volume, and the positive path where only a daemon `404` plus a follow-up absence inspection deletes the row. Also covers account deletion requiring resource cleanup and unmanaged bind aliases blocking deletion.
+- `VOLUME_STORAGE_PATH=/tmp/nukelab-volumes-tahmid ./nukelabctl test backend tests/services/test_volume_service.py tests/container/test_docker_driver_coverage.py -q` — 101 passed. Driver regressions prove `get_volume` returns `None` only for daemon `404` and raises `ContainerDriverError` for other daemon/transport failures; deletion treats only `404` as idempotent absence.
+
+**Carried step:** Run the same failure sequence against an isolated disposable
+daemon with a real private volume, host quota and stored data. The unit/API tests
+mock the daemon, so they prove the service and driver decision paths but not that
+the real daemon error code, physical volume data and host quota state remain
+untouched until absence is verified.
 
 ### PENT-NKL-018: Queue-admitted containers bypassed runtime hardening settings
 
@@ -782,9 +802,11 @@ and reservations remain protected until absence is established.
 
 **CVSS 3.1:** 6.5 (`AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N`)
 
-**Status:** Retest Ready
+**Status:** Carried
 
 **Opened:** 2026-11-18
+
+**Retested:** 2026-11-22
 
 **Owner:** Backend Eng
 
@@ -800,9 +822,18 @@ read-only-rootfs `/home` tmpfs are now supplied to the worker; the combined
 real-stack acceptance scenario inspects the admitted container image and
 verifies the runtime identity and volume data.
 
-Retest the combined browser/worker/runtime scenario and inspect a
-queue-admitted container with `./nukelabctl verify-hardening` on an isolated
-stack. Also verify scheduled and health-restart spawns use the same settings.
+**Evidence:**
+
+- Static Compose audit (2026-11-22) parsed `compose.yml` and compared 48 spawn/runtime keys between `backend` and `celery-worker`: none are missing from `celery-worker`. `CONTAINER_HARDENING_ENABLED`, `DEV_MODE`, `APP_URL`/`PUBLIC_URL`, server-auth enablement/TTL/algorithm/rotation/rate-limit/audit, container-runtime, GPU, resource-pool, queue, registry and recovery expressions match. `SERVER_AUTH_SECRETS_DIR` is present on both containers and the shipped environment files set the same `/run/server-secrets` value; only the unset fallback differs (`/run/secrets` on the backend, `/run/server-secrets` on the worker), a pre-existing default inconsistency outside this finding.
+- Spawn-path audit: the only application call to `create_container` is `backend/app/container/spawner.py`; API launches, queue dispatch, scheduled start/restart, health auto-restart and owner/admin bulk start all reach it through `ServerLaunchService`/`ServerLifecycleService`. `backend/app/container/docker_driver.py` reads hardening settings when it builds the container config, so a correctly configured worker applies the same policy as the API.
+- `VOLUME_STORAGE_PATH=/tmp/nukelab-volumes-tahmid ./nukelabctl test backend tests/security/test_container_isolation.py -q` — 7 passed, 3 skipped (live-runtime isolation tests are opt-in). The new settings regression proves an explicit hardening enable survives the dev-mode default.
+- Live disposable-stack retest (2026-11-22): the combined real-stack suite queue-admitted a recreated server and directly inspected the running container. Container `a354261bae62` reported `user=65532:65532`, `CapDrop=["ALL"]`, read-only rootfs, and `no-new-privileges:true`; source and restored server containers showed the same values. The full combined suite passed 45/45 and the workspace suite passed 1/1.
+
+**Carried step:** Separately live-inspect a scheduled-start spawn and a
+health-restart spawn on an isolated stack. Both use the same `celery-worker`
+environment and the shared `spawner.py` → `docker_driver.py` path that the live
+queue-admission test exercised; the static parity audit covers their settings,
+but those two admission paths were not individually inspected at runtime.
 
 ### PENT-NKL-019: Admin bulk lifecycle bypassed cross-user grant and audit
 
@@ -810,9 +841,13 @@ stack. Also verify scheduled and health-restart spawns use the same settings.
 
 **CVSS 3.1:** 7.2 (`AV:N/AC:L/PR:H/UI:N/S:U/C:N/I:H/A:H`)
 
-**Status:** Retest Ready
+**Status:** Closed
 
 **Opened:** 2026-11-18
+
+**Closed:** 2026-11-22
+
+**Retested:** 2026-11-22
 
 **Owner:** Backend Eng
 
@@ -831,13 +866,25 @@ coverage includes the missing-reason/audit path and a limited admin with only
 `ADMIN_ACCESS`, which is rejected with 403 before any lifecycle action:
 `backend/tests/security/test_admin_bulk_authorization.py`.
 
-Retest with a role holding `ADMIN_ACCESS` but not server-write permission, and
-with a foreign server without/with a reason, on an isolated stack.
+**Evidence:**
+
+- `VOLUME_STORAGE_PATH=/tmp/nukelab-volumes-tahmid ./nukelabctl test backend tests/security/test_admin_bulk_authorization.py -q` — 3 passed. A role holding only `ADMIN_ACCESS` is rejected with 403 naming `SERVERS_WRITE_ALL`, and the lifecycle helper is not called. A foreign server without a reason fails per item with no lifecycle call. A foreign server with a reason succeeds and writes a `server.bulk_start` activity record containing the actor and reason plus an owner notification whose event key is `server_accessed`.
+- `VOLUME_STORAGE_PATH=/tmp/nukelab-volumes-tahmid ./nukelabctl test backend tests/api/admin/test_admin.py -q` — 105 passed, including the existing admin bulk-action branches.
+- Source inspection confirms the route still requires `ADMIN_ACCESS` plus JWT, then requires `SERVERS_WRITE_ALL` before the item loop; `_audit_cross_user_access` runs before each cross-user lifecycle mutation.
+
+**Closure note:** This finding is enforced at the API authorization/audit
+boundary rather than in container runtime behavior. The ASGI tests exercise the
+real permission matrix and database audit/notification writes, so a separate
+live stack would not add distinct evidence for this control.
 
 ---
 
-**Last Updated:** 2026-11-19
+**Last Updated:** 2026-11-22
 
 **Note:** Container hardening controls (PENT-NKL-001 through PENT-NKL-004) are
 implemented, covered by regression tests, and verified through a live container
 spawn/inspection. They are marked **Closed**.
+
+**Note:** Findings marked **Carried** have passed their deterministic and static
+retest criteria; each names the remaining live-runtime step in its detail
+section.

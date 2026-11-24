@@ -1,3 +1,8 @@
+global:
+  # Do not forward header-name aliases such as X_Auth_User; nginx and CGI
+  # backends would otherwise read them as the canonical header.
+  aliasHeadersStrategy: delete
+
 providers:
   docker:
     exposedByDefault: false

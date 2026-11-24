@@ -3,7 +3,7 @@
 
 import uuid
 
-from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.time_utils import utc_now
@@ -12,6 +12,14 @@ from app.db.base import Base
 
 class VolumeBackup(Base):
     __tablename__ = "volume_backups"
+    __table_args__ = (
+        Index(
+            "ix_volume_backups_recovery_scan",
+            text("COALESCE(heartbeat_at, created_at)"),
+            "id",
+            postgresql_where=text("status IN ('pending', 'in_progress', 'recovery_required')"),
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     volume_name = Column(String(255), nullable=False, index=True)
@@ -28,6 +36,8 @@ class VolumeBackup(Base):
     max_logical_bytes = Column(BigInteger, nullable=True)
     reserved_bytes = Column(BigInteger, nullable=False, default=0)
     fencing_token = Column(UUID(as_uuid=True), nullable=True)
+    executor_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    heartbeat_at = Column(DateTime, nullable=True)
     helper_identity = Column(String(255), nullable=True)
     reason_code = Column(String(50), nullable=True)
     expires_at = Column(DateTime, nullable=True)

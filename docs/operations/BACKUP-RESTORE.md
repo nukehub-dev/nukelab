@@ -236,14 +236,14 @@ inside the same host failure domain is not sufficient disaster recovery.
 
 ### 4.2 Retention
 
-`./nukelabctl backup` writes `backups/nukelab_backup-*.sql`; pre-migration
+`./nukelabctl backup` writes `backups/nukelab_backup_*.sql`; pre-migration
 snapshots are `backups/pre-migrate-*.dump`. Retain both patterns and keep an
 off-host copy:
 
 ```bash
 # Example: keep the last 30 days of routine and pre-migration backups
 find /opt/nukelab/backups -type f \
-  \( -name "nukelab_backup-*.sql" -o -name "pre-migrate-*.dump" \) \
+  \( -name "nukelab_backup_*.sql" -o -name "pre-migrate-*.dump" \) \
   -mtime +30 -delete
 ```
 
@@ -344,12 +344,30 @@ volume deletion. Account deletion requires cleanup of volumes, servers, backups
 and outstanding recovery operations first.
 
 Pending work survives broker delivery failure and is scanned for redelivery.
-`recovery_required` means runtime termination or cleanup could not be proved;
-retain the artifact, destination and operation guard while investigating. Do not
-clear guards, delete operation rows, reuse helper names or treat elapsed time as
-proof of termination. Stop and inspect the operation-labelled helper and verify
-attachments/storage before any operator repair. Automatic crash adoption and a
-supported operator reconciliation command remain future work.
+Backup and restore execution refreshes the fenced operation heartbeat. A worker
+that dies after claiming a `delete:<uuid>` artifact cleanup leaves the row in
+`deleting`; the durable dispatcher does not blindly retry it. A bounded
+maintenance pass clears the claim only after the claimant is proven stopped, then
+rechecks workload mounts and either removes the artifact or records
+`delete_failed`. Proof-backed completion is applied by the recovery reconciler
+only after completion metadata, archive checksum and helper termination are
+verified. A `restoring` destination is
+activated from the verified metadata; an already-active destination must match the
+recorded size. The volume service still owns the completion primitive.
+
+`recovery_required` means runtime termination or cleanup could not be proved.
+Retain the artifact, destination and operation guard while investigating. Admin →
+Recovery Operations can rerun the read-only inspector and reconcile only a
+proof-backed outcome; volume success still completes through the recovery
+service's artifact hooks, and the console never activates a destination itself. An
+ambiguous result returns conflict and changes nothing. There is no force path,
+admin cancel/retry, TTL takeover or automatic source stop. Do not clear guards,
+delete operation rows, reuse helper names or treat elapsed time as proof of
+termination. Stop and inspect the operation-labelled helper and verify
+attachments/storage before any operator repair. Owners receive deduplicated
+attention/completion notices after an applied transition, plus a bounded daily
+reminder while work remains unresolved. See
+[recovery operations](OPERATIONS.md#11-recovery-operations-and-upgrades).
 
 These local recovery copies share the host's failure domain. Keep database
 backups and an independently managed off-host storage backup policy as well.

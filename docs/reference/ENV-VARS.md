@@ -45,7 +45,7 @@ Both `.env` and `.env.development` are gitignored. `.env.example` is the only en
 | `CSRF_PROTECTION_ENABLED` | Enable double-submit CSRF protection |
 | `CORS_ORIGINS` | Comma-separated allowed origins |
 | `CORS_ALLOW_CREDENTIALS` | Allow cookies across origins |
-| `CONTAINER_HARDENING_ENABLED` | Harden spawned server containers (non-root, no capabilities, read-only rootfs, no-new-privileges); defaults on outside dev mode |
+| `CONTAINER_HARDENING_ENABLED` | Harden spawned server containers (non-root, no capabilities, read-only rootfs, no-new-privileges); defaults on outside dev mode. Pass the same value to `backend` and `celery-worker`, because background-admitted launches use the worker's configuration |
 
 ### Rate Limiting
 
@@ -152,10 +152,40 @@ local-only.
 | `QUEUE_TIMEOUT_SECONDS` | Maximum age of a waiting request before expiry |
 | `QUEUE_MAX_PENDING_PER_OWNER` | Maximum simultaneous pending requests per owner |
 | `QUEUE_MAX_PENDING_TOTAL` | Maximum simultaneous pending requests platform-wide |
+| `WORKER_HEARTBEAT_INTERVAL_SECONDS` | Worker/executor heartbeat cadence (default 5s) |
+| `WORKER_HEARTBEAT_STALE_SECONDS` | Age after which a heartbeat is stale (default 20s; must exceed the interval) |
+| `OPERATION_HEARTBEAT_INTERVAL_SECONDS` | Operation heartbeat cadence while a fenced launch/backup/restore row is active (default 10s) |
+| `OPERATION_HEARTBEAT_STALE_SECONDS` | Age after which an operation heartbeat is stale (default 90s; must exceed the interval) |
+| `RECOVERY_SCAN_INTERVAL_SECONDS` | Recovery reconciliation scan interval (default 30s) |
+| `RECOVERY_INITIAL_DELAY_SECONDS` | Delay before the first scan after worker readiness (default 60s) |
+| `RECOVERY_PREPARED_GRACE_SECONDS` | Grace before an unclaimed prepared operation may fail (default 60s) |
+| `RECOVERY_SCAN_BATCH_SIZE` | Maximum operation rows inspected per scan (default 200) |
+| `RECOVERY_STALL_WARNING_SECONDS` | Warning threshold for a live worker with a stale operation heartbeat (default 300s) |
+| `RECOVERY_LEGACY_DRAIN_CONFIRMED` | Set true only after a full stop/drain with no pre-2.3 executor; never replaces runtime inspection |
 | `UPLOAD_DIR` | Container path for uploads |
 
 Waiting queue requests do not reserve compute from the resource pools. The
 values must reflect the actual host capacity available to NukeLab.
+
+Recovery reminders are not configurable through environment variables. While an
+`uncertain` launch or `recovery_required` volume row remains unresolved, Celery
+Beat runs one bounded reminder sweep daily at 08:00 UTC and deduplicates to at
+most one reminder per operation per 24 hours.
+
+### Registry verification
+
+| Variable | Description |
+|---|---|
+| `REGISTRY_VERIFICATION_POLICY` | `off` (no registry I/O), `prefer` (verify when possible, otherwise record a local-only revision), or `require` (fail closed). Code default `off`; `.env.example` uses `prefer` for new installs |
+| `REGISTRY_PULL_POLICY` | `on_demand` allows an exact platform-digest pull when the approved artifact is missing; `preload_only` never pulls during launch or verification |
+| `REGISTRY_ALLOWED_HOSTS` | Optional comma-separated registry host allowlist. Empty permits public HTTPS registries that pass SSRF checks; private/loopback hosts and separate token-service hosts must be listed |
+| `REGISTRY_CREDENTIALS_FILE` | Docker `config.json`-compatible credentials file used only for verification. Empty means anonymous; compose sets the container path automatically |
+| `REGISTRY_CREDENTIALS_FILE_HOST` | Host path mounted read-only into `backend` and `celery-worker` at the credentials path; defaults to `/dev/null`. The file must be readable by uid 65532 and is re-read within 60 seconds, so replace it atomically to rotate credentials |
+
+`credsStore` and `credHelpers` are not supported. Runtime image pulls
+use the container engine's own registry login; the verification credentials do
+not authenticate a runtime pull. Resolution alone does not create approval, and
+a moved tag never becomes a new approval automatically.
 
 ### Volume recovery
 

@@ -33,6 +33,7 @@ from app.services.server_operation_service import (
     get_active,
 )
 from app.services.volume_operation_service import ACTIVE_STATES, transition_volume_operation
+from app.services.worker_heartbeat import current_executor_id
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +133,12 @@ class ServerTerminationService:
                 previous_container_id=server.container_id,
                 previous_status=server.status,
             )
-            operation = await claim_operation(self.db, operation.id, operation.fencing_token)
+            operation = await claim_operation(
+                self.db,
+                operation.id,
+                operation.fencing_token,
+                executor_id=current_executor_id(),
+            )
             if operation is None:
                 raise LaunchError("launch_in_progress", 409)
             reservation = _Termination(

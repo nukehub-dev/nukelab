@@ -259,18 +259,23 @@ fixtures.
 
 ### CI/CD supply-chain checks
 
-The security command supports optional supply-chain checks. Enable them in
-release pipelines:
+The security command supports optional supply-chain checks:
 
 - `./nukelabctl security --check-base-images` — fail if external Dockerfile
-  `FROM` images are not pinned by digest.
+  `FROM` images are not pinned by digest. The `Base Image Pinning` job in
+  `.github/workflows/security.yml` runs this strictly and is part of
+  `Security Gate`; branch protection must require `Security Gate` for merge
+  blocking.
 - `./nukelabctl security --signed-commits` — fail if the current branch contains
-  unsigned commits.
-- `./nukelabctl security --sbom` — generate CycloneDX SBOMs under
-  `backend/reports/security/sbom/`.
+  unsigned commits. CI uses a range-scoped check and keeps it advisory until
+  maintainers can sign.
+- `./nukelabctl security --sbom` — generate ad-hoc CycloneDX SBOMs under
+  `backend/reports/security/sbom/`. Tagged release CI uses the deterministic
+  `scripts/security/generate-release-sbom.sh`, then publishes and verifies
+  build-provenance and SBOM attestations for every release image.
 
-These checks are off by default because they require process/registry changes
-(commit signing and base-image pinning) that are not yet enforced.
+The local command keeps these checks off by default because they require
+process or registry changes.
 
 ## Child NAD Index
 

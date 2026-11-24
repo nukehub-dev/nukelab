@@ -43,6 +43,7 @@ from app.services.server_operation_service import (
     get_active,
 )
 from app.services.volume_operation_service import acquire_volume_operations
+from app.services.worker_heartbeat import current_executor_id
 
 COMPUTE_STATES = ("running", "starting", "stopping")
 
@@ -434,7 +435,12 @@ class ServerLifecycleService(ServerLaunchService):
 
         async with self.db.begin():
             operation = await self.db.get(ServerLaunchOperation, operation_id)
-            claim = await claim_operation(self.db, operation.id, operation.fencing_token)
+            claim = await claim_operation(
+                self.db,
+                operation.id,
+                operation.fencing_token,
+                executor_id=current_executor_id(),
+            )
             if claim is None:
                 raise LaunchError("launch_in_progress")
             server_id, token, container_id, owner_id = (
@@ -705,7 +711,12 @@ class ServerLifecycleService(ServerLaunchService):
                 environment_slug=environment.slug,
             )
             token = operation.fencing_token
-            await claim_operation(self.db, operation_id, token)
+            await claim_operation(
+                self.db,
+                operation_id,
+                token,
+                executor_id=current_executor_id(),
+            )
         try:
             for mount in mounts:
                 if mount["auto_created"]:

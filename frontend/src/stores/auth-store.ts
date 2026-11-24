@@ -54,6 +54,8 @@ export const PERMISSIONS = {
   VOLUMES_WRITE_OWN: 'volumes:write_own',
   VOLUMES_READ_ALL: 'volumes:read_all',
   VOLUMES_WRITE_ALL: 'volumes:write_all',
+  OPERATIONS_READ_ALL: 'operations:read_all',
+  OPERATIONS_MANAGE_ALL: 'operations:manage_all',
 
   AUDIT_READ: 'audit:read',
   ADMIN_ACCESS: 'admin:access',

@@ -3,6 +3,8 @@
 
 """PostgreSQL persistence regressions for approval and launch history."""
 
+from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -17,6 +19,7 @@ from app.schemas.environment_manifest import ImageIdentity, ManifestResources
 from app.services.environment_revision_service import (
     ConfigurationChanged,
     EnvironmentRevisionService,
+    RevisionAmbiguous,
     RevisionUnavailable,
     fingerprint,
     template_configuration,
@@ -33,26 +36,59 @@ def runtime_identity():
     )
 
 
-async def create_template(db):
-    name = "environment-" + uuid4().hex
-    template = EnvironmentTemplate(
-        name=name,
-        slug=name,
-        image="workspace:latest",
-        is_active=True,
-        environment_variables={"TOKEN": "private-value"},
+def verified_runtime_identity(*, local_id="sha256:" + "a" * 64):
+    digest = "sha256:" + "b" * 64
+    return ImageIdentity(
+        requested_reference="workspace:latest",
+        local_id=local_id,
+        repository_digests=[f"registry/workspace@{digest}"],
+        os="linux",
+        architecture="amd64",
+        registry_verified=True,
+        verified_reference=f"registry/workspace@{digest}",
+        manifest_digest=digest,
+        index_digest="sha256:" + "d" * 64,
+        descriptor_media_type="application/vnd.oci.image.manifest.v1+json",
     )
+
+
+def exported_manifest(*, portable_fingerprint, runtime=None, label="Origin environment"):
+    source = SimpleNamespace(
+        id=uuid4(),
+        fingerprint="c" * 64,
+        portable_fingerprint=portable_fingerprint,
+        runtime_identity=(runtime or verified_runtime_identity()).model_dump(mode="json"),
+        toolchain_identity=None,
+        configuration={"tool_mounts": [], "environment_variables": {}},
+    )
+    return build_manifest(
+        source,
+        template_label=label,
+        resources=ManifestResources(cpu=1.0, memory_mib=2048, disk_mib=10240),
+    )
+
+
+async def create_template(db, **changes):
+    name = "environment-" + uuid4().hex
+    values = {
+        "name": name,
+        "slug": name,
+        "image": "workspace:latest",
+        "is_active": True,
+        "environment_variables": {"TOKEN": "private-value"},
+    }
+    template = EnvironmentTemplate(**(values | changes))
     db.add(template)
     await db.flush()
     return template
 
 
-async def capture(db, template, authorize=None):
+async def capture(db, template, authorize=None, runtime=None):
     service = EnvironmentRevisionService(db, authorize or AsyncMock())
     revision = await service.capture(
         template.id,
         expected_template_fingerprint=fingerprint(template_configuration(template)),
-        runtime=runtime_identity(),
+        runtime=runtime or runtime_identity(),
     )
     return service, revision
 
@@ -189,3 +225,201 @@ async def test_launch_record_redelivery_reuses_identity_and_is_append_only(db_se
     first = await db_session.get(ServerLaunchRecord, operation_id)
     await db_session.refresh(first)
     assert first.generation == 1
+
+
+@pytest.mark.asyncio
+async def test_portable_manifest_matches_a_second_template_by_fingerprint_only(db_session):
+    origin_template = await create_template(db_session, name="origin-" + uuid4().hex)
+    _, origin = await capture(
+        db_session,
+        origin_template,
+        runtime=verified_runtime_identity(local_id="sha256:" + "a" * 64),
+    )
+    exported = exported_manifest(
+        portable_fingerprint=origin.portable_fingerprint,
+        label="Origin label",
+    )
+    portable_fingerprint = origin.portable_fingerprint
+    origin_id = origin.id
+    await db_session.delete(origin)
+    await db_session.flush()
+
+    destination_template = await create_template(db_session, name="destination-" + uuid4().hex)
+    _, destination = await capture(
+        db_session,
+        destination_template,
+        runtime=verified_runtime_identity(local_id="sha256:" + "f" * 64),
+    )
+
+    assert destination.id != origin_id
+    assert destination.portable_fingerprint == portable_fingerprint
+    assert destination.runtime_identity["local_id"] != exported.runtime.local_id
+    service = ServerProvenanceService(
+        db_session,
+        EnvironmentRevisionService(db_session, AsyncMock()),
+        can_use_template=AsyncMock(return_value=True),
+    )
+    selected = await service.validate_recreation(exported.model_dump_json())
+    assert selected.id == destination.id
+
+
+@pytest.mark.asyncio
+async def test_portable_manifest_with_multiple_templates_is_ambiguous(db_session):
+    first_template = await create_template(db_session)
+    second_template = await create_template(db_session)
+    _, first = await capture(
+        db_session,
+        first_template,
+        runtime=verified_runtime_identity(local_id="sha256:" + "a" * 64),
+    )
+    _, second = await capture(
+        db_session,
+        second_template,
+        runtime=verified_runtime_identity(local_id="sha256:" + "f" * 64),
+    )
+    assert first.portable_fingerprint == second.portable_fingerprint
+
+    exported = exported_manifest(portable_fingerprint=first.portable_fingerprint)
+    service = ServerProvenanceService(
+        db_session,
+        EnvironmentRevisionService(db_session, AsyncMock()),
+        can_use_template=AsyncMock(return_value=True),
+    )
+    with pytest.raises(RevisionAmbiguous) as error:
+        await service.validate_recreation(exported.model_dump_json())
+    assert error.value.code == "revision_ambiguous"
+
+
+@pytest.mark.asyncio
+async def test_portable_manifest_without_matching_revision_is_unavailable(db_session):
+    exported = exported_manifest(portable_fingerprint="e" * 64)
+    service = ServerProvenanceService(
+        db_session,
+        EnvironmentRevisionService(db_session, AsyncMock()),
+        can_use_template=AsyncMock(return_value=True),
+    )
+    with pytest.raises(RevisionUnavailable) as error:
+        await service.validate_recreation(exported.model_dump_json())
+    assert error.value.code == "revision_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_portable_manifest_never_matches_a_revoked_revision(db_session):
+    template = await create_template(db_session)
+    _, revision = await capture(db_session, template, runtime=verified_runtime_identity())
+    portable_fingerprint = revision.portable_fingerprint
+    exported = exported_manifest(portable_fingerprint=portable_fingerprint)
+    revision.revoked = True
+    await db_session.flush()
+
+    service = ServerProvenanceService(
+        db_session,
+        EnvironmentRevisionService(db_session, AsyncMock()),
+        can_use_template=AsyncMock(return_value=True),
+    )
+    with pytest.raises(RevisionUnavailable) as error:
+        await service.validate_recreation(exported.model_dump_json())
+    assert error.value.code == "revision_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_portable_manifest_chooses_the_newest_revision_of_one_template(db_session):
+    template = await create_template(db_session)
+    portable_fingerprint = "e" * 64
+    older_id = uuid4()
+    newer_id = uuid4()
+    db_session.add_all(
+        [
+            EnvironmentRevision(
+                id=older_id,
+                template_id=template.id,
+                fingerprint="1" * 64,
+                template_fingerprint="2" * 64,
+                portable_fingerprint=portable_fingerprint,
+                configuration={"tool_mounts": [], "environment_variables": {}},
+                runtime_identity=verified_runtime_identity().model_dump(mode="json"),
+                created_at=datetime(2026, 1, 1, 12),
+            ),
+            EnvironmentRevision(
+                id=newer_id,
+                template_id=template.id,
+                fingerprint="3" * 64,
+                template_fingerprint="4" * 64,
+                portable_fingerprint=portable_fingerprint,
+                configuration={"tool_mounts": [], "environment_variables": {}},
+                runtime_identity=verified_runtime_identity().model_dump(mode="json"),
+                created_at=datetime(2026, 1, 2, 12),
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    service = ServerProvenanceService(
+        db_session,
+        EnvironmentRevisionService(db_session, AsyncMock()),
+        can_use_template=AsyncMock(return_value=True),
+    )
+    selected = await service.validate_recreation(
+        exported_manifest(portable_fingerprint=portable_fingerprint).model_dump_json()
+    )
+    assert selected.id == newer_id
+
+
+@pytest.mark.asyncio
+async def test_unauthorized_portable_templates_are_omitted_not_disclosed(db_session):
+    allowed_template = await create_template(db_session)
+    hidden_template = await create_template(db_session)
+    _, allowed = await capture(
+        db_session,
+        allowed_template,
+        runtime=verified_runtime_identity(local_id="sha256:" + "a" * 64),
+    )
+    _, hidden = await capture(
+        db_session,
+        hidden_template,
+        runtime=verified_runtime_identity(local_id="sha256:" + "f" * 64),
+    )
+    assert allowed.portable_fingerprint == hidden.portable_fingerprint
+    exported = exported_manifest(portable_fingerprint=allowed.portable_fingerprint)
+
+    async def allowed_only(template):
+        return template.id == allowed_template.id
+
+    service = ServerProvenanceService(
+        db_session,
+        EnvironmentRevisionService(db_session, AsyncMock()),
+        can_use_template=allowed_only,
+    )
+    selected = await service.validate_recreation(exported.model_dump_json())
+    assert selected.id == allowed.id
+
+    async def deny_all(template):
+        return False
+
+    denied = ServerProvenanceService(
+        db_session,
+        EnvironmentRevisionService(db_session, AsyncMock()),
+        can_use_template=deny_all,
+    )
+    with pytest.raises(RevisionUnavailable) as error:
+        await denied.validate_recreation(exported.model_dump_json())
+    assert error.value.code == "revision_unavailable"
+    assert hidden_template.name not in str(error.value)
+
+
+@pytest.mark.asyncio
+async def test_inactive_portable_templates_are_not_matched(db_session):
+    template = await create_template(db_session)
+    _, revision = await capture(db_session, template, runtime=verified_runtime_identity())
+    exported = exported_manifest(portable_fingerprint=revision.portable_fingerprint)
+    template.is_active = False
+    await db_session.flush()
+
+    service = ServerProvenanceService(
+        db_session,
+        EnvironmentRevisionService(db_session, AsyncMock()),
+        can_use_template=AsyncMock(return_value=True),
+    )
+    with pytest.raises(RevisionUnavailable) as error:
+        await service.validate_recreation(exported.model_dump_json())
+    assert error.value.code == "revision_unavailable"

@@ -744,6 +744,173 @@ async def test_missing_approved_local_image_is_not_replaced_by_tag_pull(db_sessi
 
 
 @pytest.mark.asyncio
+async def test_resolve_revision_reuses_active_revision_without_re_resolving(
+    db_session, launch_fixture
+):
+    driver = runtime_driver()
+    service = ServerLaunchService(db_session, driver)
+    request = launch_fixture.request()
+
+    first = await service.resolve_revision(launch_fixture.owner_id, request)
+    assert driver.resolve_image.await_count == 1
+    assert driver.image_exists.await_count == 1
+
+    second = await service.resolve_revision(launch_fixture.owner_id, request)
+
+    assert second == first
+    assert driver.resolve_image.await_count == 2
+    assert driver.image_exists.await_count == 2
+    driver.pull_image.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reused_revision_missing_local_artifact_never_pulls_mutable_tag(
+    db_session, launch_fixture
+):
+    driver = runtime_driver()
+    service = ServerLaunchService(db_session, driver)
+    request = launch_fixture.request()
+    await service.resolve_revision(launch_fixture.owner_id, request)
+
+    driver.image_exists.return_value = False
+    with pytest.raises(LaunchError, match="artifact_missing"):
+        await service.resolve_revision(launch_fixture.owner_id, request)
+
+    assert driver.resolve_image.await_count == 1
+    driver.pull_image.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_revoked_active_revision_is_not_silently_replaced_on_resolve(
+    db_session, launch_fixture
+):
+    from app.models.environment_revision import EnvironmentRevision
+    from app.services.environment_revision_service import RevisionUnavailable
+
+    driver = runtime_driver()
+    service = ServerLaunchService(db_session, driver)
+    request = launch_fixture.request()
+    revision_id = await service.resolve_revision(launch_fixture.owner_id, request)
+
+    revision = await db_session.get(EnvironmentRevision, revision_id)
+    revision.revoked = True
+    await db_session.commit()
+
+    with pytest.raises(RevisionUnavailable):
+        await service.resolve_revision(launch_fixture.owner_id, request)
+
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(EnvironmentRevision)
+            .where(EnvironmentRevision.template_id == launch_fixture.environment_id)
+        )
+        == 1
+    )
+    driver.pull_image.assert_not_awaited()
+
+
+def registry_fakes(*, local_id=IMAGE_ID):
+    from app.schemas.environment_manifest import ImageIdentity
+    from app.services.registry_client import VerifiedImage
+    from app.services.registry_image_service import RegistryResolution
+
+    manifest_digest = "sha256:" + "c" * 64
+    verified_reference = f"registry.example/approved@{manifest_digest}"
+    verified = VerifiedImage(
+        requested_reference="approved:latest",
+        verified_reference=verified_reference,
+        manifest_digest=manifest_digest,
+        index_digest="sha256:" + "d" * 64,
+        descriptor_media_type="application/vnd.oci.image.manifest.v1+json",
+        os="linux",
+        architecture="amd64",
+        variant=None,
+    )
+    identity = ImageIdentity(
+        requested_reference="approved:latest",
+        local_id=local_id,
+        repository_digests=[verified_reference],
+        os="linux",
+        architecture="amd64",
+        registry_verified=True,
+        verified_reference=verified_reference,
+        manifest_digest=manifest_digest,
+        index_digest=verified.index_digest,
+        descriptor_media_type=verified.descriptor_media_type,
+    )
+    registry = SimpleNamespace(
+        resolve=AsyncMock(
+            return_value=RegistryResolution(
+                policy="require",
+                state="verified",
+                verified=verified,
+                fallback_reason=None,
+                pull_requested=False,
+            )
+        )
+    )
+    artifacts = SimpleNamespace(ensure_local=AsyncMock(return_value=identity))
+    return registry, artifacts, identity
+
+
+@pytest.mark.asyncio
+async def test_registry_verified_reference_captures_portable_revision(db_session, launch_fixture):
+    from app.models.environment_revision import EnvironmentRevision
+
+    driver = runtime_driver()
+    registry, artifacts, _ = registry_fakes()
+    service = ServerLaunchService(db_session, driver, registry=registry, artifacts=artifacts)
+    request = launch_fixture.request()
+
+    revision_id = await service.resolve_revision(launch_fixture.owner_id, request)
+    revision = await db_session.get(EnvironmentRevision, revision_id)
+
+    assert revision is not None
+    assert revision.runtime_identity["registry_verified"] is True
+    assert revision.portable_fingerprint is not None
+    registry.resolve.assert_awaited_once_with("approved:latest")
+    artifacts.ensure_local.assert_awaited_once()
+    driver.pull_image.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_reused_verified_revision_requires_exact_local_proof(db_session, launch_fixture):
+    driver = runtime_driver()
+    registry, artifacts, _ = registry_fakes()
+    service = ServerLaunchService(db_session, driver, registry=registry, artifacts=artifacts)
+    request = launch_fixture.request()
+
+    first = await service.resolve_revision(launch_fixture.owner_id, request)
+    second = await service.resolve_revision(launch_fixture.owner_id, request)
+
+    assert second == first
+    registry.resolve.assert_awaited_once()
+    assert artifacts.ensure_local.await_count == 2
+    driver.pull_image.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_registry_require_failure_maps_to_launch_error(db_session, launch_fixture):
+    from app.services.registry_client import RegistryError
+
+    driver = runtime_driver()
+    registry = SimpleNamespace(
+        resolve=AsyncMock(side_effect=RegistryError("registry_unreachable", "offline"))
+    )
+    service = ServerLaunchService(
+        db_session, driver, registry=registry, artifacts=SimpleNamespace()
+    )
+
+    with pytest.raises(LaunchError) as failure:
+        await service.resolve_revision(launch_fixture.owner_id, launch_fixture.request())
+
+    assert failure.value.code == "registry_unreachable"
+    assert failure.value.status_code == 503
+    driver.pull_image.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_template_change_during_image_resolution_cannot_approve_stale_configuration(
     db_session, launch_fixture
 ):

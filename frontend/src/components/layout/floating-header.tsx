@@ -57,7 +57,7 @@ export function FloatingHeader({
         )}
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-          {subtitle && <p className="text-sm text-muted-foreground mt-1 truncate">{subtitle}</p>}
+          {subtitle && <p className="mt-1 text-sm text-muted-foreground sm:truncate">{subtitle}</p>}
         </div>
 
         {/* Actions */}

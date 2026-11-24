@@ -82,6 +82,29 @@ async def test_probe_failure_keeps_loaded_rows_and_status(db_session, test_user,
 
 
 @pytest.mark.asyncio
+async def test_database_failure_is_not_swallowed_as_an_observation(
+    db_session, test_user, monkeypatch
+):
+    server = Server(
+        name="database-failure",
+        user_id=test_user.id,
+        status="running",
+        container_id="runtime",
+    )
+    db_session.add(server)
+    await db_session.commit()
+
+    async def unavailable(_db):
+        raise RuntimeError("admission database unavailable")
+
+    monkeypatch.setattr("app.api.servers.spawner.get_status", AsyncMock(return_value="stopped"))
+    monkeypatch.setattr("app.services.admission_service.acquire_admission_lock", unavailable)
+    with pytest.raises(RuntimeError, match="admission database unavailable"):
+        await _observe_server_runtime(server, db_session)
+    assert server.status == "running" and server.stopped_at is None
+
+
+@pytest.mark.asyncio
 async def test_paused_runtime_keeps_memory_and_compute_accounting(
     db_session, test_user, monkeypatch
 ):

@@ -62,6 +62,10 @@ class Permission:
     VOLUMES_READ_ALL = "volumes:read_all"
     VOLUMES_WRITE_ALL = "volumes:write_all"
 
+    # Operation recovery visibility and reconciliation
+    OPERATIONS_READ_ALL = "operations:read_all"
+    OPERATIONS_MANAGE_ALL = "operations:manage_all"
+
     # Audit
     AUDIT_READ = "audit:read"
 
@@ -109,6 +113,8 @@ class Permission:
             cls.VOLUMES_WRITE_OWN,
             cls.VOLUMES_READ_ALL,
             cls.VOLUMES_WRITE_ALL,
+            cls.OPERATIONS_READ_ALL,
+            cls.OPERATIONS_MANAGE_ALL,
             cls.AUDIT_READ,
             cls.ADMIN_ACCESS,
         ]

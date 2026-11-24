@@ -42,6 +42,7 @@ __all__ = [
     "Volume",
     "VolumeBackup",
     "VolumeRestore",
+    "WorkerHeartbeat",
     "WorkspaceInvitation",
     "WorkspaceVolume",
 ]
@@ -86,5 +87,6 @@ from app.models.volume import Volume as Volume
 from app.models.volume_backup import VolumeBackup as VolumeBackup
 from app.models.volume_operation import VolumeOperation as VolumeOperation
 from app.models.volume_restore import VolumeRestore as VolumeRestore
+from app.models.worker_heartbeat import WorkerHeartbeat as WorkerHeartbeat
 from app.models.workspace_invitation import WorkspaceInvitation as WorkspaceInvitation
 from app.models.workspace_volume import WorkspaceVolume as WorkspaceVolume

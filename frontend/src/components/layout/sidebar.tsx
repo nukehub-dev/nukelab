@@ -41,6 +41,7 @@ interface NavItem {
   icon: React.ElementType
   href: string
   requiredPermission?: string
+  requiredPermissions?: string[]
 }
 
 interface NavGroup {
@@ -97,6 +98,9 @@ function canAccessItem(
   hasPermission: (p: string) => boolean,
   canAccessAdminPanel: () => boolean
 ): boolean {
+  if (item.requiredPermissions) {
+    return item.requiredPermissions.every((permission) => hasPermission(permission))
+  }
   if (!item.requiredPermission) {
     // Administration link is special - check any admin permission
     if (item.href === '/admin') return canAccessAdminPanel()
@@ -129,6 +133,9 @@ export function Sidebar() {
 
   const isActive = (href: string) => {
     if (href === '/') return location.pathname === '/'
+    // The administration hub is exact so nested admin routes can highlight
+    // their own sidebar entry.
+    if (href === '/admin') return location.pathname === '/admin'
     return location.pathname.startsWith(href)
   }
 
@@ -499,7 +506,10 @@ export function Sidebar() {
       </aside>
 
       {/* Mobile Bottom Dock */}
-      <nav className="fixed bottom-4 left-4 right-4 z-40 lg:hidden flex justify-center pointer-events-none">
+      <nav
+        className="fixed bottom-4 left-4 right-4 z-40 lg:hidden flex justify-center pointer-events-none"
+        style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+      >
         <div className="pointer-events-auto flex items-center w-full max-w-md bg-background/80 backdrop-blur-xl border border-border/50 rounded-full shadow-lg shadow-black/20 px-2 h-14 overflow-visible">
           {/* Left items — each item gets an equal slot so spacing stays
               symmetric around the center button regardless of label length. */}

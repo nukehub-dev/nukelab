@@ -19,6 +19,7 @@ import {
   KeyRound,
   LayoutDashboard,
   LifeBuoy,
+  ListOrdered,
   Loader2,
   Palette,
   Search,
@@ -179,6 +180,7 @@ export function CommandPalette() {
   const navigate = useNavigate()
   const hasPermission = useAuthStore((state) => state.hasPermission)
   const hasAnyPermission = useAuthStore((state) => state.hasAnyPermission)
+  const hasAllPermissions = useAuthStore((state) => state.hasAllPermissions)
   const canAccessAdmin = useAuthStore((state) => state.canAccessAdmin)
 
   // Open on the global `show-search` event (same pattern as ShortcutsModal)
@@ -291,11 +293,25 @@ export function CommandPalette() {
         hasPermission(PERMISSIONS.SERVERS_READ_ALL)
       ),
       ...adminPage(
+        'Queue',
+        '/admin/queue',
+        ListOrdered,
+        ['queue', 'requests', 'waiting', 'starting'],
+        hasAllPermissions([PERMISSIONS.SERVERS_READ_ALL, PERMISSIONS.ADMIN_ACCESS])
+      ),
+      ...adminPage(
         'Health',
         '/admin/health',
         HeartPulse,
         ['health', 'status'],
         hasPermission(PERMISSIONS.ADMIN_ACCESS)
+      ),
+      ...adminPage(
+        'Recovery Operations',
+        '/admin/operations',
+        Wrench,
+        ['operations', 'recovery', 'reconcile', 'backup', 'restore'],
+        hasAllPermissions([PERMISSIONS.OPERATIONS_READ_ALL, PERMISSIONS.ADMIN_ACCESS])
       ),
       ...adminPage(
         'Analytics',
@@ -392,7 +408,7 @@ export function CommandPalette() {
       ...(canAccessAdmin() ? [grafana] : []),
       page('Help & FAQ', '/support', LifeBuoy, ['help', 'questions', 'support', 'faq']),
     ]
-  }, [hasPermission, hasAnyPermission, canAccessAdmin])
+  }, [hasPermission, hasAnyPermission, hasAllPermissions, canAccessAdmin])
 
   const sections = useMemo<Section[]>(() => {
     if (isSlashMode) {

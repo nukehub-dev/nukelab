@@ -6,6 +6,7 @@
 import os
 
 import pytest
+from pydantic import ValidationError
 
 from app.config import Settings
 from app.version import __version__
@@ -149,3 +150,104 @@ class TestAppVersion:
         monkeypatch.setenv("APP_VERSION", "9.9.9-ci")
         monkeypatch.setenv("OTEL_SERVICE_VERSION", "custom")
         assert Settings().otel_service_version == "custom"
+
+
+class TestRegistrySettings:
+    """Registry verification settings keep the upgrade-safe code default."""
+
+    def _clear_registry_env(self, monkeypatch):
+        for key in (
+            "REGISTRY_VERIFICATION_POLICY",
+            "REGISTRY_PULL_POLICY",
+            "REGISTRY_ALLOWED_HOSTS",
+            "REGISTRY_CREDENTIALS_FILE",
+        ):
+            monkeypatch.delenv(key, raising=False)
+
+    def test_code_defaults_preserve_existing_launch_behavior(self, monkeypatch):
+        self._clear_registry_env(monkeypatch)
+
+        settings = Settings()
+
+        assert settings.registry_verification_policy == "off"
+        assert settings.registry_pull_policy == "on_demand"
+        assert settings.registry_allowed_hosts == ""
+        assert settings.registry_credentials_file == ""
+
+    def test_environment_values_are_parsed_raw(self, monkeypatch):
+        monkeypatch.setenv("REGISTRY_VERIFICATION_POLICY", "require")
+        monkeypatch.setenv("REGISTRY_PULL_POLICY", "preload_only")
+        monkeypatch.setenv("REGISTRY_ALLOWED_HOSTS", " GHCR.IO , example.com:5000 ")
+        monkeypatch.setenv("REGISTRY_CREDENTIALS_FILE", "/run/registry-credentials/config.json")
+
+        settings = Settings()
+
+        assert settings.registry_verification_policy == "require"
+        assert settings.registry_pull_policy == "preload_only"
+        # Normalization belongs to the registry service, not Settings.
+        assert settings.registry_allowed_hosts == " GHCR.IO , example.com:5000 "
+        assert settings.registry_credentials_file == "/run/registry-credentials/config.json"
+
+    @pytest.mark.parametrize(
+        ("key", "value"),
+        [
+            ("REGISTRY_VERIFICATION_POLICY", "sometimes"),
+            ("REGISTRY_PULL_POLICY", "always"),
+        ],
+    )
+    def test_invalid_policy_values_are_rejected(self, monkeypatch, key, value):
+        monkeypatch.setenv(key, value)
+
+        with pytest.raises(ValidationError):
+            Settings()
+
+
+class TestWorkerHeartbeatSettings:
+    """Recovery heartbeat timing stays positive and ordered."""
+
+    def _clear_heartbeat_env(self, monkeypatch):
+        for key in (
+            "WORKER_HEARTBEAT_INTERVAL_SECONDS",
+            "WORKER_HEARTBEAT_STALE_SECONDS",
+        ):
+            monkeypatch.delenv(key, raising=False)
+
+    def test_defaults(self, monkeypatch):
+        self._clear_heartbeat_env(monkeypatch)
+
+        settings = Settings()
+
+        assert settings.worker_heartbeat_interval_seconds == 5
+        assert settings.worker_heartbeat_stale_seconds == 20
+
+    def test_environment_overrides(self, monkeypatch):
+        monkeypatch.setenv("WORKER_HEARTBEAT_INTERVAL_SECONDS", "7")
+        monkeypatch.setenv("WORKER_HEARTBEAT_STALE_SECONDS", "30")
+
+        settings = Settings()
+
+        assert settings.worker_heartbeat_interval_seconds == 7
+        assert settings.worker_heartbeat_stale_seconds == 30
+
+    @pytest.mark.parametrize(
+        ("key", "value"),
+        [
+            ("WORKER_HEARTBEAT_INTERVAL_SECONDS", "0"),
+            ("WORKER_HEARTBEAT_INTERVAL_SECONDS", "-1"),
+            ("WORKER_HEARTBEAT_STALE_SECONDS", "0"),
+            ("WORKER_HEARTBEAT_STALE_SECONDS", "-1"),
+        ],
+    )
+    def test_non_positive_values_are_rejected(self, monkeypatch, key, value):
+        self._clear_heartbeat_env(monkeypatch)
+        monkeypatch.setenv(key, value)
+
+        with pytest.raises(ValidationError):
+            Settings()
+
+    def test_stale_threshold_must_exceed_the_interval(self):
+        with pytest.raises(ValidationError, match="WORKER_HEARTBEAT_STALE_SECONDS"):
+            Settings(worker_heartbeat_interval_seconds=20, worker_heartbeat_stale_seconds=20)
+
+        with pytest.raises(ValidationError, match="WORKER_HEARTBEAT_STALE_SECONDS"):
+            Settings(worker_heartbeat_interval_seconds=20, worker_heartbeat_stale_seconds=10)

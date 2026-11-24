@@ -11,6 +11,7 @@ All files under `infrastructure/`.
 ## Local Contracts
 
 - Traefik v3 static configuration in `traefik/traefik.yml`.
+- Keep the compose Traefik image on a supported release; the 3.6 line is end-of-life and must not be used. Retain `global.aliasHeadersStrategy: delete` and a bounded `maxResponseBodySize` on ForwardAuth middlewares.
 - Dynamic configuration (routers, services, middlewares) in `traefik/dynamic/`.
 - TLS and certificate handling orchestrated at the project level; `certs/` is the certificate output directory.
 

@@ -14,12 +14,92 @@ section.
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-11-22
+
+### Added
+
+- Crash-safe recovery foundation: per-process worker heartbeats with container
+  incarnation identity, fenced operation heartbeats, and active approval reuse.
+  Heartbeat age is an inspection trigger only; it never releases reservations
+  or proves termination by itself.
+- Registry-verified environment identity: bounded OCI/Docker registry
+  resolution with Bearer/Basic authentication, exact platform manifest digest
+  proof, optional registry-verified pulls, and a portable environment
+  fingerprint for cross-install matching. Tag movement never creates a new
+  approval automatically.
+- A range-scoped signed-commit check for pull requests, pushes and release
+  tags, so legacy unsigned history does not block new work.
+- Cross-install environment manifests now match destination approvals by the
+  portable fingerprint only; local-only manifests keep strict local revision
+  matching. Admin operations visibility adds sanitized list/detail views and a
+  proof-only reconcile action with no force path.
+- `doctor` now reports recovery-journal, heartbeat, registry-verification,
+  credential, and legacy-row state without mutating the stack.
+- External Dockerfile base images are now checked by a strict `Base Image
+  Pinning` security job included in `Security Gate`; a weekly review reports
+  upstream tag drift in one tracked issue.
+- Tagged release CI publishes deterministic CycloneDX SBOMs plus build
+  provenance and SBOM attestations for every image, then verifies them with
+  `gh attestation verify`. Normal branch CI does not run the release-only
+  scans.
+- Operators get a read-only cross-owner queue view, and owners get deduplicated
+  recovery attention/completion notifications plus a bounded daily reminder
+  for unresolved recovery-required work. Queue rows include sanitized
+  owner/environment/plan names, requested resources and status summaries; the
+  owner filter uses a directory picker when the operator can read users.
+- Recovery operations show sanitized target and owner names, and environment
+  revision history supports loaded-page portability/revocation filters, search,
+  and copyable full IDs, fingerprints and manifest digests.
+- Recovery metrics and alerts cover worker-heartbeat freshness, recovery-scan
+  health, stalled or recovery-required operations, and registry-verification
+  gaps. Scan freshness is persisted so the backend scrape reports work that ran
+  in the Celery process.
+- Queue `starting` requests are mapped to their launch operation. An orphaned
+  request stays operator-visible until runtime absence is proved, and work is
+  never blindly requeued or cancelled.
+- A backup artifact cleanup interrupted after its durable `delete:<uuid>` claim
+  is recovered only after the claimant is proven stopped; the retry rechecks
+  mounts and either removes the artifact or records `delete_failed`.
+- Volume backup/restore execution now heartbeats under its fenced operation,
+  and proof-backed completion is applied by the reconciler only after artifact
+  and helper-termination checks. The admin UI adds environment-revision and
+  recovery-operation consoles; the console has no force or override path.
+- A launch left `uncertain` by a crash may be adopted as success only when
+  complete runtime and public-readiness proof is available; otherwise it stays
+  protected for operator reconciliation.
+
 ### Changed
 
+- Mobile page content and the bottom navigation dock respect iOS safe-area
+  insets, so the last controls remain scrollable above the dock.
+- Recovery scans now use partial indexes matching the active launch, backup and
+  restore selection order. On a 100k/50k/50k seeded journal the three-query
+  p95 dropped from 16.9 ms to 2.4 ms, so the 30-second scan no longer reads
+  completed history.
 - The root README architecture map is now a generated light/dark SVG pair
   selected by `<picture>`, with local brand icons embedded as data URIs and no
   CDN or runtime network dependency. The old HTML/PNG source was removed and
   docs CI verifies the generated SVGs against their checked-in generator.
+
+### Security
+
+- Updated the frontend nginx base to 1.31.9 with Alpine package upgrades, moved
+  the shared environment base to Debian 13.7 and require
+  `nginx >= 1.26.3-3+deb13u11`, and rebuilt the auth sidecar with Go 1.27.4.
+  This picks up the nginx2root and related DSA-6642-1 fixes (CVE-2026-123007,
+  CVE-2026-123633, CVE-2026-121810, CVE-2026-123634, CVE-2026-113425,
+  CVE-2026-118899) plus current Go standard-library fixes.
+- Upgraded Traefik from the end-of-life 3.6 line to 3.7.19, including fixes for
+  the HTTP/1 opaque request-target routing/auth bypass, CONNECT connection-pool
+  poisoning, and ReplacePathRegex traversal advisories. Enabled
+  `global.aliasHeadersStrategy: delete` and bounded monitoring ForwardAuth
+  response bodies.
+- Refreshed frontend lockfile dependencies to clear all `npm audit` findings,
+  including the seroval deserialization issue.
+- Updated the backend runtime base to Python 3.13.18 on Debian 13.7, PyJWT
+  2.14.0, and msgpack 1.2.3, and removed the unused pip/setuptools tools from
+  shipped backend and volume-helper images. Trivy now reports no fixed
+  HIGH/CRITICAL vulnerabilities in either image.
 
 ## [2.2.0] - 2026-11-20
 

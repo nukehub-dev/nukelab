@@ -337,12 +337,19 @@ class TestUpdatePrometheusBusinessMetrics:
         servers_res = mock.Mock()
         servers_res.all.return_value = [("running", 2), ("stopped", 3)]
         db.execute = mock.AsyncMock(side_effect=[users_res, balance_res, servers_res])
+        recovery_snapshot = mock.Mock()
 
         with (
             mock.patch("app.config.settings.prometheus_enabled", True),
             mock.patch("app.core.prometheus_metrics.set_users_total") as m_users,
             mock.patch("app.core.prometheus_metrics.set_nuke_balance_total") as m_nuke,
             mock.patch("app.core.prometheus_metrics.set_servers_total") as m_servers,
+            mock.patch(
+                "app.services.recovery_metrics.collect_recovery_metrics",
+                new_callable=mock.AsyncMock,
+                return_value=recovery_snapshot,
+            ) as m_collect,
+            mock.patch("app.services.recovery_metrics.publish_recovery_metrics") as m_publish,
         ):
             result = _run_task(update_prometheus_business_metrics, db)
 
@@ -353,6 +360,40 @@ class TestUpdatePrometheusBusinessMetrics:
         m_servers.assert_any_call("running", 2)
         # All six known statuses are reset/set
         assert m_servers.call_count == 6
+        m_collect.assert_awaited_once_with(db)
+        m_publish.assert_called_once_with(recovery_snapshot)
+
+    def test_recovery_metrics_failure_does_not_fail_business_metrics(self):
+        db = _make_db()
+        users_res = mock.Mock()
+        users_res.scalar.return_value = 5
+        balance_res = mock.Mock()
+        balance_res.scalar.return_value = 0
+        servers_res = mock.Mock()
+        servers_res.all.return_value = []
+        db.execute = mock.AsyncMock(side_effect=[users_res, balance_res, servers_res])
+
+        with (
+            mock.patch("app.config.settings.prometheus_enabled", True),
+            mock.patch("app.core.prometheus_metrics.set_users_total"),
+            mock.patch("app.core.prometheus_metrics.set_nuke_balance_total"),
+            mock.patch("app.core.prometheus_metrics.set_servers_total"),
+            mock.patch(
+                "app.services.recovery_metrics.collect_recovery_metrics",
+                new_callable=mock.AsyncMock,
+                side_effect=RuntimeError("database unavailable"),
+            ),
+            mock.patch("app.services.recovery_metrics.publish_recovery_metrics") as m_publish,
+            mock.patch("app.tasks.logger.warning") as m_warning,
+        ):
+            result = _run_task(update_prometheus_business_metrics, db)
+
+        assert "users=5" in result
+        m_publish.assert_not_called()
+        m_warning.assert_called_once_with(
+            "Recovery metrics collection failed",
+            extra={"error_class": "RuntimeError"},
+        )
 
 
 # ── grant_daily_allowance_to_all failure branches ────────────
@@ -461,9 +502,14 @@ class TestTaskErrorTails:
         with (
             mock.patch("app.config.settings.prometheus_enabled", True),
             mock.patch("app.tasks._run_async", side_effect=_run_async_raises(Exception("db down"))),
+            mock.patch("app.tasks.logger.warning") as m_warning,
         ):
             result = update_prometheus_business_metrics.run()
-        assert "Error updating business metrics: db down" in result
+        assert "Error updating business metrics: Exception" in result
+        m_warning.assert_called_once_with(
+            "Business metrics update failed",
+            extra={"error_class": "Exception"},
+        )
 
     def test_cleanup_expired_allowance_overrides_fatal(self):
         with mock.patch(

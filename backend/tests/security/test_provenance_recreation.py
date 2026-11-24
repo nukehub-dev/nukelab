@@ -19,7 +19,13 @@ from app.models.server_launch_record import ServerLaunchRecord
 from app.models.server_queue import ServerQueue
 from app.models.volume import Volume
 from tests.api.servers.conftest import server_api_runtime as server_api_runtime
-from tests.api.servers.test_server_provenance import recorded, recreation
+from tests.api.servers.test_server_provenance import (
+    add_portable_revision,
+    manifest_recreation,
+    portable_manifest,
+    recorded,
+    recreation,
+)
 from tests.api.servers.test_servers_launch_boundary import auth
 from tests.api.servers.test_servers_launch_boundary import launch_api as launch_api
 
@@ -359,3 +365,32 @@ async def test_manage_scope_can_submit_without_reading_source_metadata(
     )
     assert result.status_code == 200, result.text
     assert result.json()["user_id"] == str(launch_api.owner_id)
+
+
+@pytest.mark.asyncio
+async def test_portable_manifest_cannot_match_an_environment_the_actor_cannot_use(
+    client, user_token, db_session, launch_api, provenance_runtime, server_api_runtime
+):
+    from app.models.environment_template import EnvironmentTemplate
+
+    template = await db_session.get(EnvironmentTemplate, launch_api.environment_id)
+    destination = await add_portable_revision(db_session, template, local_id="sha256:" + "f" * 64)
+    template.is_public = False
+    await db_session.commit()
+    exported = portable_manifest(destination.portable_fingerprint, username=launch_api.username)
+    body = manifest_recreation(exported, launch_api)
+
+    preview = await client.post(
+        "/api/servers/recreate/validate",
+        headers=auth(user_token),
+        json={"manifest": body["manifest"]},
+    )
+    assert preview.status_code == 409
+    assert preview.json()["detail"]["code"] == "revision_unavailable"
+    assert template.name not in preview.text
+    assert str(template.id) not in preview.text
+    result = await client.post("/api/servers/recreate", headers=auth(user_token), json=body)
+    assert result.status_code == 409
+    assert result.json()["detail"]["code"] == "revision_unavailable"
+    provenance_runtime.assert_not_awaited()
+    server_api_runtime.create_container.assert_not_awaited()

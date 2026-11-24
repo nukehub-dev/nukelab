@@ -142,7 +142,7 @@ Phase 10: Remediation Support & Retest
 | CFG-07 | Review request size limits | `backend/app/middleware/request_size_limit.py` | 10 MB default; chunked-transfer abort |
 | CFG-08 | Review path traversal prevention | `backend/app/core/filesystem.py::secure_path()` | `Path.resolve()` + `relative_to()` validation; whitelist for avatars |
 | CFG-09 | Review Docker spawner security options | `backend/app/container/spawner.py` | Non-root user, read-only root fs, no new privileges, capability drop, seccomp |
-| CFG-10 | Review Traefik TLS and middleware config | `infrastructure/traefik/traefik.yml`, `dynamic/*.yml` | TLS 1.3, no insecure dashboard, no browserXssFilter |
+| CFG-10 | Review Traefik TLS and middleware config | `infrastructure/traefik/traefik.yml`, `dynamic/*.yml` | TLS 1.3, no insecure dashboard, no browserXssFilter, supported release, alias-header deletion, bounded ForwardAuth response |
 | CFG-11 | Review environment variable and secret handling | `.env.example`, compose files, CI secrets | No hardcoded secrets; production validation refuses defaults |
 
 ### 5.3 Phase 3 — Authentication & Session Management
@@ -256,8 +256,8 @@ Phase 10: Remediation Support & Retest
 | CICD-04b | Container image signing with Cosign | `.github/workflows/security.yml` | Target state: built backend/frontend/auth-sidecar/volume-helper images are signed with Cosign keyless signing using GitHub OIDC; signatures published to GHCR. Not yet implemented |
 | CICD-04c | Cosign signature verification | `.github/workflows/security.yml` / downstream consumers | Future requirement once Cosign signing exists: verify with `cosign verify --certificate-identity-regexp` and enforce policy in deployment workflows |
 | CICD-05 | Workflow permissions | `.github/workflows/*.yml` | Minimal `permissions`, no `pull_request_target` abuse |
-| CICD-06 | Base image pinning | Dockerfiles | All external base images pinned by digest; verified by `./nukelabctl security --check-base-images` |
-| CICD-07 | SBOM generation | CI artifacts | CycloneDX/SPDX SBOM produced per release |
+| CICD-06 | Base image pinning | Dockerfiles | All external base images pinned by digest; verified strictly by the `Base Image Pinning` job in `.github/workflows/security.yml` and included in `Security Gate` |
+| CICD-07 | SBOM generation | CI artifacts | Deterministic CycloneDX SBOM produced for every published release image and attached as a build attestation; the release workflow verifies the SBOM and provenance predicates |
 
 ### 5.9 Phase 9 — WebSocket & Real-Time Channel Testing
 

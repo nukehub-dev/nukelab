@@ -1,7 +1,7 @@
 services:
     # Reverse Proxy
     traefik:
-        image: docker.io/library/traefik:v3.6.16
+        image: docker.io/library/traefik:v3.7.19
         container_name: nukelab-traefik
         command:
             - --configFile=/etc/traefik/traefik.yml
@@ -174,6 +174,25 @@ services:
             - REDIS_DB=${REDIS_DB:-0}
             - DOCKER_NETWORK=${DOCKER_NETWORK:-nukelab-network}
             - TRAEFIK_INTERNAL_URL=${TRAEFIK_INTERNAL_URL:-http://traefik:80}
+            # Registry verification/credentials. The credentials file is
+            # mounted read-only at a fixed path; REGISTRY_CREDENTIALS_FILE_HOST
+            # selects the host file (default /dev/null = anonymous).
+            - REGISTRY_VERIFICATION_POLICY=${REGISTRY_VERIFICATION_POLICY:-off}
+            - REGISTRY_PULL_POLICY=${REGISTRY_PULL_POLICY:-on_demand}
+            - REGISTRY_ALLOWED_HOSTS=${REGISTRY_ALLOWED_HOSTS:-}
+            - REGISTRY_CREDENTIALS_FILE=/run/registry-credentials/config.json
+            # Worker/executor heartbeat cadence used by crash recovery.
+            - WORKER_HEARTBEAT_INTERVAL_SECONDS=${WORKER_HEARTBEAT_INTERVAL_SECONDS:-5}
+            - WORKER_HEARTBEAT_STALE_SECONDS=${WORKER_HEARTBEAT_STALE_SECONDS:-20}
+            # Operation heartbeat and recovery scan settings used by crash recovery.
+            - OPERATION_HEARTBEAT_INTERVAL_SECONDS=${OPERATION_HEARTBEAT_INTERVAL_SECONDS:-10}
+            - OPERATION_HEARTBEAT_STALE_SECONDS=${OPERATION_HEARTBEAT_STALE_SECONDS:-90}
+            - RECOVERY_SCAN_INTERVAL_SECONDS=${RECOVERY_SCAN_INTERVAL_SECONDS:-30}
+            - RECOVERY_INITIAL_DELAY_SECONDS=${RECOVERY_INITIAL_DELAY_SECONDS:-60}
+            - RECOVERY_PREPARED_GRACE_SECONDS=${RECOVERY_PREPARED_GRACE_SECONDS:-60}
+            - RECOVERY_SCAN_BATCH_SIZE=${RECOVERY_SCAN_BATCH_SIZE:-200}
+            - RECOVERY_STALL_WARNING_SECONDS=${RECOVERY_STALL_WARNING_SECONDS:-300}
+            - RECOVERY_LEGACY_DRAIN_CONFIRMED=${RECOVERY_LEGACY_DRAIN_CONFIRMED:-false}
             - LOG_LEVEL=${LOG_LEVEL:-INFO}
             - LOG_FORMAT=${LOG_FORMAT:-json}
             - DEV_RELOAD=${DEV_RELOAD:-true}
@@ -240,6 +259,7 @@ services:
             - user-secrets:${USER_AUTH_SECRETS_DIR:-/run/user-secrets}
             - server-secrets:${SERVER_AUTH_SECRETS_DIR:-/run/server-secrets}
             - xfs-projects:/data/xfs
+            - ${REGISTRY_CREDENTIALS_FILE_HOST:-/dev/null}:/run/registry-credentials/config.json:ro
         devices:
             - ${XFS_QUOTA_DEVICE_PATH:-/dev/null}:${XFS_QUOTA_DEVICE_PATH:-/dev/null}:r
         cap_add:
@@ -249,6 +269,20 @@ services:
         depends_on:
             - postgres
             - redis
+        # Celery worker/Beat wait for this check, so it must pass only after
+        # the API has finished startup (schema creation and seeding).
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "python",
+                    "-c",
+                    "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 18
+            start_period: 60s
         labels:
             - "traefik.enable=true"
             - "traefik.http.routers.backend.rule=PathPrefix(`/api`)"
@@ -444,6 +478,26 @@ services:
             - QUEUE_MAX_PENDING_PER_OWNER=${QUEUE_MAX_PENDING_PER_OWNER:-5}
             - QUEUE_MAX_PENDING_TOTAL=${QUEUE_MAX_PENDING_TOTAL:-500}
             - CONTAINER_RUNTIME=${CONTAINER_RUNTIME:-docker}
+            # Registry verification/credentials — required: queue, schedule and
+            # health launches execute in this worker too. The file is mounted
+            # read-only at the fixed container path; the host file is selected
+            # by REGISTRY_CREDENTIALS_FILE_HOST (default /dev/null = anonymous).
+            - REGISTRY_VERIFICATION_POLICY=${REGISTRY_VERIFICATION_POLICY:-off}
+            - REGISTRY_PULL_POLICY=${REGISTRY_PULL_POLICY:-on_demand}
+            - REGISTRY_ALLOWED_HOSTS=${REGISTRY_ALLOWED_HOSTS:-}
+            - REGISTRY_CREDENTIALS_FILE=/run/registry-credentials/config.json
+            # Worker/executor heartbeat cadence used by crash recovery.
+            - WORKER_HEARTBEAT_INTERVAL_SECONDS=${WORKER_HEARTBEAT_INTERVAL_SECONDS:-5}
+            - WORKER_HEARTBEAT_STALE_SECONDS=${WORKER_HEARTBEAT_STALE_SECONDS:-20}
+            # Operation heartbeat and recovery scan settings used by crash recovery.
+            - OPERATION_HEARTBEAT_INTERVAL_SECONDS=${OPERATION_HEARTBEAT_INTERVAL_SECONDS:-10}
+            - OPERATION_HEARTBEAT_STALE_SECONDS=${OPERATION_HEARTBEAT_STALE_SECONDS:-90}
+            - RECOVERY_SCAN_INTERVAL_SECONDS=${RECOVERY_SCAN_INTERVAL_SECONDS:-30}
+            - RECOVERY_INITIAL_DELAY_SECONDS=${RECOVERY_INITIAL_DELAY_SECONDS:-60}
+            - RECOVERY_PREPARED_GRACE_SECONDS=${RECOVERY_PREPARED_GRACE_SECONDS:-60}
+            - RECOVERY_SCAN_BATCH_SIZE=${RECOVERY_SCAN_BATCH_SIZE:-200}
+            - RECOVERY_STALL_WARNING_SECONDS=${RECOVERY_STALL_WARNING_SECONDS:-300}
+            - RECOVERY_LEGACY_DRAIN_CONFIRMED=${RECOVERY_LEGACY_DRAIN_CONFIRMED:-false}
             # Email / SMTP configuration — required: notification emails are
             # sent by Celery tasks running in this worker, not by the API.
             - SMTP_HOST=${SMTP_HOST:-}
@@ -466,6 +520,7 @@ services:
             - user-secrets:${USER_AUTH_SECRETS_DIR:-/run/user-secrets}
             - server-secrets:${SERVER_AUTH_SECRETS_DIR:-/run/server-secrets}
             - xfs-projects:/data/xfs
+            - ${REGISTRY_CREDENTIALS_FILE_HOST:-/dev/null}:/run/registry-credentials/config.json:ro
         devices:
             - ${XFS_QUOTA_DEVICE_PATH:-/dev/null}:${XFS_QUOTA_DEVICE_PATH:-/dev/null}:r
         cap_add:
@@ -473,8 +528,12 @@ services:
         networks:
             - nukelab-network
         depends_on:
-            - redis
-            - postgres
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            backend:
+                condition: service_healthy
         restart: unless-stopped
         stop_grace_period: 20s
 
@@ -529,8 +588,12 @@ services:
         networks:
             - nukelab-network
         depends_on:
-            - redis
-            - postgres
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            backend:
+                condition: service_healthy
         restart: unless-stopped
         stop_grace_period: 20s
 

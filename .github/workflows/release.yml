@@ -3,6 +3,11 @@ name: Release
 on:
   push:
     tags: ['v*.*.*']
+  workflow_run:
+    # Verification must start only after the tagged CI/CD run has published
+    # the images and their attestations.
+    workflows: ['CI/CD']
+    types: [completed]
 
 permissions:
   contents: write
@@ -10,6 +15,7 @@ permissions:
 jobs:
   release:
     name: Create GitHub Release
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -56,6 +62,17 @@ jobs:
               echo "docker pull ghcr.io/${{ github.repository_owner }}/${img}:${VERSION}"
             done
             echo '```'
+            echo ""
+            echo "### Attestations"
+            echo ""
+            echo "On a successful tagged CI/CD run, build provenance and CycloneDX SBOM attestations"
+            echo "are published for every image above. The release workflow then verifies all application"
+            echo "images and the environment base image with \`gh attestation verify\`. No SLSA level is claimed."
+            echo ""
+            echo '```bash'
+            echo "gh attestation verify oci://ghcr.io/${{ github.repository_owner }}/nukelab-backend@sha256:<digest> --repo ${{ github.repository }}"
+            echo "gh attestation verify oci://ghcr.io/${{ github.repository_owner }}/nukelab-backend@sha256:<digest> --repo ${{ github.repository }} --predicate-type https://cyclonedx.org/bom"
+            echo '```'
           } >> release-notes.md
           cat release-notes.md
 
@@ -66,3 +83,101 @@ jobs:
           body_path: release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  verify-attestations:
+    name: Verify release attestations
+    runs-on: ubuntu-latest
+    # A workflow_run run is separate from the tagged CI/CD run, so it cannot
+    # `needs` the image build jobs. Start only after the tagged CI/CD run
+    # succeeds, then resolve each published tag to its manifest digest with
+    # buildx and verify that exact `oci://...@sha256:<digest>` subject. This is
+    # the digest handoff path: published manifest digest, not build-step
+    # metadata from another workflow run. Tag protection is required so the
+    # tag cannot move between the CI/CD push and this verification.
+    if: |
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
+    permissions:
+      contents: read
+      packages: read
+      attestations: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Resolve release tag
+        id: tag
+        env:
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          if [[ ! "$HEAD_BRANCH" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Skipping ${HEAD_BRANCH}: not a vX.Y.Z release tag."
+            exit 0
+          fi
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "version=${HEAD_BRANCH#v}" >> "$GITHUB_OUTPUT"
+          echo "source-ref=refs/tags/${HEAD_BRANCH}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        if: steps.tag.outputs.release == 'true'
+        # Pinned because this action runs in the release verification path.
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GitHub Container Registry
+        if: steps.tag.outputs.release == 'true'
+        # Pinned because this action runs in the release verification path.
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify build provenance and SBOM attestations
+        if: steps.tag.outputs.release == 'true'
+        env:
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ steps.tag.outputs.version }}
+          SOURCE_REF: ${{ steps.tag.outputs.source-ref }}
+          SOURCE_DIGEST: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          verify_image() {
+            local image="$1"
+            local ref="ghcr.io/${OWNER}/${image}:${VERSION}"
+            local digest
+            digest="$(docker buildx imagetools inspect "$ref" --format '{{.Manifest.Digest}}')"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "ERROR: could not resolve a manifest digest for ${ref}: ${digest}" >&2
+              return 1
+            fi
+            echo "Verifying ${image}@${digest}"
+
+            gh attestation verify "oci://ghcr.io/${OWNER}/${image}@${digest}" \
+              --repo "$REPO" \
+              --signer-workflow "${REPO}/.github/workflows/ci.yml" \
+              --source-ref "$SOURCE_REF" \
+              --source-digest "$SOURCE_DIGEST" \
+              --deny-self-hosted-runners
+
+            gh attestation verify "oci://ghcr.io/${OWNER}/${image}@${digest}" \
+              --repo "$REPO" \
+              --predicate-type https://cyclonedx.org/bom \
+              --signer-workflow "${REPO}/.github/workflows/ci.yml" \
+              --source-ref "$SOURCE_REF" \
+              --source-digest "$SOURCE_DIGEST" \
+              --deny-self-hosted-runners
+          }
+
+          for image in \
+            nukelab-backend \
+            nukelab-frontend \
+            nukelab-auth-sidecar \
+            nukelab-volume-helper; do
+            verify_image "$image"
+          done
+
+          # One environment image is enough for the 2.3.0 release gate.
+          verify_image nukelab-environment-base

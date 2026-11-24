@@ -228,6 +228,37 @@ class TestContainerHardening:
         )
 
 
+class TestHardeningDefaults:
+    """Explicit hardening settings must survive the dev-mode default."""
+
+    def test_explicit_hardening_enable_overrides_dev_mode_default(self):
+        from app.config import Settings
+
+        disabled_dev = Settings(
+            _env_file=None,
+            app_env="development",
+            dev_mode=True,
+            container_hardening_enabled=None,
+        )
+        assert disabled_dev.container_hardening_enabled is False
+
+        enabled_dev = Settings(
+            _env_file=None,
+            app_env="development",
+            dev_mode=True,
+            container_hardening_enabled=True,
+        )
+        assert enabled_dev.container_hardening_enabled is True
+
+        default_production = Settings(
+            _env_file=None,
+            app_env="development",
+            dev_mode=False,
+            container_hardening_enabled=None,
+        )
+        assert default_production.container_hardening_enabled is True
+
+
 class TestContainerNetworkIsolation:
     """Verify network isolation between user containers and system services."""
 

@@ -106,19 +106,28 @@ Locations: `backend/app/services/server_queue_service.py`,
 `server_queue_dispatch_service.py`, `server_launch_service.py`,
 `server_launch_validation.py`, `server_lifecycle_service.py`,
 `server_provenance_service.py`, `server_recreation_service.py`,
-`volume_operation_service.py`, `volume_backup_service.py`,
-`volume_recovery_runtime.py`.
+`operation_reconciliation.py`, `operation_finalizer.py`,
+`operation_reconciler.py`, `recovery_metrics.py`,
+`recovery_notifications.py`, `volume_operation_service.py`,
+`volume_backup_service.py`, `volume_recovery_runtime.py`,
+`registry_artifact_service.py`, `environment_revision_admin_service.py`.
 
 Responsibilities:
 
 - Admit owner queue requests under resource-pool limits and dispatch bounded
-  batches with deterministic priority ordering.
+  batches with deterministic priority ordering; resolve `starting` requests
+  from their launch operation and proved runtime absence.
 - Persist launch and lifecycle intent before runtime I/O, fence stale
   generations, and retain reservations for uncertain outcomes.
-- Record the verified launch revision and sanitized manifest, and validate
-  recreation/import against current authorization and catalog state.
+- Inspect runtime/artifact evidence read-only, finalize only proof-backed
+  terminal outcomes, and reconcile bounded batches on a fixed cadence without
+  TTL takeover.
+- Record the verified launch revision and sanitized manifest, validate
+  recreation/import against current authorization and catalog state, and
+  verify registry digests/platform identity for admin-approved revisions.
 - Capture and restore private volume archives through the trusted helper with
   storage budgets, retention pins and writer exclusion.
+- Publish bounded recovery metrics and deduplicated owner notifications.
 
 ### Volume recovery helper
 

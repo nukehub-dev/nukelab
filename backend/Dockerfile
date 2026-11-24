@@ -1,9 +1,9 @@
-FROM python:3.13-slim@sha256:eb43ff125d8d58d7449dcba7d336c23bcac412f526d861db493b9994d8010280 AS base
+FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS base
 
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     gcc \
     libpq-dev \
     xfsprogs \
@@ -32,6 +32,13 @@ CMD ["python", "-m", "pytest"]
 
 # ── Production / runtime target (default) ───────────────────────────────────
 FROM base AS runtime
+
+# The runtime does not install packages; drop the build-time package manager
+# and its vendored dependencies from the shipped image.
+RUN rm -rf /usr/local/lib/python3.13/site-packages/pip* \
+    /usr/local/lib/python3.13/site-packages/setuptools* \
+    /usr/local/lib/python3.13/site-packages/wheel* \
+    /usr/local/bin/pip*
 
 # Platform version injected by CI (from scripts/ci-version.sh). Empty for
 # local builds; the app then falls back to the static version in

@@ -166,11 +166,12 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 | Immutable NUKE transaction ledger | ✅ Implemented | `CreditTransaction` model |
 | Version-pinned dependencies | ✅ Implemented | Locked requirements and lockfile |
 | Code review / protected main branch | 🟡 Process | Enforced via GitHub repository settings (out of codebase) |
-| Signed commits / artifact signing | ❌ Not implemented | Recommended for CI/CD hardening |
+| Signed commits / artifact signing | 🟡 Partial | Range-scoped signed-commit check in `.github/workflows/security.yml`; release images get build-provenance and CycloneDX SBOM attestations verified in `.github/workflows/release.yml` |
 
 **Residual Gaps / Notes:**
 
-- Signed commits and artifact signing are process/CI controls not yet implemented.
+- Signed commits are checked but remain advisory until maintainers enable signing and repository enforcement; PENT-NKL-007 tracks closure.
+- GitHub artifact attestations are implemented. Cosign image signing is not used.
 
 **Risk Rating:** Medium (process-dependent)
 
@@ -231,7 +232,7 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 
 **Overall Audit Result:** Pass ✅
 
-No critical or high-severity gaps remain. The medium-rated item (A08) is process-dependent and should be addressed through repository branch protection, signed commits, and CI artifact signing rather than application code changes.
+No critical or high-severity gaps remain. The medium-rated item (A08) is process-dependent: release artifact attestations are implemented, while signed commits and their branch-protection enforcement remain a maintainer process change.
 
 ---
 

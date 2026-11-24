@@ -53,7 +53,7 @@ NukeLab is a multi-user scientific computing platform. It exposes a web manageme
 - **ContainerDriver** (`backend/app/container/driver.py`) and `DockerDriver` (`aiodocker`) provide the low-level runtime abstraction selected by `CONTAINER_RUNTIME`; `ContainerClient` is a compatibility shim.
 - **ServerSpawner** (`backend/app/container/spawner.py`) coordinates higher-level server lifecycle actions (volume creation, image pulling, Traefik labels, readiness checks).
 - **Queue, launch, lifecycle, provenance and recovery services** persist owner intent before runtime I/O, enforce admission and authorization, and reconcile uncertain outcomes.
-- **Celery workers** run background tasks: NUKE billing, server cleanup, queue dispatch, scheduled start/stop, notifications, maintenance windows, and recovery retention.
+- **Celery workers** run background tasks: NUKE billing, server cleanup, queue dispatch, scheduled start/stop, notifications, maintenance windows, recovery scans, and recovery retention.
 
 ### Data and state layer
 

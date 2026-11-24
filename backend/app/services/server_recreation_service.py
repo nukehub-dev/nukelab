@@ -50,7 +50,9 @@ class ServerRecreationService:
     def __init__(self, db: AsyncSession, actor_id: UUID):
         self.db, self.actor_id = db, actor_id
         self.revisions = EnvironmentRevisionService(db, self._authorize_template)
-        self.provenance = ServerProvenanceService(db, self.revisions)
+        self.provenance = ServerProvenanceService(
+            db, self.revisions, can_use_template=self._can_use_template
+        )
 
     async def _actor(self):
         actor = await self.db.get(User, self.actor_id, populate_existing=True)
@@ -62,6 +64,11 @@ class ServerRecreationService:
         actor = await self._actor()
         if not await EnvironmentService(self.db).can_user_use_env(str(template.id), actor.role):
             raise LaunchError("permission_revoked", 403)
+
+    async def _can_use_template(self, template):
+        """Non-raising current authorization for portable candidate filtering."""
+        actor = await self._actor()
+        return await EnvironmentService(self.db).can_user_use_env(str(template.id), actor.role)
 
     @staticmethod
     def _saved_manifest(raw):

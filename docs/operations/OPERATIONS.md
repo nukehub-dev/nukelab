@@ -329,47 +329,309 @@ host telemetry. Set `RESOURCE_POOL_CPU`, `RESOURCE_POOL_MEMORY_MIB` and
   running together; queue position is ordering, not a promised start time.
 - `SERVER_LAUNCH_TIMEOUT_SECONDS` is the deadline for reserved launches and
   long-running lifecycle/recovery work.
+- Owners may cancel only `pending` requests. `starting` rows are resolved from
+  the linked launch operation, not by an admin action. An orphaned `starting` row
+  is cancelled only after runtime absence is proved from its recorded container
+  ID, managed server label, or deterministic launch name; otherwise it remains
+  `starting` with `recovery_required`.
+- **Administration → Queue** (`/admin/queue`) is a read-only cross-owner view. It
+  requires `servers:read_all` plus `ADMIN_ACCESS` and a JWT session. There is no
+  admin cancel, retry, or requeue action. Rows show bounded owner/environment/plan
+  display names and requested CPU, memory, disk and GPU; the summary counts each
+  status while ignoring the status chip but honoring owner/age/recovery filters.
+  The owner picker is available only with `users:read`; otherwise the exact-UUID
+  filter remains.
 
 Monitor queue depth, expired requests and worker/Beat health. See
 [SERVER-LIFECYCLE.md](../architecture/SERVER-LIFECYCLE.md) for admission and
 fencing behavior.
 
-## Lifecycle journal upgrades and uncertain operations
+## 11. Recovery operations and upgrades
 
-Drain API requests and stop old Celery workers/Beat before deploying the journal
-migration. Mixed old/new runtime writers are unsupported: old workers do not
-honor new claims, mount guards or cancellation. Take the normal pre-migration
-snapshot, reconcile in-flight legacy launches, then run the migration and start
-the matching API/worker images together.
+### 11.1 Upgrading to 2.3.0
 
-Migration preflight refuses duplicate owner/server names, conflicting active queue
-names and unidentified legacy in-flight queue entries. Resolve those records with
-runtime evidence before retrying; the migration does not silently delete user
-servers. Pending legacy requests without a normalized payload are cancelled with
-a resubmit reason. Incomplete historic launches become protected uncertain
+2.3.0 adds the `worker_heartbeats` registry, nullable `executor_id` and
+`heartbeat_at` columns on launch/backup/restore journal rows, and
+`environment_revisions.portable_fingerprint` with active-only uniqueness. The
+migration chain must have exactly one Alembic head; branched or mixed heads are
+unsupported.
+
+Drain external traffic and stop the old API, Celery worker and Beat before
+running the migration. Mixed old/new runtime writers are unsupported: an old
+worker does not honor the new heartbeat, claim, mount-guard or cancellation
+contract. Do not start launch, backup or restore work against the old schema.
+
+```bash
+# Pin the target release first (or set NUKELAB_IMAGE_TAG)
+# NUKELAB_VERSION=2.3.0
+
+./nukelabctl stop
+./nukelabctl update
+./nukelabctl start backend
+./nukelabctl db-migrate
+./nukelabctl restart
+```
+
+`./nukelabctl stop` stops the platform stack; user server containers keep running
+unless you also pass `--include-servers`. Run `db-migrate` immediately after the
+backend starts: the recovery scanner refuses an incompatible journal schema, and
+a background task that cannot run leaves its durable row for the next tick.
+
+`./nukelabctl db-migrate` automatically writes
+`backups/pre-migrate-<version>-<current-revision>-<timestamp>.dump` before
+`alembic upgrade head`. If the snapshot fails, the migration aborts. If the
+migration fails, the command prints the exact restore command. Do not use
+`--no-backup` unless you have already taken an equivalent snapshot.
+
+On a first start against an empty database, Compose starts `celery-worker` and
+`celery-beat` only after the backend health check (`GET /api/health`) passes.
+The backend has then finished its startup table creation, seeding and
+schema-compatibility check, so the worker no longer races schema creation and
+does not log a transient `Worker journal schema is incompatible` critical. If
+the backend never becomes healthy, worker and Beat do not start at all; diagnose
+the backend or database startup instead of restarting the workers.
+
+This gate covers backend startup only. In the upgrade procedure above,
+`db-migrate` runs after the stack is started, so the worker can still see the
+pre-migration schema until that migration finishes and the stack is restarted.
+A worker that reports `Worker journal schema is incompatible` after the backend
+is healthy is reading a schema that does not match its image: check that
+`alembic heads` shows one current head and that the deployed image matches the
+database revision before admitting launch, backup, or restore work.
+
+Check the revision graph before deploying:
+
+```bash
+./nukelabctl exec backend alembic heads
+```
+
+Exactly one head must be returned. Migration preflight also refuses duplicate
+owner/server names, conflicting active queue names and unidentified legacy
+in-flight queue entries; resolve those with runtime evidence instead of deleting
+user servers. Pending legacy requests without a normalized payload are cancelled
+with a resubmit reason. Incomplete historic launches become protected uncertain
 operations; only matching owner/server/revision/generation evidence permits a
 completed journal backfill.
 
-For `recovery_required` or an uncertain journal, first establish that the original
-executor has terminated. Inspect the UUID-based runtime name, managed owner/server
-labels, actual image identity, mount attachments and GPU assignments. A database
-row with no container ID does not prove no container exists. Keep reservations
-until the runtime outcome is established. Automated adoption and an operator
-reconciliation command are not yet available; do not manually expire reservations
-on a timer or blindly retry runtime mutations. Record the evidence and use a
-reviewed repair procedure or restore the verified pre-migration snapshot with its
-matching image version.
+The 2.3.0 portable-fingerprint migration has a downgrade preflight. A downgrade
+refuses duplicate `(template_id, fingerprint)` groups, which can exist after a
+revoke and re-verification, before any DDL and without deleting or merging rows.
+Use the pre-migration snapshot instead of an in-place downgrade.
+
+### 11.2 Rollback
+
+The startup schema guard (`DB_SCHEMA_GUARD=auto`) refuses an old backend image
+against a newer database in production and warns in other environments;
+`enforce` always refuses and `off` disables the guard. Roll back with a pinned
+image and the matching pre-migration snapshot, not by leaving mixed versions
+running. Stop Celery workers/Beat and drain requests before the restore so no
+writes race the database replacement; maintenance mode can keep user traffic away
+while you do this.
+
+```bash
+# Pin the previous release first
+# NUKELAB_VERSION=<previous-version>
+
+./nukelabctl update
+./nukelabctl restore --stamp <previous-revision> \
+  backups/pre-migrate-<snapshot-version>-<previous-revision>-<timestamp>.dump
+./nukelabctl restart
+```
+
+`restore` drops and recreates the database and asks for confirmation unless
+`--yes` is supplied. The version in the snapshot filename is the version that
+created the snapshot; `--stamp` must use the previous Alembic revision recorded in
+that filename. It needs Postgres and a backend container for the Alembic stamp.
+Keep the current (newer) backend container running through the restore; if the
+stack is stopped, start the newer release first, restore, then restart into the
+pinned image. Never start the previous image against the newer schema and expect
+the guard to repair it.
+
+### 11.3 Investigating uncertain work
+
+For `recovery_required` volume work or an `uncertain` launch, first establish
+that the original executor terminated. Heartbeat age, an HTTP deadline, Celery
+inspection and Redis are not termination proof.
+
+1. Open **Administration → Recovery Operations** (`/admin/operations`) and filter
+   by kind or recovery state. For an active row, the detail view reruns the
+   read-only inspector and shows bounded liveness, runtime and proof diagnostics.
+2. Run `./nukelabctl doctor`. Its recovery preflight is read-only and reports
+   journal schema, heartbeat configuration, registry verification and credential
+   state without pulling images or mutating the stack.
+3. Inspect the UUID-based runtime name, managed owner/server labels, actual image
+   identity and platform, mount attachments and GPU assignments. A database row
+   with no container ID does not prove that no container exists. For volume work,
+   inspect the operation-labelled helper and artifact completion/termination.
+4. Keep reservations, guards and artifacts until the outcome is proved. Do not
+   clear an uncertain journal row, delete operation rows, reuse helper names,
+   manually expire reservations on a timer, or blindly retry runtime mutations.
+5. Use the reconcile action only when the inspector can support a terminal
+   outcome. A 409 response means proof is ambiguous and nothing changed. Record
+   the evidence and use a reviewed repair procedure or restore the verified
+   pre-migration snapshot with its matching image version.
+
+Reconciliation requires `operations:manage_all` plus `ADMIN_ACCESS`, a JWT
+session and a bounded reason. It reruns the same evidence inspection and lets the
+fenced finalizer apply only a proof-backed success or failure. There is no force
+or override path. Volume completion still requires the recovery service's
+artifact and helper-termination checks, which the background reconciler supplies;
+the console never activates a destination or marks a backup complete on its own.
+Every call is audited.
+
+Applied transitions notify the owner. Attention notices are deduplicated per
+operation and terminal state; one completion notice per operation is sent only
+after an attention event. A bounded reminder runs daily at 08:00 UTC while work
+remains unresolved, with at most one reminder per operation per 24 hours.
+Notification failure never changes recovery state or releases reservations.
+
+The operations console requires `operations:read_all` plus `ADMIN_ACCESS` and a
+JWT session. The read-only queue console separately requires `servers:read_all`
+plus `ADMIN_ACCESS` and a JWT session. Owner queue cancellation remains
+pending-only; there is no admin cancel, retry or requeue action.
+
+### 11.4 Recovery monitoring
+
+When `PROMETHEUS_ENABLED=true`, the backend scrape at `/api/metrics` republishes
+recovery gauges from durable rows. The reconciler runs in the Celery process, so
+it also persists scan freshness in the `system_settings` key
+`recovery_scan_state`; the backend scrape loads that bounded state and publishes
+it in the API process. The row contains timestamps, duration and counters only.
+
+| Metric | Meaning |
+|---|---|
+| `nukelab_workers_registered` | Process-lifetime executor rows in the heartbeat registry |
+| `nukelab_worker_heartbeats{state}` | Heartbeat rows classified `fresh`, `stale`, or `stopped` |
+| `nukelab_worker_heartbeat_age_seconds` | Age of the most recent worker heartbeat |
+| `nukelab_worker_last_heartbeat_timestamp_seconds` | Unix timestamp of the most recent worker heartbeat |
+| `nukelab_operations_active{kind}` | Active `launch`, `backup`, or `restore` journal rows |
+| `nukelab_operations_recovery_required{kind}` | Active rows needing operator recovery |
+| `nukelab_operations_stalled{kind}` | Active rows whose operation heartbeat exceeded the stale threshold |
+| `nukelab_recovery_scan_last_success_timestamp_seconds` | Last error-free scan pass |
+| `nukelab_recovery_scan_duration_seconds` | Duration of the most recent scan |
+| `nukelab_recovery_scan_last_report{result}` | `scanned`, `finalized`, `deferred`, or `errors` counters |
+| `nukelab_registry_verification_policy{policy}` | `1` for the active `off`, `prefer`, or `require` policy |
+| `nukelab_registry_local_only_revisions` | Non-revoked revisions without a portable registry identity |
+| `nukelab_registry_templates_without_verified_revision` | Active templates with no non-revoked verified revision |
+
+Labels are fixed to worker state, operation kind, registry policy and scan result.
+User, server, operation, image and executor identifiers are never metric labels.
+The reconciler removes worker heartbeat rows whose last beat is older than 24
+hours as bounded maintenance; the gauges count retained rows.
+
+The `nukelab-recovery` alert group covers the operational failures:
+
+| Alert | Condition |
+|---|---|
+| `NukeLabRecoveryNoFreshWorkers` | Registered executors exist but none are fresh for 2 minutes |
+| `NukeLabRecoveryWorkerHeartbeatsStale` | At least one stale heartbeat for 5 minutes |
+| `NukeLabRecoveryScanStale` | After a successful scan, none for more than 60 seconds (two default intervals) |
+| `NukeLabOperationsRecoveryRequired` | Recovery-required rows remain for 15 minutes |
+| `NukeLabOperationsStalled` | An active operation heartbeat is stale for 10 minutes |
+| `NukeLabRegistryVerificationGaps` | Local-only revisions under `require`, or unverified active templates under `off` |
+
+Heartbeat and stalled-operation alerts are inspection triggers, not automatic
+cleanup. Follow the investigation flow above and do not release protection from
+the alert alone.
+
+## 12. Registry verification and environment revisions
+
+Registry verification proves that an approved artifact is the exact platform
+artifact expected, independently of mutable tags. Resolution alone never creates
+approval.
+
+| Policy | Behavior |
+|---|---|
+| `off` | No registry I/O; launches use local identities |
+| `prefer` | Verify when possible; record a truthful local-only fallback when resolution is unavailable |
+| `require` | Fail closed when the approved reference cannot be verified |
+
+A verified revision stores the canonical repository, platform manifest digest,
+OS/architecture/variant and index digest. Local proof requires the same canonical
+repository and platform digest in the local image's repository digests plus a
+matching platform; a tag-pulled multi-architecture index digest is not proof.
+`REGISTRY_PULL_POLICY=on_demand` allows pulling exactly
+`<repository>@sha256:<platform-digest>` when the approved artifact is absent,
+serialized by a PostgreSQL advisory lock on a direct connection and re-proved
+after the pull. `preload_only` never pulls during launch or verification and fails
+closed when the artifact is missing or platform-mismatched.
+
+Tag movement requires an explicit admin verify. Ordinary launch and recreation
+reuse the captured revision and never re-resolve a moved tag into a new approval.
+**Administration → Environments** → **Revisions** lists immutable history,
+including revoked rows. Verify requires `environment:update` plus `ADMIN_ACCESS`
+and a reason; it rejects local image IDs, resolves the current runtime and
+toolchain references under `require`, checks the exact local platform digest
+(pulling by digest under `on_demand`), captures or reuses the active revision, and
+audits the result. Revoke is idempotent, has no un-revoke, and requires explicit
+confirmation before removing the last selectable revision. Reads require
+`environment:read` plus `ADMIN_ACCESS`. The panel filters the loaded page by
+All/Registry verified/Local only/Revoked and searches IDs, fingerprints, images
+and verified references; copy controls copy full identifiers and digests without
+truncation. Server pagination is unchanged by these loaded-page filters.
+
+Portable fingerprints are computed only for registry-verified configurations. A
+cross-install portable manifest matches active revisions by that fingerprint
+alone; template labels, slugs and origin revision/local IDs are display metadata.
+Multiple matching templates return `revision_ambiguous`. Local-only manifests keep
+strict local revision matching. Revoked revisions never satisfy either match.
+
+Registry credentials are optional and used only for verification. Set
+`REGISTRY_CREDENTIALS_FILE_HOST` to a Docker `config.json`-compatible file; Compose
+mounts it read-only into `backend` and `celery-worker` and points
+`REGISTRY_CREDENTIALS_FILE` at the container path. The file must be readable by
+UID 65532. Replace the host file atomically to rotate credentials; it is re-read
+within 60 seconds. Runtime image pulls still use the container engine's own
+registry login, and `credsStore`/`credHelpers` are not supported. Private or
+loopback registry hosts, including a separate token-service host, must be listed
+in `REGISTRY_ALLOWED_HOSTS`.
+
+## 13. Supply-chain checks
+
+**Base-image pinning.** External Dockerfile `FROM` references must be pinned by
+digest. The required `Base Image Pinning` job runs
+`./nukelabctl security --check-base-images` and is part of the blocking Security
+Gate. Local source builds and pull-based deploys share the same pinned images.
+
+**Drift review.** A weekly scheduled `Base Image Digest Review` runs
+`scripts/security/check-base-image-drift.sh` against the tracked Dockerfiles. It
+resolves each `image:tag` manifest without pulling layers and compares the pinned
+digest with both the current index digest and the selected platform manifest
+digest. Drift opens or updates one `[supply-chain] Base image digest drift` issue;
+a clean review closes it. The workflow never opens a pull request and is not a
+pull-request gate; updating a digest remains a reviewed change.
+
+**Release SBOMs and attestations.** Tagged `v*.*.*` releases run the release-only
+path. CI generates a deterministic CycloneDX JSON SBOM for each published image
+using a pinned Syft image, based on the exact digest-qualified reference. The
+generator excludes file catalogers, derives the serial number from the image
+digest, removes the run timestamp and sorts serialization so the same image digest
+and generator produce the same bytes. It fails on empty, non-CycloneDX, oversized
+or component-free output. CI then attests build provenance and the SBOM, and the
+Release workflow resolves each published tag to its manifest digest and verifies
+both attestations with `gh attestation verify` for backend, frontend,
+auth-sidecar, volume-helper and the environment base image. Normal branch CI does
+not run the release-only SBOM or attestation steps.
+
+This is build provenance and artifact inventory, not a claim of SLSA compliance.
+For an ad-hoc local inventory, `./nukelabctl security --sbom` writes CycloneDX
+SBOMs under `backend/reports/security/sbom/`; that path is separate from the
+deterministic release artifacts.
 
 ## Retaining captured environment artifacts
 
 Environment exports describe approved artifacts and logical data mounts; they do
-not contain image bytes, variable values or user-volume data. Current local-only
+not contain image bytes, variable values or user-volume data. Local-only
 recreation requires the exact images to remain on the original engine and a
 matching approved revision on this installation. Pruning those images can make a
 recorded launch unavailable for recreation even though its history/export remains
-readable. Retain required images and immutable toolchain caches; inspect overall
-storage usage before cleanup. Automatic cache garbage collection and verified
-registry portability are not implemented.
+readable.
+
+Registry-verified revisions can use the exact approved platform digest and, under
+`on_demand`, pull that digest if it is absent locally. `preload_only` deliberately
+refuses that pull. Retain required local-only images and immutable toolchain
+caches; inspect overall storage usage before cleanup. Automatic cache garbage
+collection is not implemented.
 
 Recreation fails explicitly for unavailable artifacts rather than substituting a
 newer tag. Revoking a revision or disabling its approved environment prevents new
