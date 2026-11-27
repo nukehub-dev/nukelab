@@ -19,7 +19,7 @@
 # version dynamically (APP_VERSION build arg injected by CI); version.py is a
 # fixed "0.0.0-dev" fallback for local builds and is never bumped.
 #
-# The script never commits or tags; it prints the follow-up git commands.
+# The script prints the follow-up git commands and the release closeout reminder.
 
 set -euo pipefail
 
@@ -68,3 +68,6 @@ echo "  git add VERSION frontend/package.json frontend/package-lock.json CHANGEL
 echo "  git commit -m \"chore: bump version to $_version\""
 echo "  git tag v$_version"
 echo "  git push origin main --tags   # CI tags images: $_version, sha-<sha>, latest"
+echo
+echo "After tagged CI/CD and attestation verification finish, review docs/plan/ROADMAP.md."
+echo "Update the release baseline and outstanding priorities. Keep run links with release evidence."

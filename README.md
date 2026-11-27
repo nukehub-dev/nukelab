@@ -1,26 +1,26 @@
 # NukeLab
 
-Multi-user scientific computing platform with granular RBAC, real-time
-monitoring, credit-based resource management, and dynamic container orchestration.
+[![CI/CD status](https://github.com/nukehub-dev/nukelab/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nukehub-dev/nukelab/actions/workflows/ci.yml)
+[![Security checks status](https://github.com/nukehub-dev/nukelab/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/nukehub-dev/nukelab/actions/workflows/security.yml)
 
-## Highlights
+NukeLab is a self-hosted platform for teams that share scientific computing
+infrastructure. Researchers launch browser-accessible workspaces from approved
+environments, and operators control access and allocate CPU, memory, storage,
+and GPUs.
 
-- **Role-based access control** with a permission matrix and per-role customization
-- **Dynamic user environments** via admin-defined Docker image templates
-- **Resource plans** that enforce CPU, memory, and disk limits per server
-- **NUKE credit system** for fair resource allocation and auto-billing
-- **Crash-safe recovery** with worker/operation heartbeats, proof-backed reconciliation, admin visibility, and no time-based takeover
-- **Registry-verified environments** with exact platform-digest identity, optional digest pulls, and portable fingerprints
-- **Real-time metrics** through WebSockets with optional Prometheus + Grafana + Jaeger
-- **Security-first defaults**: hardened containers, CSRF protection, strict CORS, security headers, and audit logging
-- **Supply-chain checks**: strict base-image pinning, weekly digest-drift review, and release SBOM/provenance attestations
-- **Container flexibility**: runs on Docker or Podman, with Traefik v3 as the reverse proxy
+[Quick start](#quick-start) · [Documentation](docs/README.md) · [Roadmap](docs/plan/ROADMAP.md) · [Changelog](CHANGELOG.md)
+
+## What you can do
+
+- **Share compute.** Set resource plans, allocate GPUs, manage access by role, and queue launches when capacity is full. NUKE credits track and limit usage.
+- **Recreate workspaces.** Save launch provenance and match registry-verified environment revisions by image digest and configuration across installations.
+- **Recover data and interrupted work.** Back up offline private volumes, restore into new volumes, and give operators evidence to reconcile interrupted launches and recovery operations.
+- **Operate the platform.** Monitor live resource usage, review audit logs, and inspect published image provenance and SBOM attestations.
 
 ## Quick Start
 
-Requires Docker or Podman, compose, and Git. The hot-reload development stack
-additionally needs Node.js 24+ and npm; run `./nukelabctl install frontend`
-before `./nukelabctl dev`.
+For a local evaluation, install Git and either Docker with Compose or Podman
+with a Compose provider.
 
 ```bash
 git clone https://github.com/nukehub-dev/nukelab.git
@@ -29,26 +29,14 @@ cp .env.example .env.development
 ./nukelabctl start
 ```
 
-After start:
+Open <http://localhost:8080> and sign in with the default development credentials
+`admin` / `admin123`. Open **Administration → Setup** to publish an active public
+environment and confirm that a plan is available to users before the first launch.
+[First-run catalog setup](docs/operations/OPERATIONS.md#9-first-run-catalog-setup)
 
-| Service | URL |
-| --- | --- |
-| Frontend | `http://localhost:8080` |
-| API | `http://localhost:8080/api` |
-| API docs | `http://localhost:8080/api/docs` |
-
-Default development login: `admin` / `admin123`.
-
-On a fresh install, sign in as an administrator and open **Administration →
-Setup** (`/admin/setup`) to publish an active public environment and make at
-least one plan available to users before deploying.
-
-For hot-reload development:
-
-```bash
-./nukelabctl install frontend
-./nukelabctl dev
-```
+For hot reload, install Node.js 24+ and npm, then run
+`./nukelabctl install frontend` followed by `./nukelabctl dev`.
+[Local development guide](docs/development/LOCAL-DEV.md)
 
 ## Architecture at a Glance
 
@@ -58,61 +46,34 @@ For hot-reload development:
   <img src="docs/assets/architecture-light.svg" alt="NukeLab architecture: browser traffic reaches Traefik, which routes to the React SPA, FastAPI backend, and NukeIDE containers. The backend and Celery workers use PostgreSQL, Redis, and the container driver, while an optional observability stack covers the platform.">
 </picture>
 
-See [docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.md) for the full
-system overview and [docs/architecture/COMPONENTS.md](docs/architecture/COMPONENTS.md)
-for component responsibilities.
+Traefik routes traffic to the React frontend, FastAPI backend, and NukeIDE
+workspaces on Docker or Podman. PostgreSQL stores platform state, Redis handles
+caching and messaging, and Celery runs background work.
+[System overview](docs/architecture/OVERVIEW.md) · [Component responsibilities](docs/architecture/COMPONENTS.md)
 
 ## Documentation
 
-| Topic | Location |
+| I want to | Start here |
 | --- | --- |
-| System overview and request flows | [docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.md) |
-| Component responsibilities | [docs/architecture/COMPONENTS.md](docs/architecture/COMPONENTS.md) |
-| Authentication and authorization | [docs/architecture/AUTH.md](docs/architecture/AUTH.md) |
-| Queue, lifecycle, provenance, recovery and recreation | [docs/architecture/SERVER-LIFECYCLE.md](docs/architecture/SERVER-LIFECYCLE.md) |
-| Core data model | [docs/architecture/DATA-MODEL.md](docs/architecture/DATA-MODEL.md) |
-| Local development | [docs/development/LOCAL-DEV.md](docs/development/LOCAL-DEV.md) |
-| Contributing guidelines | [docs/development/CONTRIBUTING.md](docs/development/CONTRIBUTING.md) |
-| Operations (first-run setup, recovery, upgrades, DB, backups, supply chain) | [docs/operations/OPERATIONS.md](docs/operations/OPERATIONS.md) |
-| Production deployment | [docs/operations/PRODUCTION-DEPLOYMENT.md](docs/operations/PRODUCTION-DEPLOYMENT.md) |
-| Database and private-volume backup/restore | [docs/operations/BACKUP-RESTORE.md](docs/operations/BACKUP-RESTORE.md) |
-| Monitoring and observability | [docs/architecture/MONITORING.md](docs/architecture/MONITORING.md) |
-| Security test plans and findings | [docs/security/](docs/security/) |
-| Environment variables | [docs/reference/ENV-VARS.md](docs/reference/ENV-VARS.md) |
-| CLI command reference | [docs/reference/CLI-COMMANDS.md](docs/reference/CLI-COMMANDS.md) |
-
-Start with [docs/README.md](docs/README.md) for a guided index.
+| Deploy and operate NukeLab | [Production deployment](docs/operations/PRODUCTION-DEPLOYMENT.md) · [Operations guide](docs/operations/OPERATIONS.md) |
+| Back up the database or private volumes | [Backup and restore](docs/operations/BACKUP-RESTORE.md) |
+| Understand access and workspace behavior | [Authentication and authorization](docs/architecture/AUTH.md) · [Server lifecycle](docs/architecture/SERVER-LIFECYCLE.md) |
+| Configure the platform | [Environment variables](docs/reference/ENV-VARS.md) · [CLI reference](docs/reference/CLI-COMMANDS.md) |
+| Develop or contribute | [Local development](docs/development/LOCAL-DEV.md) · [Contributing guide](docs/development/CONTRIBUTING.md) |
 
 ## Management Commands
 
 ```bash
-./nukelabctl start          # Start all services
-./nukelabctl stop           # Stop all services
-./nukelabctl restart        # Restart all services
-./nukelabctl dev            # Start development stack with hot reload
-./nukelabctl build          # Rebuild containers
-./nukelabctl logs [service] # View logs for a service
-./nukelabctl status         # Show running containers
+./nukelabctl status         # Show running services
+./nukelabctl logs backend   # Follow backend logs
+./nukelabctl stop           # Stop the stack
 ```
-
-See [docs/reference/CLI-COMMANDS.md](docs/reference/CLI-COMMANDS.md) for the full
-command reference.
-
-## Technology Stack
-
-- **Reverse Proxy**: Traefik v3
-- **Frontend**: Vite + React 19 SPA, Tailwind CSS, TanStack Router, TanStack Query
-- **Backend**: FastAPI (Python 3.13), Pydantic v2, SQLAlchemy 2, asyncpg
-- **Database**: PostgreSQL 17 with partitioned time-series tables
-- **Cache / Queue**: Redis (sessions, pub/sub, Celery broker, caching)
-- **Task Queue**: Celery with Celery Beat
-- **Observability**: Prometheus, Grafana, Alertmanager, Jaeger, OpenTelemetry
-- **Container Engine**: Docker or Podman
 
 ## API
 
-The REST API is documented automatically at `/api/docs` and `/api/openapi.json`
-when the backend is running.
+When API documentation is enabled, the running stack serves
+[interactive API docs](http://localhost:8080/api/docs) and the
+[OpenAPI schema](http://localhost:8080/api/openapi.json).
 
 ## License
 

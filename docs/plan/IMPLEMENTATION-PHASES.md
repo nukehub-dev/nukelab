@@ -64,7 +64,7 @@ This document records the original v2.0 implementation plan and current delivery
 
 ## Phase 6: Production Hardening & Kubernetes
 
-**Status**: Partial — Docker/Podman hardening and the 2.3.0 recovery/registry/supply-chain scope are implemented; automated deployment verification, remote-runner acceptance of the combined suite, external assessment, and Kubernetes remain open
+**Status**: Partial — Docker/Podman hardening and the 2.3.0 recovery, registry and supply-chain features are implemented. Automated deployment verification, external assessment and Kubernetes remain open.
 
 ### Completed
 
@@ -82,6 +82,7 @@ This document records the original v2.0 implementation plan and current delivery
 - Crash-safe recovery: process/operation heartbeats, read-only evidence inspection, proof-backed finalization, bounded reconciliation, queue `starting` recovery, admin operations/queue consoles and owner recovery notifications (`operation_reconciliation.py`, `operation_finalizer.py`, `operation_reconciler.py`, `recovery_notifications.py`)
 - Registry-verified environment revisions with exact platform-digest proof, optional digest pulls, portable fingerprint matching, and admin verify/revoke (`registry_artifact_service.py`, `environment_revision_admin_service.py`)
 - Supply-chain gates: strict base-image pinning, weekly digest-drift review, and release-only deterministic CycloneDX SBOM plus build-provenance/SBOM attestations (`scripts/security/`, `.github/workflows/security.yml`, `.github/workflows/release.yml`)
+- A disposable Docker SIGKILL drill covered direct API launch, queue-admitted launch, backup, restore and stop.
 
 ### Deferred
 
@@ -92,7 +93,6 @@ This document records the original v2.0 implementation plan and current delivery
 
 ### Remaining delivery gaps
 
-- Remote-runner execution of the combined acceptance suite: the local disposable-stack combined and workspace suites pass; GitHub-hosted runs still provide the release evidence
 - GitHub repository enforcement: `CI Gate`/`Security Gate` required checks, protected signed tags, and signed-commit enforcement are maintainer-owned settings
 - Podman parity: registry pulls, hardening and crash recovery are verified on Docker 29.9.2; Podman remains untested
 - Automated deployment health verification and traffic cutover: Future; `update` prepares images and instructs the operator to restart, and rollback is an operator procedure using a pinned image plus snapshot restore
@@ -151,12 +151,7 @@ This document records the original v2.0 implementation plan and current delivery
 
 ## Known tech debt
 
-- The combined frontend acceptance suite runs locally; remote-runner execution
-  and flake observation remain release-verification work.
-- Recovery inspection/finalization has unit and service coverage, but a
-  real-stack worker-crash and helper-interruption exercise remains a release
-  gate. Proof-backed reconciliation, admin reconcile and bounded reminders are
-  implemented; there is no force path or time-based takeover.
+- Continue monitoring browser test flakes in CI.
 - Registry verification and portable-fingerprint matching are implemented.
   Operator registry credentials/allowlists and retention of local-only artifacts
   remain deployment responsibilities.

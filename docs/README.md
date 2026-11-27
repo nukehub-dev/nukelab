@@ -4,10 +4,10 @@ This directory contains all durable documentation for the NukeLab platform. Docu
 
 ## How to use this index
 
-- **New contributors and developers** → start with [development/LOCAL-DEV.md](development/LOCAL-DEV.md) and [development/CONTRIBUTING.md](development/CONTRIBUTING.md)
-- **Operators running the platform** → start with [architecture/OVERVIEW.md](architecture/OVERVIEW.md), then [operations/OPERATIONS.md](operations/OPERATIONS.md)
-- **Security reviewers** → start with [security/PENETRATION-TEST-PLAN.md](security/PENETRATION-TEST-PLAN.md)
-- **Anyone configuring or deploying** → see [reference/ENV-VARS.md](reference/ENV-VARS.md) and [operations/PRODUCTION-DEPLOYMENT.md](operations/PRODUCTION-DEPLOYMENT.md)
+- **New contributors and developers** → [Local development](development/LOCAL-DEV.md) and [Contributing guide](development/CONTRIBUTING.md)
+- **Operators running the platform** → [System overview](architecture/OVERVIEW.md) and [Operations guide](operations/OPERATIONS.md)
+- **Security reviewers** → [Penetration test plan](security/PENETRATION-TEST-PLAN.md)
+- **Anyone configuring or deploying** → [Environment variables](reference/ENV-VARS.md) and [Production deployment](operations/PRODUCTION-DEPLOYMENT.md)
 
 ## Documentation structure
 
@@ -15,55 +15,55 @@ This directory contains all durable documentation for the NukeLab platform. Docu
 
 | Document | Purpose |
 |---|---|
-| [plan/ROADMAP.md](plan/ROADMAP.md) | Current platform status, recent milestones, and upcoming priorities |
-| [plan/IMPLEMENTATION-PHASES.md](plan/IMPLEMENTATION-PHASES.md) | Phase-by-phase delivery record with remaining work |
-| [plan/DECISION-LOG.md](plan/DECISION-LOG.md) | Architecture and process decisions with rationale |
+| [Roadmap](plan/ROADMAP.md) | Current release baseline, product priorities, operational readiness, and deferred work |
+| [Implementation phases](plan/IMPLEMENTATION-PHASES.md) | Phase-by-phase delivery record with remaining work |
+| [Decision log](plan/DECISION-LOG.md) | Architecture and process decisions with rationale |
 
 ### Architecture
 
 | Document | Purpose |
 |---|---|
-| [architecture/OVERVIEW.md](architecture/OVERVIEW.md) | High-level system overview, request flow, and runtime boundaries |
-| [architecture/COMPONENTS.md](architecture/COMPONENTS.md) | Component responsibilities and interaction matrix |
-| [architecture/AUTH.md](architecture/AUTH.md) | Authentication and authorization flows: local JWT, OAuth, container access proxy |
-| [architecture/SERVER-LIFECYCLE.md](architecture/SERVER-LIFECYCLE.md) | Queue admission, fenced lifecycle, provenance/recreation, heartbeats, proof-backed recovery and admin operations |
-| [architecture/DATA-MODEL.md](architecture/DATA-MODEL.md) | Core entities, relationships, and schema conventions |
-| [architecture/MONITORING.md](architecture/MONITORING.md) | Observability stack: Prometheus, Grafana, Alertmanager, Jaeger, OpenTelemetry |
+| [System overview](architecture/OVERVIEW.md) | High-level system overview, request flow, and runtime boundaries |
+| [Components](architecture/COMPONENTS.md) | Component responsibilities and interaction matrix |
+| [Authentication and authorization](architecture/AUTH.md) | Local JWT, OAuth, and the container access proxy |
+| [Server lifecycle](architecture/SERVER-LIFECYCLE.md) | Queue admission, fenced lifecycle, provenance/recreation, heartbeats, proof-backed recovery and admin operations |
+| [Data model](architecture/DATA-MODEL.md) | Core entities, relationships, and schema conventions |
+| [Monitoring](architecture/MONITORING.md) | Prometheus, Grafana, Alertmanager, Jaeger, and OpenTelemetry |
 
 ### Operations
 
 | Document | Purpose |
 |---|---|
-| [operations/OPERATIONS.md](operations/OPERATIONS.md) | First-run catalog setup, recovery operations, upgrades and rollback, database operations, monitoring and supply-chain checks |
-| [operations/PRODUCTION-DEPLOYMENT.md](operations/PRODUCTION-DEPLOYMENT.md) | Production deployment, cgroup controllers, lxcfs, storage quotas and optional volume recovery |
-| [operations/BACKUP-RESTORE.md](operations/BACKUP-RESTORE.md) | Database and private-volume backup, restore procedures, reconciliation and disaster recovery |
-| [operations/GPU-SETUP.md](operations/GPU-SETUP.md) | NVIDIA GPU passthrough and CDI configuration |
-| [operations/READ-REPLICAS.md](operations/READ-REPLICAS.md) | Read replica reference for future scaling |
+| [Operations guide](operations/OPERATIONS.md) | First-run catalog setup, recovery operations, upgrades and rollback, database operations, monitoring and supply-chain checks |
+| [Production deployment](operations/PRODUCTION-DEPLOYMENT.md) | Production deployment, cgroup controllers, lxcfs, storage quotas and optional volume recovery |
+| [Backup and restore](operations/BACKUP-RESTORE.md) | Database and private-volume backup, restore procedures, reconciliation and disaster recovery |
+| [GPU setup](operations/GPU-SETUP.md) | NVIDIA GPU passthrough and CDI configuration |
+| [Read replicas](operations/READ-REPLICAS.md) | Read replica reference for future scaling |
 
 ### Security
 
 | Document | Purpose |
 |---|---|
-| [security/PENETRATION-TEST-PLAN.md](security/PENETRATION-TEST-PLAN.md) | Scope, methodology, and test plan for security reviews |
-| [security/PENETRATION-TEST-FINDINGS.md](security/PENETRATION-TEST-FINDINGS.md) | Confirmed findings with CVSS ratings and retest criteria |
-| [security/PENETRATION-TEST-REMEDIATION.md](security/PENETRATION-TEST-REMEDIATION.md) | Remediation ownership and tracking |
-| [security/OWASP-AUDIT.md](security/OWASP-AUDIT.md) | OWASP-aligned security audit notes |
-| [security/USER-AUTH-KEYS.md](security/USER-AUTH-KEYS.md) | User authentication key management |
+| [Penetration test plan](security/PENETRATION-TEST-PLAN.md) | Scope, methodology, and test plan for security reviews |
+| [Penetration test findings](security/PENETRATION-TEST-FINDINGS.md) | Confirmed findings with CVSS ratings and retest criteria |
+| [Penetration test remediation](security/PENETRATION-TEST-REMEDIATION.md) | Remediation ownership and tracking |
+| [OWASP audit](security/OWASP-AUDIT.md) | OWASP-aligned security audit notes |
+| [User authentication keys](security/USER-AUTH-KEYS.md) | User authentication key management |
 
 ### Development
 
 | Document | Purpose |
 |---|---|
-| [development/LOCAL-DEV.md](development/LOCAL-DEV.md) | Development stack, hot reload, and local tooling |
-| [development/CONTRIBUTING.md](development/CONTRIBUTING.md) | How to contribute: tests, lint, commit style, PR process |
-| [development/WEB-PUSH.md](development/WEB-PUSH.md) | Browser push notification setup and service-worker behavior |
+| [Local development](development/LOCAL-DEV.md) | Development stack, hot reload, and local tooling |
+| [Contributing guide](development/CONTRIBUTING.md) | Tests, lint, commit style, and pull requests |
+| [Web Push](development/WEB-PUSH.md) | Browser push notification setup and service-worker behavior |
 
 ### Reference
 
 | Document | Purpose |
 |---|---|
-| [reference/ENV-VARS.md](reference/ENV-VARS.md) | Environment variable descriptions for recovery, registry verification, queueing and platform configuration |
-| [reference/CLI-COMMANDS.md](reference/CLI-COMMANDS.md) | `nukelabctl` command reference and common examples |
+| [Environment variables](reference/ENV-VARS.md) | Configuration for recovery, registry verification, queueing and the rest of the platform |
+| [CLI reference](reference/CLI-COMMANDS.md) | `nukelabctl` commands and examples |
 
 ## Maintenance rules
 
@@ -72,4 +72,4 @@ This directory contains all durable documentation for the NukeLab platform. Docu
 3. **Do not duplicate details that live elsewhere.** API endpoints are documented at `/api/docs`. Environment variables are described in `.env.example`. CLI commands are surfaced by `./nukelabctl --help`. Link to those sources instead of copying them.
 4. **Use relative links.** All internal links must be relative so documentation remains usable offline and in branches.
 
-See [AGENTS.md](AGENTS.md) for ownership and contract details.
+See the [documentation contributor instructions](AGENTS.md) for ownership and contract details.

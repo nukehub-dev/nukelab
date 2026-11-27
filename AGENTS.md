@@ -66,6 +66,7 @@ Default section order:
 - Do not duplicate rules across many files unless each scope needs a local version.
 - Delete stale notes instead of explaining history.
 - Trim obvious statements, repeated rules, misplaced detail, and warnings for risks that no longer exist.
+- Use descriptive titles in README navigation links. Show a file path when the reader needs it for a concrete task.
 
 ## Closeout
 
@@ -157,6 +158,11 @@ Notes:
   conda-base, workspace, dev), and `Release` creates a **draft** GitHub Release. The release body is
   extracted from the matching `## [X.Y.Z]` section in `CHANGELOG.md`, so keep
   it curated.
+- The release maintainer closes out the release after tagged `CI/CD` and the
+  follow-up `Verify release attestations` job finish. Use the results to update
+  the baseline and outstanding priorities in [the roadmap](docs/plan/ROADMAP.md).
+  Keep individual run links and execution details with the release evidence.
+  See the [planning contract](docs/plan/AGENTS.md).
 - Record notable changes in the root `CHANGELOG.md` (Keep a Changelog format,
   `[Unreleased]` section).
 

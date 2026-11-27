@@ -21,13 +21,20 @@ All files under `docs/plan/`. The `docs/AGENTS.md` owns the top-level docs index
 
 | Document | Purpose |
 |---|---|
-| [ROADMAP.md](ROADMAP.md) | Current platform status, recent milestones, and upcoming priorities |
+| [ROADMAP.md](ROADMAP.md) | Current release baseline, product priorities, operational readiness, and deferred work |
 | [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) | Phase-by-phase delivery record with remaining work |
 | [DECISION-LOG.md](DECISION-LOG.md) | Architecture and process decisions with rationale |
 
 ## Work guidance
 
-- Update `ROADMAP.md` after each release or milestone.
+- Review `ROADMAP.md` after each release or milestone. Maintain the release
+  baseline and summarize open items by status and next outcome. Use delivery
+  evidence to close or carry forward priorities.
+- Record notable changes by version in the [changelog](../../CHANGELOG.md).
+  Keep individual CI, test, and attestation run links with GitHub checks or
+  local release evidence.
+- Reconcile related claims in `IMPLEMENTATION-PHASES.md` and `DECISION-LOG.md`
+  when the release evidence changes their status.
 - Keep `IMPLEMENTATION-PHASES.md` as the existing historical delivery summary and correct stale capability claims. Do not append temporary execution phases or cycle logs; keep current shared priorities in `ROADMAP.md` and follow the root local-research rule for working materials.
 - Record new reversible decisions in `DECISION-LOG.md`; update status if a decision is revised.
 - Prefer deletion over stale historical notes; move historical context to an explicit "Historical" appendix with a removal date.
