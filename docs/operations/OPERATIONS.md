@@ -458,7 +458,13 @@ inspection and Redis are not termination proof.
    read-only inspector and shows bounded liveness, runtime and proof diagnostics.
 2. Run `./nukelabctl doctor`. Its recovery preflight is read-only and reports
    journal schema, heartbeat configuration, registry verification and credential
-   state without pulling images or mutating the stack.
+   state without pulling images or mutating the stack. This default host
+   preflight tolerates a stopped stack. When the upgraded deployment should be
+   running, use `./nukelabctl doctor --post-upgrade` instead: it strictly verifies
+   the started deployment read-only, comparing expected vs observed release
+   version, service image identity and Alembic schema, and checking Celery
+   worker/Beat presence and unresolved recovery rows. See the
+   [upgrade runbook](PRODUCTION-DEPLOYMENT.md#upgrade-runbook).
 3. Inspect the UUID-based runtime name, managed owner/server labels, actual image
    identity and platform, mount attachments and GPU assignments. A database row
    with no container ID does not prove that no container exists. For volume work,
@@ -533,6 +539,51 @@ The `nukelab-recovery` alert group covers the operational failures:
 Heartbeat and stalled-operation alerts are inspection triggers, not automatic
 cleanup. Follow the investigation flow above and do not release protection from
 the alert alone.
+
+### 11.5 Batch job rollout and drain
+
+Batch jobs are disabled for new submissions by default. Enable a pilot only
+after the normal pinned upgrade and schema migration complete:
+
+1. Confirm the database is at the current Alembic head and contains
+   `batch_jobs` and `batch_job_logs`, and that `celery-worker` plus
+   `celery-beat` run the same image and schema as the backend.
+2. Set the pilot cohort and enable submission together:
+
+   ```env
+   BATCH_JOBS_SUBMISSION_ENABLED=true
+   BATCH_JOBS_ALLOWED_USER_IDS=<owner-uuid>[,<owner-uuid>]
+   ```
+
+   An empty cohort falls back to the `jobs:write_own` grant. Grant
+   `jobs:read_own` to anyone who should keep history access. Keep the
+   `BATCH_JOBS_*` runtime, interval and limit values consistent across
+   `backend`, `celery-worker` and `celery-beat`; Beat schedules using the
+   interval settings.
+3. Verify the deployment with the read-only post-upgrade verifier described in
+   the [upgrade runbook](PRODUCTION-DEPLOYMENT.md#upgrade-runbook), and confirm
+   the worker can reach the configured container engine. On a deployment that
+   does not enable jobs, missing optional batch tables are reported as not
+   installed, not as failure.
+4. Run one pilot job from the owner Jobs page. Confirm it uses an approved
+   zero-cost CPU plan and an owned private volume, runs as UID 65532 with no
+   network, writes output under `/work`, and records a terminal result and
+   bounded log.
+
+To drain or disable the pilot, set `BATCH_JOBS_SUBMISSION_ENABLED=false` and
+restart the backend. This blocks new submissions only: queued and admitted jobs
+continue through dispatch, monitoring, cancellation and cleanup, and history
+remains readable. Keep `celery-worker` and `celery-beat` running until no job is
+`queued`, `starting`, `running`, or `cancelling`; otherwise deadlines, exit
+observation and log capture wait for the next worker tick. Queued jobs can be
+cancelled by their owners or left to expire.
+
+Do not delete `batch_jobs`, `batch_job_logs`, `job_writer` volume-operation rows,
+or job containers to "clean up". A `recovery_required` job retains its
+reservation and volume guard; inspect it in `/jobs` or `/admin/jobs` and follow
+the [uncertain-work procedure](#113-investigating-uncertain-work). There is no
+proof-backed admin reconcile or manual reservation-release path in this release,
+so do not clear `reservation_active` or the guard by hand.
 
 ## 12. Registry verification and environment revisions
 

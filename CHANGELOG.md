@@ -14,6 +14,81 @@ section.
 
 ## [Unreleased]
 
+### Added
+
+- Owner single-run batch jobs (pilot): submit one noninteractive command against
+  an approved zero-cost CPU plan and an owned private volume, with queued,
+  running, cancellation, recovery, result, and bounded-log views at `/jobs` and
+  `/jobs/{id}`. Submissions are opt-in and JWT-only.
+- A durable batch-job journal (`batch_jobs`, `batch_job_logs`) with idempotent
+  submission, fenced admission, shared CPU/memory/disk accounting, owner/fleet
+  caps, and an exclusive `job_writer` volume guard. Job history, retained logs,
+  and cancellation remain available while submission is disabled.
+- A hardened headless execution profile: approved immutable image identity,
+  owned `/work` preparation before the non-root job, literal argv with no shell
+  parsing, no network, read-only rootfs, dropped capabilities, UID 65532, bounded
+  runtime and logs, and create/start checkpoints with bounded monitor, cleanup
+  retry, and recovery inspection.
+- Guided first launch on the dashboard and deploy dialog: eligible current
+  catalog defaults are preselected, stale saved plan/environment defaults are
+  surfaced instead of submitted, and catalog failures no longer look like a
+  missing catalog.
+- Read-only cross-owner batch-job visibility at `/admin/jobs` with sanitized
+  state, reason, owner/environment/plan/volume labels, reservation and
+  volume-guard flags, heartbeat age, and log/cleanup state. There is no admin
+  cancel, retry, reconcile, or manual-release action.
+- `./nukelabctl doctor --post-upgrade` verifies a running deployment read-only:
+  service containers, public API health and release version, image identity,
+  Alembic head compatibility, Celery worker/Beat presence, unresolved recovery
+  rows, and optional batch-job tables.
+- Batch-job recovery metrics for queued, active, recovery-required, and
+  cleanup-pending rows.
+
+### Changed
+
+- Batch dispatch, execution, monitoring, and recovery run from
+  `celery-worker`/Beat with configurable bounded intervals. Active batch
+  reservations participate in the existing resource-pool and quota accounting.
+- Volume mutation, backup/restore, mount intent, and deletion now share the
+  `job_writer` exclusive guard, so a job's `/work` volume cannot change while
+  the runtime outcome is unresolved.
+
+### Security
+
+- Owner job routes require JWT and `jobs:read_own`/`jobs:write_own`; foreign job
+  IDs return 404. Admin job rows require a JWT session plus `operations:read_all`
+  and `ADMIN_ACCESS`, and never expose argv, logs, environment values, image
+  references, volume paths, runtime identity, or fencing tokens.
+- Batch containers run without network access, ports, capabilities, rootfs
+  writes, restart policy, or platform credentials. Argument count/bytes, runtime,
+  pids, memory, tmpfs, and log output are bounded; terminal release requires
+  termination proof.
+
+### Deferred
+
+- Batch submission remains disabled by default for the pilot. Zero-cost billing
+  is the only implemented mode; `BATCH_JOBS_ALLOW_PAID_PLANS` is inert and paid
+  credit settlement is not implemented.
+- No full API→PostgreSQL/Redis/Celery/Docker batch job has run end to end yet,
+  and the required disposable real-stack browser scenario plus worker-death/
+  broker-loss interruption drill are not wired into CI. No staging pinned
+  upgrade, rollback, off-host restore, or registry `preload_only` rehearsal has
+  completed. Writable `/work` disk enforcement and the last-slot capacity/volume
+  race remain a storage/staging gate.
+- Podman job enablement, scoped workload secrets, job completion notifications,
+  and an admin proof-backed reconcile/manual-release path remain pending.
+
+### Verification
+
+- Backend full suite passed: 4,995 passed, 6 skipped, 0 failed.
+- Frontend unit tests (234), lint, format check, type check, and production build
+  passed.
+- Targeted mocked browser suites passed: jobs UI 11, guided first launch 9, admin
+  jobs UI 8, and the existing queue/admin-setup regressions 10.
+- A real Docker driver smoke passed for `/work` preparation, UID 65532, output,
+  timeout exit 124, stop exit 137, and cleanup. Shell lint and
+  `docker compose config -q` passed.
+
 ## [2.3.0] - 2026-11-22
 
 ### Added

@@ -4,7 +4,7 @@
 
 help_doctor() {
     cat <<- EOF
-${BOLD}Usage:${RESET} ./nukelabctl doctor
+${BOLD}Usage:${RESET} ./nukelabctl doctor [options]
 
 Run non-destructive checks and report whether the host environment is ready
 to run NukeLab.
@@ -13,10 +13,73 @@ Also reports read-only recovery-journal and registry-verification preflight
 state. A stopped stack or unreachable database is reported as unavailable,
 not as a failure.
 
+${BOLD}Options:${RESET}
+  --post-upgrade             Verify a running upgraded stack (read-only)
+  --expected-version <ver>   Release version required by --post-upgrade
+                             (default: resolved NUKELAB_VERSION/VERSION/git tag)
+  --help, -h                 Show this help
+
+${BOLD}Post-upgrade mode checks:${RESET}
+required service containers, public API health and release version, running
+service image identity, database schema head compatibility, Celery worker
+heartbeat and Beat presence, unresolved recovery rows, and optional batch-job
+tables. It never migrates, writes, restarts, pulls, or prints credentials.
+
+Exit status is 0 when all required checks pass and 1 when any required check
+fails. Warnings require review but do not fail the run.
+
 ${BOLD}Examples:${RESET}
   ./nukelabctl doctor
   ./nukelabctl doctor --verbose
+  ./nukelabctl doctor --post-upgrade
+  ./nukelabctl doctor --post-upgrade --expected-version 2.4.0
 EOF
+}
+
+# Defaults for doctor options.
+DOCTOR_POST_UPGRADE=false
+DOCTOR_EXPECTED_VERSION=""
+
+parse_doctor_args() {
+    while [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; do
+        case "${EXTRA_ARGS[0]}" in
+            --post-upgrade)
+                DOCTOR_POST_UPGRADE=true
+                EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
+                ;;
+            --expected-version)
+                if [ ${#EXTRA_ARGS[@]} -lt 2 ] || [ -z "${EXTRA_ARGS[1]}" ]; then
+                    die "Missing value for doctor --expected-version"
+                fi
+                DOCTOR_EXPECTED_VERSION="${EXTRA_ARGS[1]}"
+                EXTRA_ARGS=("${EXTRA_ARGS[@]:2}")
+                ;;
+            --expected-version=*)
+                DOCTOR_EXPECTED_VERSION="${EXTRA_ARGS[0]#*=}"
+                if [ -z "$DOCTOR_EXPECTED_VERSION" ]; then
+                    die "Missing value for doctor --expected-version"
+                fi
+                EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
+                ;;
+            --help | -h)
+                help_doctor
+                exit 0
+                ;;
+            --*)
+                die "Unknown option for doctor: ${EXTRA_ARGS[0]}"
+                ;;
+            *)
+                die "Unexpected argument for doctor: ${EXTRA_ARGS[0]}"
+                ;;
+        esac
+    done
+
+    if [ -n "$DOCTOR_EXPECTED_VERSION" ] && ! $DOCTOR_POST_UPGRADE; then
+        die "--expected-version requires --post-upgrade"
+    fi
+    if [ -n "$DOCTOR_EXPECTED_VERSION" ] && [[ ! "$DOCTOR_EXPECTED_VERSION" =~ ^[A-Za-z0-9._+-]{1,64}$ ]]; then
+        die "Invalid value for doctor --expected-version: ${DOCTOR_EXPECTED_VERSION}"
+    fi
 }
 
 # Counters and output helpers used only by doctor.
@@ -209,7 +272,17 @@ _doctor_check_disk() {
 # shellcheck source=../doctor/preflight.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../doctor/preflight.sh"
 
+# Post-upgrade verification is read-only and bounded; default doctor behavior
+# remains a stopped-stack-tolerant host preflight.
+# shellcheck source=../doctor/post_upgrade.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../doctor/post_upgrade.sh"
+
 cmd_doctor() {
+    if $DOCTOR_POST_UPGRADE; then
+        _doctor_post_upgrade
+        return
+    fi
+
     step "NukeLab environment check"
 
     _doctor_check_engine

@@ -59,6 +59,9 @@ ROLE_PERMISSIONS = {
         # Volumes (admin level)
         Permission.VOLUMES_READ_ALL,
         Permission.VOLUMES_WRITE_ALL,
+        # Batch jobs (owner-scoped)
+        Permission.JOBS_READ_OWN,
+        Permission.JOBS_WRITE_OWN,
         # Operation recovery visibility and reconciliation
         Permission.OPERATIONS_READ_ALL,
         Permission.OPERATIONS_MANAGE_ALL,
@@ -97,6 +100,9 @@ ROLE_PERMISSIONS = {
         # Volumes (full)
         Permission.VOLUMES_READ_ALL,
         Permission.VOLUMES_WRITE_ALL,
+        # Batch jobs (owner-scoped)
+        Permission.JOBS_READ_OWN,
+        Permission.JOBS_WRITE_OWN,
         # Audit
         Permission.AUDIT_READ,
     ],
@@ -124,6 +130,9 @@ ROLE_PERMISSIONS = {
         # Volumes (write own + read all)
         Permission.VOLUMES_WRITE_OWN,
         Permission.VOLUMES_READ_ALL,
+        # Batch jobs (owner-scoped)
+        Permission.JOBS_READ_OWN,
+        Permission.JOBS_WRITE_OWN,
     ],
     "user": [
         # Own resources (full CRUD)
@@ -140,6 +149,9 @@ ROLE_PERMISSIONS = {
         Permission.CREDITS_READ_OWN,
         # Analytics (view own)
         Permission.ANALYTICS_READ_OWN,
+        # Batch jobs (owner-scoped)
+        Permission.JOBS_READ_OWN,
+        Permission.JOBS_WRITE_OWN,
     ],
     "guest": [
         # Read-only access to own servers and volumes

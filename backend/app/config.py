@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import os
+import uuid
 from typing import Any, Literal
 from urllib.parse import urlparse, urlunparse
 
@@ -212,6 +213,40 @@ class Settings(BaseSettings):
     queue_max_pending_per_owner: int = Field(default=5, gt=0)
     queue_max_pending_total: int = Field(default=500, gt=0)
 
+    # Single-run batch jobs. Submission is disabled by default until an operator
+    # enables a pilot cohort; the zero-cost path is the only supported billing mode.
+    batch_jobs_submission_enabled: bool = False
+    # Inert compatibility flag: paid settlement is unsupported until the
+    # settlement gate lands, so capabilities always report zero_cost.
+    batch_jobs_allow_paid_plans: bool = False
+    # Optional operator-approved pilot cohort. Empty means the permission grant
+    # (jobs:write_own) defines eligibility. Invalid entries are ignored.
+    batch_jobs_allowed_user_ids: str = ""
+    batch_jobs_max_active_per_owner: int = Field(default=1, gt=0)
+    batch_jobs_max_queued_per_owner: int = Field(default=3, gt=0)
+    batch_jobs_default_runtime_seconds: int = Field(default=1800, gt=0)
+    batch_jobs_max_runtime_seconds: int = Field(default=7200, gt=0)
+    batch_jobs_queue_ttl_seconds: int = Field(default=86400, gt=0)
+    batch_jobs_max_argv_items: int = Field(default=64, gt=0)
+    batch_jobs_max_input_bytes: int = Field(default=16384, gt=0)
+    batch_jobs_log_tail_bytes: int = Field(default=262144, gt=0)
+    batch_jobs_log_retention_seconds: int = Field(default=604800, gt=0)
+
+    # Batch admission/runtime controls. The fleet cap counts active reservations
+    # across owners; zero means unlimited. Interval and batch bounds keep
+    # dispatch/monitor/recovery scans bounded and heartbeats observable.
+    batch_jobs_max_active_fleet: int = Field(default=5, ge=0)
+    batch_jobs_heartbeat_stale_seconds: int = Field(default=90, gt=0)
+    batch_jobs_stop_timeout_seconds: int = Field(default=30, gt=0)
+    batch_jobs_monitor_batch_size: int = Field(default=20, ge=1, le=200)
+    batch_jobs_dispatch_batch_size: int = Field(default=10, ge=1, le=100)
+    batch_jobs_dispatch_interval_seconds: int = Field(default=5, gt=0)
+    batch_jobs_monitor_interval_seconds: int = Field(default=10, gt=0)
+    batch_jobs_recovery_interval_seconds: int = Field(default=30, gt=0)
+    batch_jobs_recovery_batch_size: int = Field(default=50, ge=1, le=500)
+    batch_jobs_pids_limit: int = Field(default=256, ge=1, le=8192)
+    batch_jobs_tmpfs_bytes: int = Field(default=67108864, ge=1, le=1024**3)
+
     # Worker/executor liveness. A heartbeat older than the stale threshold is
     # only an observation; it never proves termination or authorizes takeover.
     worker_heartbeat_interval_seconds: int = Field(default=5, gt=0)
@@ -231,6 +266,20 @@ class Settings(BaseSettings):
     recovery_scan_batch_size: int = Field(default=200, gt=0)
     recovery_stall_warning_seconds: int = Field(default=300, gt=0)
     recovery_legacy_drain_confirmed: bool = False
+
+    @property
+    def batch_jobs_allowed_user_id_set(self) -> set[uuid.UUID]:
+        """Parse the optional pilot cohort, ignoring blank/invalid entries."""
+        cohort: set[uuid.UUID] = set()
+        for raw in self.batch_jobs_allowed_user_ids.split(","):
+            value = raw.strip()
+            if not value:
+                continue
+            try:
+                cohort.add(uuid.UUID(value))
+            except (ValueError, AttributeError, TypeError):
+                continue
+        return cohort
 
     @property
     def gpu_device_list(self) -> list[str]:

@@ -25,7 +25,7 @@ _manage_sh_complete() {
 
 	# Options that take a value — complete the value, not an option name.
 	case "$prev" in
-	--tail | -n | --timeout | -t | -k)
+	--tail | -n | --timeout | -t | -k | --expected-version)
 		return
 		;;
 	--overlay | -o)
@@ -131,6 +131,9 @@ _manage_sh_complete() {
 		;;
 	check-env)
 		COMPREPLY=($(compgen -W "--all --changed ${global_flags[*]}" -- "$cur"))
+		;;
+	doctor)
+		COMPREPLY=($(compgen -W "--post-upgrade --expected-version ${global_flags[*]}" -- "$cur"))
 		;;
 	sync-env)
 		# First positional is the env file; after that only flags.

@@ -19,7 +19,8 @@ from app.config import settings
 from app.db.base import Base
 
 PREVIOUS_REVISION = "34ce1a62ffe8"
-HEAD_REVISION = "a4c9e2f7b1d3"
+BATCH_REVISION = "b7d4e1c9a2f5"
+HEAD_REVISION = "e2c7a9f4d6b1"
 NEW_TABLES = {
     "environment_revisions",
     "server_launch_records",
@@ -27,6 +28,8 @@ NEW_TABLES = {
     "server_launch_intents",
     "server_launch_operations",
     "volume_restores",
+    "batch_jobs",
+    "batch_job_logs",
 }
 
 
@@ -90,12 +93,25 @@ def test_fresh_upgrade_downgrade_and_reupgrade(migration_database):
     assert ScriptDirectory.from_config(config).get_heads() == [HEAD_REVISION]
     command.upgrade(config, "head")
     assert NEW_TABLES <= asyncio.run(tables(name))
+    # The first downgrade removes only the admission reservation columns.
+    command.downgrade(config, "-1")
+    after_admission = asyncio.run(tables(name))
+    assert "batch_jobs" in after_admission
+    # The next downgrade removes the additive batch tables.
+    command.downgrade(config, "-1")
+    after_batch = asyncio.run(tables(name))
+    assert "batch_jobs" not in after_batch
+    assert "batch_job_logs" not in after_batch
+    assert NEW_TABLES - {"batch_jobs", "batch_job_logs"} <= after_batch
+    # Four more steps reach the pre-workflow baseline used by this rehearsal.
     command.downgrade(config, "-1")
     command.downgrade(config, "-1")
     command.downgrade(config, "-1")
     command.downgrade(config, "-1")
     assert "volume_restores" not in asyncio.run(tables(name))
-    assert NEW_TABLES - {"volume_restores"} <= asyncio.run(tables(name))
+    assert NEW_TABLES - {"volume_restores", "batch_jobs", "batch_job_logs"} <= asyncio.run(
+        tables(name)
+    )
     command.upgrade(config, "head")
     command.downgrade(config, PREVIOUS_REVISION)
     assert NEW_TABLES.isdisjoint(asyncio.run(tables(name)))

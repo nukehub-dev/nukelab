@@ -30,6 +30,8 @@ export const PERMISSIONS = {
   SERVERS_READ_ALL: 'servers:read_all',
   SERVERS_WRITE_ALL: 'servers:write_all',
   SERVERS_ACCESS_OTHERS: 'servers:access_others',
+  JOBS_READ_OWN: 'jobs:read_own',
+  JOBS_WRITE_OWN: 'jobs:write_own',
   ENVIRONMENT_CREATE: 'environment:create',
   ENVIRONMENT_READ: 'environment:read',
   ENVIRONMENT_UPDATE: 'environment:update',
@@ -123,6 +125,8 @@ const PERMISSION_IMPLICATIONS: Record<string, string[]> = {
     PERMISSIONS.SERVERS_READ_ALL,
     PERMISSIONS.SERVERS_WRITE_ALL,
     PERMISSIONS.SERVERS_ACCESS_OTHERS,
+    PERMISSIONS.JOBS_READ_OWN,
+    PERMISSIONS.JOBS_WRITE_OWN,
     PERMISSIONS.ENVIRONMENT_CREATE,
     PERMISSIONS.ENVIRONMENT_READ,
     PERMISSIONS.ENVIRONMENT_UPDATE,
@@ -218,6 +222,9 @@ function checkPermission(user: User | null, permission: string): boolean {
       return roleLevel >= ROLE_LEVELS.user
     case PERMISSIONS.SERVERS_READ_OWN:
       return roleLevel >= ROLE_LEVELS.guest
+    case PERMISSIONS.JOBS_READ_OWN:
+    case PERMISSIONS.JOBS_WRITE_OWN:
+      return roleLevel >= ROLE_LEVELS.user
     case PERMISSIONS.ENVIRONMENT_CREATE:
     case PERMISSIONS.ENVIRONMENT_UPDATE:
     case PERMISSIONS.ENVIRONMENT_DELETE:

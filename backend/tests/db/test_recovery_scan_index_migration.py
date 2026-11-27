@@ -12,7 +12,9 @@ from tests.db.test_launch_workflow_migration import connect
 from tests.db.test_launch_workflow_migration import migration_database as migration_database
 
 PREVIOUS_REVISION = "c5f8a2d91e47"
-HEAD_REVISION = "a4c9e2f7b1d3"
+SCAN_REVISION = "a4c9e2f7b1d3"
+BATCH_REVISION = "b7d4e1c9a2f5"
+HEAD_REVISION = "e2c7a9f4d6b1"
 INDEX_EXPECTATIONS = {
     "server_launch_operations": (
         "ix_server_launch_operations_recovery_scan",
@@ -59,7 +61,9 @@ def test_recovery_scan_indexes_upgrade_downgrade_and_reupgrade(migration_databas
     config, database = migration_database
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == PREVIOUS_REVISION
+    assert script.get_revision(SCAN_REVISION).down_revision == PREVIOUS_REVISION
+    assert script.get_revision(BATCH_REVISION).down_revision == SCAN_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == BATCH_REVISION
 
     command.upgrade(config, "head")
     upgraded = asyncio.run(recovery_indexes(database))
@@ -73,7 +77,11 @@ def test_recovery_scan_indexes_upgrade_downgrade_and_reupgrade(migration_databas
         for state in states:
             assert state in index["definition"]
 
-    command.downgrade(config, "-1")
+    command.downgrade(config, SCAN_REVISION)
+    assert asyncio.run(revision(database)) == SCAN_REVISION
+    assert set(asyncio.run(recovery_indexes(database))) == set(INDEX_EXPECTATIONS)
+
+    command.downgrade(config, PREVIOUS_REVISION)
     assert asyncio.run(revision(database)) == PREVIOUS_REVISION
     assert asyncio.run(recovery_indexes(database)) == {}
 

@@ -19,7 +19,7 @@ from app.models.volume_operation import VolumeOperation
 from app.services.admission_service import acquire_admission_lock
 
 ACTIVE_STATES = ("reserved", "running", "recovery_required")
-EXCLUSIVE_KINDS = ("backup", "restore")
+EXCLUSIVE_KINDS = ("backup", "restore", "job_writer")
 KINDS = (*EXCLUSIVE_KINDS, "writer", "mount")
 
 

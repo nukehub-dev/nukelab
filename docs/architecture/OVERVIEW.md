@@ -49,15 +49,15 @@ NukeLab is a multi-user scientific computing platform. It exposes a web manageme
 
 ### API and orchestration layer
 
-- **FastAPI backend** (`backend/app/main.py`) owns auth, user/server/environment/plan management, audit logging, metrics, and Docker orchestration.
+- **FastAPI backend** (`backend/app/main.py`) owns auth, user/server/environment/plan management, audit logging, metrics, Docker orchestration, and owner/admin batch-job surfaces.
 - **ContainerDriver** (`backend/app/container/driver.py`) and `DockerDriver` (`aiodocker`) provide the low-level runtime abstraction selected by `CONTAINER_RUNTIME`; `ContainerClient` is a compatibility shim.
 - **ServerSpawner** (`backend/app/container/spawner.py`) coordinates higher-level server lifecycle actions (volume creation, image pulling, Traefik labels, readiness checks).
-- **Queue, launch, lifecycle, provenance and recovery services** persist owner intent before runtime I/O, enforce admission and authorization, and reconcile uncertain outcomes.
-- **Celery workers** run background tasks: NUKE billing, server cleanup, queue dispatch, scheduled start/stop, notifications, maintenance windows, recovery scans, and recovery retention.
+- **Queue, launch, lifecycle, provenance, batch-job and recovery services** persist owner intent before runtime I/O, enforce admission and authorization, and reconcile uncertain outcomes.
+- **Celery workers** run background tasks: NUKE billing, server cleanup, queue dispatch, batch-job dispatch/monitoring/recovery, scheduled start/stop, notifications, maintenance windows, recovery scans, and recovery retention.
 
 ### Data and state layer
 
-- **PostgreSQL 17** stores users, roles, permissions, servers, environments, plans, credit transactions, audit logs, launch provenance, recovery records and metrics history. Time-series tables are partitioned by month.
+- **PostgreSQL 17** stores users, roles, permissions, servers, environments, plans, credit transactions, audit logs, launch provenance, batch-job journals and bounded logs, recovery records and metrics history. Time-series tables are partitioned by month.
 - **Redis** handles token denylist/revocation state, pub/sub, Celery broker duties, response caching, rate limits, and real-time message distribution.
 - **Private volume backups** live under an operator-configured host path that the API/workers and the trusted recovery helper reach through the same bind mount.
 
@@ -67,7 +67,7 @@ NukeLab is a multi-user scientific computing platform. It exposes a web manageme
 - **FastAPI instead of Django.** Native async/await, WebSocket support, and Pydantic validation fit an I/O-bound platform that calls the Docker API frequently.
 - **Traefik instead of Nginx.** Native Docker auto-discovery is required for dynamic user container routing.
 - **PostgreSQL instead of a separate time-series database.** The workload fits relational queries with monthly partitioning for audit and metrics tables.
-- **Durable intent instead of best-effort provisioning.** Queue requests, lifecycle reservations and launch provenance are persisted before runtime I/O so uncertain outcomes can be fenced and reconciled instead of silently duplicated.
+- **Durable intent instead of best-effort provisioning.** Queue requests, lifecycle reservations, batch-job reservations and launch provenance are persisted before runtime I/O so uncertain outcomes can be fenced and reconciled instead of silently duplicated.
 
 ## Scaling notes
 
@@ -78,4 +78,4 @@ Current hardware constraints drove several design choices:
 - **Idle auto-stop** and **max runtime** reclaim resources automatically.
 - Horizontal scaling is a future phase; the data model and routing are designed to accommodate multiple worker hosts.
 
-See [COMPONENTS.md](COMPONENTS.md) for detailed component responsibilities, [AUTH.md](AUTH.md) for auth flows, [SERVER-LIFECYCLE.md](SERVER-LIFECYCLE.md) for container lifecycle, and [DATA-MODEL.md](DATA-MODEL.md) for core entities.
+See [COMPONENTS.md](COMPONENTS.md) for detailed component responsibilities, [BATCH-JOBS.md](BATCH-JOBS.md) for single-run execution, [AUTH.md](AUTH.md) for auth flows, [SERVER-LIFECYCLE.md](SERVER-LIFECYCLE.md) for container lifecycle, and [DATA-MODEL.md](DATA-MODEL.md) for core entities.

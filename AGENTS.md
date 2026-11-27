@@ -195,6 +195,24 @@ High-level layout; see the Child NAD Index below for domain-specific details.
   `CONTAINER_HARDENING_ENABLED`, `CONTAINER_RUNTIME`, `SERVER_AUTH_*`,
   `APP_URL`/`PUBLIC_URL`, `DEV_MODE`/`APP_ENV`, GPU and resource-pool settings.
   A missing value changes behavior only on background-admitted launches.
+- **Batch jobs execute from `celery-worker`, with `celery-beat` scheduling
+  dispatch, monitoring and recovery.** Keep the `BATCH_JOBS_*` runtime, limit,
+  interval and cohort values consistent across `backend`, `celery-worker` and
+  `celery-beat`; a missing worker or Beat value changes admission, scheduling,
+  or leaves jobs uninspected.
+- **`BATCH_JOBS_SUBMISSION_ENABLED=false` blocks new submissions only.**
+  Existing queued and admitted jobs continue dispatch, monitoring, cleanup and
+  cancellation, and owner/admin history stays readable. Drain a pilot by
+  disabling submission and letting active rows finish.
+- **Batch jobs are zero-cost only.** `BATCH_JOBS_ALLOW_PAID_PLANS` is inert,
+  nonzero-cost plans are rejected, and no credit settlement path exists.
+- **A batch reservation holds the exclusive `job_writer` volume guard.**
+  File deletion, metadata/sharing changes, backup/restore, server mount intent
+  and volume deletion must respect it; release only after terminal runtime
+  termination is proved. Recovery and cleanup never release on a timer.
+- **`/work` ownership prep must run before the non-root job.** The bounded root
+  helper fixes the single job volume; bypassing it leaves the fixed UID 65532
+  job unable to write its working directory.
 - **Frontend CI is a required gate.** `CI/CD` runs Vitest unit tests, Vite-only
   mocked browser tests, the external disposable browser stack, the workspace/IDE
   stack and the trusted volume-helper unit/runtime tests before publishing

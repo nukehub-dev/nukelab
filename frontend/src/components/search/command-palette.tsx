@@ -26,6 +26,7 @@ import {
   Server,
   Settings,
   Shield,
+  Terminal,
   UserCircle,
   Users,
   Wrench,
@@ -257,6 +258,9 @@ export function CommandPalette() {
     return [
       page('Dashboard', '/', LayoutDashboard),
       page('Servers', '/servers', Server),
+      ...(hasPermission(PERMISSIONS.JOBS_READ_OWN)
+        ? [page('Jobs', '/jobs', Terminal, ['batch', 'run', 'compute', 'logs'])]
+        : []),
       page('Usage', '/usage', Activity),
       page('Activity', '/activity', Clock, ['history', 'events']),
       ...(hasPermission(PERMISSIONS.ENVIRONMENT_READ)
@@ -311,6 +315,13 @@ export function CommandPalette() {
         '/admin/operations',
         Wrench,
         ['operations', 'recovery', 'reconcile', 'backup', 'restore'],
+        hasAllPermissions([PERMISSIONS.OPERATIONS_READ_ALL, PERMISSIONS.ADMIN_ACCESS])
+      ),
+      ...adminPage(
+        'Jobs',
+        '/admin/jobs',
+        Terminal,
+        ['jobs', 'batch', 'runs', 'operator'],
         hasAllPermissions([PERMISSIONS.OPERATIONS_READ_ALL, PERMISSIONS.ADMIN_ACCESS])
       ),
       ...adminPage(

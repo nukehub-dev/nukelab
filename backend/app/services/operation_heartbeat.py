@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.logging import get_logger
 from app.core.time_utils import utc_now
+from app.models.batch_job import BatchJob
 from app.models.server_launch_operation import ServerLaunchOperation
 from app.models.volume_backup import VolumeBackup
 from app.models.volume_restore import VolumeRestore
@@ -41,24 +42,31 @@ SessionFactory = Callable[[], AsyncSession]
 class _OperationTarget:
     table: Table
     state_column: str
-    active_state: str
+    active_states: tuple[str, ...]
 
+
+_JOB_HEARTBEAT_STATES = ("starting", "running", "cancelling")
 
 _TARGETS: dict[str, _OperationTarget] = {
     "launch": _OperationTarget(
         table=ServerLaunchOperation.__table__,
         state_column="state",
-        active_state="executing",
+        active_states=("executing",),
     ),
     "backup": _OperationTarget(
         table=VolumeBackup.__table__,
         state_column="status",
-        active_state="in_progress",
+        active_states=("in_progress",),
     ),
     "restore": _OperationTarget(
         table=VolumeRestore.__table__,
         state_column="status",
-        active_state="in_progress",
+        active_states=("in_progress",),
+    ),
+    "job": _OperationTarget(
+        table=BatchJob.__table__,
+        state_column="state",
+        active_states=_JOB_HEARTBEAT_STATES,
     ),
 }
 
@@ -101,7 +109,7 @@ async def _update_heartbeat(
         .where(
             target.table.c.id == operation_id,
             target.table.c.fencing_token == fencing_token,
-            target.table.c[target.state_column] == target.active_state,
+            target.table.c[target.state_column].in_(target.active_states),
         )
         .values(**values)
         .execution_options(synchronize_session=False)
@@ -158,7 +166,7 @@ async def operation_heartbeat(
 ):
     """Refresh ``heartbeat_at`` while the fenced operation row stays active.
 
-    ``kind`` selects the journal table and its active state. The caller passes
+    ``kind`` selects the journal table and its active states. The caller passes
     the process executor identity from :func:`current_executor_id`; ``None``
     leaves any recorded executor unchanged and is used by tests or legacy
     paths without a registered worker heartbeat.

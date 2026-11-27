@@ -12,6 +12,9 @@ from sqlalchemy import select, update
 
 from app.config import settings
 from app.core.time_utils import utc_now
+from app.models.batch_job import BatchJob
+from app.models.environment_revision import EnvironmentRevision
+from app.models.environment_template import EnvironmentTemplate
 from app.models.gpu_allocation import GpuAllocation
 from app.models.resource_quota import ResourceQuota
 from app.models.server import Server
@@ -19,6 +22,7 @@ from app.models.server_plan import ServerPlan
 from app.models.volume import Volume
 from app.services.gpu_allocator import GpuAllocatorService
 from app.services.quota_service import QuotaService
+from app.services.resource_pool_service import ResourcePoolService
 
 
 def forbid_boundary(db):
@@ -237,3 +241,191 @@ async def test_launch_can_defer_physical_gpu_capacity_but_not_owner_quota(
         assert "GPU limit exceeded" in deferred["reason"]
     else:
         assert "No GPUs available" in default["reason"]
+
+
+async def _job_resources(db, user):
+    marker = uuid.uuid4().hex[:12]
+    template = EnvironmentTemplate(
+        name=f"accounting-env-{marker}",
+        slug=f"accounting-env-{marker}",
+        image="approved:latest",
+        is_active=True,
+        is_public=True,
+    )
+    plan = ServerPlan(
+        name=f"accounting-plan-{marker}",
+        slug=f"accounting-plan-{marker}",
+        cpu_limit=1.0,
+        memory_limit="1g",
+        disk_limit="2g",
+        gpu_limit=0,
+        max_servers_per_user=10,
+        is_active=True,
+        is_public=True,
+    )
+    volume = Volume(
+        name=f"accounting-volume-{marker}",
+        display_name="Accounting data",
+        owner_id=user.id,
+        visibility="private",
+        max_size_bytes=1024**3,
+        status="active",
+    )
+    db.add_all([template, plan, volume])
+    await db.flush()
+    revision = EnvironmentRevision(
+        template_id=template.id,
+        fingerprint=uuid.uuid4().hex * 2,
+        template_fingerprint=uuid.uuid4().hex * 2,
+        configuration={},
+        runtime_identity={},
+    )
+    db.add(revision)
+    await db.flush()
+    return plan, revision, volume
+
+
+def _job(
+    user,
+    revision,
+    *,
+    plan_id=None,
+    state="starting",
+    reservation_active=True,
+    cpu=1.0,
+    memory_mib=1024,
+    disk_mib=2048,
+):
+    now = utc_now()
+    return BatchJob(
+        user_id=user.id,
+        name=f"accounting-{uuid.uuid4().hex[:8]}",
+        idempotency_key_hash=uuid.uuid4().hex * 2,
+        request_fingerprint=uuid.uuid4().hex * 2,
+        revision_id=revision.id,
+        plan_id=plan_id,
+        argv=["true"],
+        max_runtime_seconds=60,
+        state=state,
+        state_changed_at=now,
+        revision_snapshot={},
+        plan_snapshot={},
+        volume_snapshot={},
+        reservation_active=reservation_active,
+        reserved_cpu=cpu,
+        reserved_memory_mib=memory_mib,
+        reserved_disk_mib=disk_mib,
+        fencing_token=uuid.uuid4(),
+        created_at=now,
+        updated_at=now,
+    )
+
+
+@pytest.mark.asyncio
+async def test_active_job_reservations_count_once_and_queued_do_not_count(db_session, test_user):
+    plan, revision, volume = await _job_resources(db_session, test_user)
+    quota_row = ResourceQuota(
+        user_id=test_user.id,
+        max_cpu_total=10,
+        max_memory_total="16g",
+        max_disk_total="10g",
+        max_gpu_total=0,
+        max_servers_total=10,
+    )
+    queued = _job(
+        test_user,
+        revision,
+        state="queued",
+        cpu=9.0,
+        memory_mib=9000,
+        disk_mib=9000,
+    )
+    starting = _job(test_user, revision, plan_id=plan.id, cpu=2.0, memory_mib=2048)
+    recovering = _job(
+        test_user,
+        revision,
+        state="recovery_required",
+        cpu=1.0,
+        memory_mib=1024,
+    )
+    terminal = _job(
+        test_user,
+        revision,
+        state="succeeded",
+        reservation_active=False,
+        cpu=8.0,
+        memory_mib=8192,
+        disk_mib=8192,
+    )
+    db_session.add_all([quota_row, queued, starting, recovering, terminal])
+    await db_session.flush()
+
+    commit_patch, rollback_patch = forbid_boundary(db_session)
+    with commit_patch, rollback_patch:
+        allocated = await ResourcePoolService(db_session)._get_allocated_resources()
+        assert allocated == {"cpu": 3.0, "memory_mb": 3072, "disk_mb": 4096}
+        observed = await QuotaService(db_session).recalculate_usage(str(test_user.id), commit=False)
+        assert observed.usage_cpu == 3.0
+        assert observed.usage_memory_mb == 3072
+        assert observed.usage_servers == 2
+        # The private volume is counted once and active job disk is not added.
+        assert observed.usage_disk_mb == 1024
+        assert db_session.in_transaction()
+
+    # A terminal result or an explicit reservation release stops counting.
+    await db_session.execute(
+        update(BatchJob)
+        .where(BatchJob.id.in_([starting.id, recovering.id]))
+        .values(state="succeeded", reservation_active=False)
+    )
+    await db_session.commit()
+    allocated = await ResourcePoolService(db_session)._get_allocated_resources()
+    assert allocated == {"cpu": 0, "memory_mb": 0, "disk_mb": 0}
+    observed = await QuotaService(db_session).recalculate_usage(str(test_user.id), commit=False)
+    assert observed.usage_cpu == 0
+    assert observed.usage_memory_mb == 0
+    assert observed.usage_servers == 0
+    assert observed.usage_disk_mb == 1024
+
+
+@pytest.mark.asyncio
+async def test_spawn_check_counts_active_job_slots_and_compute(db_session, test_user):
+    plan, revision, _volume = await _job_resources(db_session, test_user)
+    quota_row = ResourceQuota(
+        user_id=test_user.id,
+        max_cpu_total=3.5,
+        max_memory_total="16g",
+        max_disk_total="10g",
+        max_gpu_total=0,
+        max_servers_total=10,
+    )
+    db_session.add(quota_row)
+    db_session.add(_job(test_user, revision, plan_id=plan.id, cpu=2.0, memory_mib=2048))
+    db_session.add(_job(test_user, revision, plan_id=plan.id, cpu=1.0, memory_mib=1024))
+    await db_session.flush()
+    service = QuotaService(db_session)
+
+    # Usage already includes both active jobs; the requested plan adds one more CPU.
+    denied_cpu = await service.check_spawn_allowed(
+        str(test_user.id), str(plan.id), commit=False, include_gpu_pool=False
+    )
+    assert denied_cpu["allowed"] is False
+    assert "CPU limit exceeded" in denied_cpu["reason"]
+
+    quota_row.max_cpu_total = 10
+    quota_row.max_servers_total = 2
+    await db_session.flush()
+    denied_slots = await service.check_spawn_allowed(
+        str(test_user.id), str(plan.id), commit=False, include_gpu_pool=False
+    )
+    assert denied_slots["allowed"] is False
+    assert "Maximum server limit reached" in denied_slots["reason"]
+
+    quota_row.max_servers_total = 10
+    plan.max_servers_per_user = 2
+    await db_session.flush()
+    denied_plan = await service.check_spawn_allowed(
+        str(test_user.id), str(plan.id), commit=False, include_gpu_pool=False
+    )
+    assert denied_plan["allowed"] is False
+    assert "Plan limit reached" in denied_plan["reason"]

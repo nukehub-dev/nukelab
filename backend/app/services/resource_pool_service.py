@@ -12,9 +12,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.models.batch_job import ACTIVE_JOB_STATES, BatchJob
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
 from app.models.server_queue import ServerQueue
+
+_RESERVED_JOB_STATES = tuple(state for state in ACTIVE_JOB_STATES if state != "queued")
 
 
 class ResourcePoolService:
@@ -63,6 +66,24 @@ class ResourcePoolService:
         total_cpu = sum(s.allocated_cpu for s in servers)
         total_memory_mb = sum(self._parse_memory(s.allocated_memory) for s in servers)
         total_disk_mb = sum(self._parse_memory(s.allocated_disk) for s in servers)
+
+        # Active job reservations share the same host budget. Queued jobs hold
+        # no capacity, and each reserved row contributes exactly once.
+        jobs = (
+            await self.db.execute(
+                select(
+                    BatchJob.reserved_cpu,
+                    BatchJob.reserved_memory_mib,
+                    BatchJob.reserved_disk_mib,
+                ).where(
+                    BatchJob.reservation_active.is_(True),
+                    BatchJob.state.in_(_RESERVED_JOB_STATES),
+                )
+            )
+        ).all()
+        total_cpu += sum(float(job.reserved_cpu or 0) for job in jobs)
+        total_memory_mb += sum(int(job.reserved_memory_mib or 0) for job in jobs)
+        total_disk_mb += sum(int(job.reserved_disk_mib or 0) for job in jobs)
 
         return {
             "cpu": total_cpu,

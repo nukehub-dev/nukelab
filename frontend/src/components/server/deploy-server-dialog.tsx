@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ApiError } from '../../lib/api'
-import { HardDrive, Plus, X, AlertTriangle, ArrowRight } from 'lucide-react'
+import { HardDrive, Plus, X, AlertTriangle, ArrowRight, Info } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -18,7 +18,13 @@ import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import { Select, SelectItem } from '../ui/select'
 import { Label } from '../ui/label'
-import { formatBytes, formatPlanResource, parseMemoryString } from '../../lib/utils'
+import { cn, formatBytes, formatPlanResource, parseMemoryString } from '../../lib/utils'
+import {
+  describeDeployCost,
+  describeDeployVolume,
+  resolveDeployDefaults,
+  resolveDeployMountPath,
+} from '../../lib/deploy-defaults'
 import { PERMISSIONS, useAuthStore } from '../../stores/auth-store'
 import type { Environment, Plan } from '../../types/api'
 import type { Volume } from '../../hooks/use-volumes'
@@ -79,26 +85,66 @@ export function DeployServerDialog({
   const [volumeMounts, setVolumeMounts] = useState<VolumeMountForm[]>([
     { volume_id: '', mount_path: '', mode: 'read_write', max_size_gb: 10 },
   ])
+  const [selectionTouched, setSelectionTouched] = useState({
+    plan: false,
+    environment: false,
+  })
   const [visibleError, setVisibleError] = useState<string | null>(null)
   const canAccessAdmin = useAuthStore((state) => state.hasPermission(PERMISSIONS.ADMIN_ACCESS))
+
+  // The dialog already receives the actor-scoped catalog it renders, so guide
+  // from those records rather than re-filtering admin choices.
+  const deployDefaults = useMemo(
+    () =>
+      resolveDeployDefaults({
+        plans,
+        environments,
+        savedPlanId: defaultPlanId,
+        savedEnvironmentId: defaultEnvironmentId,
+      }),
+    [plans, environments, defaultPlanId, defaultEnvironmentId]
+  )
 
   const wasOpen = useRef(false)
   useEffect(() => {
     const opening = open && !wasOpen.current
     wasOpen.current = open
     if (opening) {
-      const planId = defaultPlanId && plans.some((p) => p.id === defaultPlanId) ? defaultPlanId : ''
-      const envId =
-        defaultEnvironmentId && environments.some((e) => e.id === defaultEnvironmentId)
-          ? defaultEnvironmentId
-          : ''
+      const planId = deployDefaults.planId
+      const envId = deployDefaults.environmentId
       queueMicrotask(() => {
         setDeployForm({ name: '', plan_id: planId, environment_id: envId })
+        setSelectionTouched({ plan: false, environment: false })
         setVolumeMounts([{ volume_id: '', mount_path: '', mode: 'read_write', max_size_gb: 10 }])
         setVisibleError(null)
       })
     }
-  }, [open, defaultPlanId, defaultEnvironmentId, plans, environments])
+  }, [open, deployDefaults])
+
+  // A deep link can open the dialog before the catalog queries settle. Fill a
+  // safe default once it arrives, but only while the field is untouched and
+  // empty so a user's explicit selection is never overwritten.
+  useEffect(() => {
+    if (!open) return
+    if (!selectionTouched.plan && !deployForm.plan_id && deployDefaults.planId) {
+      const planId = deployDefaults.planId
+      queueMicrotask(() => {
+        setDeployForm((current) => (current.plan_id ? current : { ...current, plan_id: planId }))
+      })
+    }
+    if (
+      !selectionTouched.environment &&
+      !deployForm.environment_id &&
+      deployDefaults.environmentId
+    ) {
+      const environmentId = deployDefaults.environmentId
+      queueMicrotask(() => {
+        setDeployForm((current) =>
+          current.environment_id ? current : { ...current, environment_id: environmentId }
+        )
+      })
+    }
+  }, [open, selectionTouched, deployForm.plan_id, deployForm.environment_id, deployDefaults])
 
   useEffect(() => {
     if (error) {
@@ -107,10 +153,31 @@ export function DeployServerDialog({
   }, [error])
 
   const selectedPlan = plans.find((p) => p.id === deployForm.plan_id)
+  const selectedEnvironment = environments.find((e) => e.id === deployForm.environment_id)
   const planDiskBytes = selectedPlan ? parseMemoryString(selectedPlan.disk_limit) : 0
   const missingPlans = plans.length === 0
   const missingEnvironments = environments.length === 0
   const prerequisitesMissing = missingPlans || missingEnvironments
+  const planSelectionStale = Boolean(deployForm.plan_id) && !selectedPlan
+  const environmentSelectionStale = Boolean(deployForm.environment_id) && !selectedEnvironment
+
+  const staleSavedPlan = deployDefaults.savedPlanStale && !selectionTouched.plan
+  const staleSavedEnvironment =
+    deployDefaults.savedEnvironmentStale && !selectionTouched.environment
+  const staleSavedFields = [
+    staleSavedPlan ? 'plan' : null,
+    staleSavedEnvironment ? 'environment' : null,
+  ].filter((field): field is string => field !== null)
+  const staleSavedMessage =
+    staleSavedFields.length > 0
+      ? `Your saved default ${staleSavedFields.join(' and ')} ${
+          staleSavedFields.length === 1 ? 'is' : 'are'
+        } no longer available. ${
+          deployDefaults.plan || deployDefaults.environment
+            ? 'The current recommended setup is preselected; review it before launching.'
+            : 'Choose a current option before launching.'
+        }`
+      : null
 
   const totalAllocatedBytes = useMemo(() => {
     return volumeMounts.reduce((sum, mount) => {
@@ -127,9 +194,17 @@ export function DeployServerDialog({
   const isOverCapacity = planDiskBytes > 0 && totalAllocatedBytes > planDiskBytes
   const capacityPercent =
     planDiskBytes > 0 ? Math.min(100, (totalAllocatedBytes / planDiskBytes) * 100) : 0
+  const missingVolumeSelection = volumeMounts.some(
+    (mount) => mount.volume_id && !volumes.some((volume) => volume.id === mount.volume_id)
+  )
 
-  const isValid =
-    deployForm.name.trim() && deployForm.plan_id && deployForm.environment_id && !isOverCapacity
+  const isValid = Boolean(
+    deployForm.name.trim() &&
+    selectedPlan &&
+    selectedEnvironment &&
+    !isOverCapacity &&
+    !missingVolumeSelection
+  )
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -140,26 +215,40 @@ export function DeployServerDialog({
       setVisibleError('Server name is required')
       return
     }
-    if (!deployForm.plan_id) {
-      setVisibleError('Please select a plan')
+    if (!selectedPlan) {
+      setVisibleError(
+        planSelectionStale
+          ? 'The selected plan is no longer available. Choose a plan from the current list.'
+          : 'Please select a plan'
+      )
       return
     }
-    if (!deployForm.environment_id) {
-      setVisibleError('Please select an environment')
+    if (!selectedEnvironment) {
+      setVisibleError(
+        environmentSelectionStale
+          ? 'The selected environment is no longer available. Choose an environment from the current list.'
+          : 'Please select an environment'
+      )
+      return
+    }
+    if (missingVolumeSelection) {
+      setVisibleError(
+        'A selected volume is no longer available. Choose a current volume before launching.'
+      )
       return
     }
 
     const mounts = volumeMounts.map((m, idx) => ({
       volume_id: m.volume_id,
-      mount_path: idx === 0 && !m.mount_path ? `/home/${defaultUsername}` : m.mount_path || '/data',
+      mount_path: resolveDeployMountPath(m.mount_path, idx, defaultUsername),
       mode: m.mode,
       max_size_bytes: !m.volume_id ? m.max_size_gb * 1024 * 1024 * 1024 : undefined,
     }))
 
     onDeploy({
       name: deployForm.name.trim(),
-      plan_id: deployForm.plan_id,
-      environment_id: deployForm.environment_id,
+      plan_id: selectedPlan.id,
+      environment_id: selectedEnvironment.id,
       volume_mounts: mounts.length > 0 ? mounts : undefined,
     })
   }
@@ -193,7 +282,9 @@ export function DeployServerDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Deploy New Server</DialogTitle>
-          <DialogDescription>Create and spawn a new simulation server.</DialogDescription>
+          <DialogDescription>
+            Review the starting resources, environment and storage, then launch your workspace.
+          </DialogDescription>
         </DialogHeader>
         <form
           id="deploy-form"
@@ -248,7 +339,10 @@ export function DeployServerDialog({
             </div>
           )}
           {visibleError && (
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+            <div
+              role="alert"
+              className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20"
+            >
               <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
               <div className="space-y-2">
                 <p className="text-sm text-destructive">{visibleError}</p>
@@ -268,6 +362,16 @@ export function DeployServerDialog({
               </div>
             </div>
           )}
+          {staleSavedMessage && (
+            <div
+              role="status"
+              data-testid="deploy-saved-default-unavailable"
+              className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3"
+            >
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" aria-hidden="true" />
+              <p className="text-xs text-muted-foreground">{staleSavedMessage}</p>
+            </div>
+          )}
           <div className="space-y-2">
             <Label>Server Name *</Label>
             <Input
@@ -281,13 +385,14 @@ export function DeployServerDialog({
               placeholder="my-simulation-server"
             />
           </div>
-          <div className="space-y-2">
-            <Label>Plan *</Label>
+          <div className="space-y-2" role="group" aria-labelledby="deploy-server-plan-label">
+            <Label id="deploy-server-plan-label">Plan *</Label>
             <Select
               value={deployForm.plan_id}
               data-testid="deploy-server-plan"
               onChange={(value) => {
                 setDeployForm({ ...deployForm, plan_id: value })
+                setSelectionTouched((current) => ({ ...current, plan: true }))
                 if (visibleError) setVisibleError(null)
               }}
               placeholder="Select a plan..."
@@ -304,14 +409,20 @@ export function DeployServerDialog({
                 </SelectItem>
               ))}
             </Select>
+            {planSelectionStale && !missingPlans && (
+              <p role="status" className="pl-1 text-xs text-destructive">
+                The selected plan is no longer available. Choose a current plan.
+              </p>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label>Environment *</Label>
+          <div className="space-y-2" role="group" aria-labelledby="deploy-server-environment-label">
+            <Label id="deploy-server-environment-label">Environment *</Label>
             <Select
               value={deployForm.environment_id}
               data-testid="deploy-server-environment"
               onChange={(value) => {
                 setDeployForm({ ...deployForm, environment_id: value })
+                setSelectionTouched((current) => ({ ...current, environment: true }))
                 if (visibleError) setVisibleError(null)
               }}
               placeholder="Select an environment..."
@@ -326,6 +437,11 @@ export function DeployServerDialog({
                 </SelectItem>
               ))}
             </Select>
+            {environmentSelectionStale && !missingEnvironments && (
+              <p role="status" className="pl-1 text-xs text-destructive">
+                The selected environment is no longer available. Choose a current environment.
+              </p>
+            )}
           </div>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -396,6 +512,7 @@ export function DeployServerDialog({
                       <button
                         type="button"
                         onClick={() => removeVolumeMount(index)}
+                        aria-label={`Remove volume mount ${index + 1}`}
                         className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                       >
                         <X className="w-3.5 h-3.5" />
@@ -405,12 +522,19 @@ export function DeployServerDialog({
 
                   <Select
                     value={mount.volume_id}
+                    data-testid={`deploy-volume-${index}`}
                     onChange={(value) => updateVolumeMount(index, 'volume_id', value)}
                     placeholder="Create new volume (default)"
                   >
-                    <SelectItem value="">Create new volume</SelectItem>
+                    <SelectItem value="" data-testid={`deploy-volume-${index}-new`}>
+                      Create new volume
+                    </SelectItem>
                     {volumes.map((vol) => (
-                      <SelectItem key={vol.id} value={vol.id}>
+                      <SelectItem
+                        key={vol.id}
+                        value={vol.id}
+                        data-testid={`deploy-volume-${index}-${vol.id}`}
+                      >
                         {vol.display_name}{' '}
                         {vol.max_size_bytes
                           ? `(${formatBytes(vol.max_size_bytes)} limit${vol.size_bytes > 0 ? `, ${formatBytes(vol.size_bytes)} used` : ''})`
@@ -488,6 +612,100 @@ export function DeployServerDialog({
               )
             })}
           </div>
+
+          <section
+            aria-labelledby="deploy-review-heading"
+            data-testid="deploy-review"
+            className="rounded-xl border border-border/60 bg-surface/40 p-4"
+          >
+            <div className="flex items-start gap-2">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+              <div className="min-w-0">
+                <h3 id="deploy-review-heading" className="text-sm font-semibold">
+                  Review before launch
+                </h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Final eligibility and capacity are confirmed when you submit.
+                </p>
+              </div>
+            </div>
+
+            <dl className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-lg border border-border/50 bg-background/40 p-2.5">
+                <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  CPU
+                </dt>
+                <dd className="mt-0.5 break-words text-sm font-medium">
+                  {selectedPlan ? `${selectedPlan.cpu_limit} vCPU` : 'Choose a plan'}
+                </dd>
+              </div>
+              <div className="rounded-lg border border-border/50 bg-background/40 p-2.5">
+                <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Memory
+                </dt>
+                <dd className="mt-0.5 break-words text-sm font-medium">
+                  {selectedPlan ? formatPlanResource(selectedPlan.memory_limit) : 'Choose a plan'}
+                </dd>
+              </div>
+              <div className="rounded-lg border border-border/50 bg-background/40 p-2.5">
+                <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Disk
+                </dt>
+                <dd className="mt-0.5 break-words text-sm font-medium">
+                  {selectedPlan ? formatPlanResource(selectedPlan.disk_limit) : 'Choose a plan'}
+                </dd>
+              </div>
+              <div className="rounded-lg border border-border/50 bg-background/40 p-2.5">
+                <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Cost
+                </dt>
+                <dd className="mt-0.5 break-words text-sm font-medium">
+                  {describeDeployCost(selectedPlan ?? null)}
+                </dd>
+              </div>
+              {selectedPlan && selectedPlan.gpu_limit > 0 && (
+                <div className="rounded-lg border border-border/50 bg-background/40 p-2.5">
+                  <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                    GPU
+                  </dt>
+                  <dd className="mt-0.5 break-words text-sm font-medium">
+                    {selectedPlan.gpu_limit}
+                  </dd>
+                </div>
+              )}
+            </dl>
+
+            <div className="mt-3 rounded-lg border border-border/50 bg-background/40 p-3">
+              <p className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <HardDrive className="h-3.5 w-3.5" aria-hidden="true" />
+                Private storage
+              </p>
+              <ul className="mt-1.5 space-y-1">
+                {volumeMounts.map((mount, index) => {
+                  const review = describeDeployVolume(mount, volumes, defaultUsername, index)
+                  return (
+                    <li key={index} className="flex flex-wrap items-baseline gap-x-1.5 text-xs">
+                      <span
+                        className={cn(
+                          'font-medium',
+                          review.missing ? 'text-destructive' : 'text-foreground'
+                        )}
+                      >
+                        {review.action}
+                      </span>
+                      <span className="text-muted-foreground">{review.detail}</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+
+            <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              If capacity is unavailable, your request waits in the existing queue. You can track it
+              from Waiting requests.
+            </p>
+          </section>
         </form>
         <DialogFooter>
           <Button variant="outline" type="button" onClick={handleCancel}>

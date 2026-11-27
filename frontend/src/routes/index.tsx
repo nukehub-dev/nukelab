@@ -20,6 +20,7 @@ import {
   Rocket,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   ListChecks,
 } from 'lucide-react'
 import { FloatingHeader } from '../components/layout/floating-header'
@@ -33,7 +34,14 @@ import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
 import { SkeletonCard } from '../components/feedback/skeleton'
 import { MetricsDashboard } from '../components/charts/metrics-dashboard'
 import { UserServerMetrics } from '../components/charts/user-server-metrics'
+import { Button } from '../components/ui/button'
 import { buttonVariants } from '../components/ui/button-variants'
+import {
+  describeDeployCost,
+  resolveDeployDefaults,
+  summarizeDeployEnvironment,
+  summarizeDeployPlan,
+} from '../lib/deploy-defaults'
 import { cn, formatDate } from '../lib/utils'
 
 export const Route = createFileRoute('/')({
@@ -43,8 +51,18 @@ export const Route = createFileRoute('/')({
 function DashboardPage() {
   const { data: dashboard, isLoading, isError, error } = useDashboard()
   const { data: servers = [], isLoading: serversLoading, isError: serversError } = useServers()
-  const { data: plansData, isPending: plansLoading } = usePlans({ is_active: true, limit: 100 })
-  const { data: environmentsData, isPending: environmentsLoading } = useEnvironments({
+  const {
+    data: plansData,
+    isPending: plansLoading,
+    isError: plansError,
+    refetch: refetchPlans,
+  } = usePlans({ is_active: true, limit: 100 })
+  const {
+    data: environmentsData,
+    isPending: environmentsLoading,
+    isError: environmentsError,
+    refetch: refetchEnvironments,
+  } = useEnvironments({
     is_active: true,
     limit: 100,
   })
@@ -62,24 +80,32 @@ function DashboardPage() {
 
   const plans = plansData?.data ?? []
   const environments = environmentsData?.data ?? []
-  // Admins see the whole catalog, so check the baseline visibility for users.
-  // Normal users only receive plans/environments the API already filtered for
-  // their access, including direct/workspace grants.
-  const hasAvailablePlan = canAccessAdmin
-    ? plans.some(
-        (plan) =>
-          plan.is_active && (plan.is_public || (plan.visible_to_roles || []).includes('user'))
-      )
-    : plans.some((plan) => plan.is_active)
-  const hasPublicEnvironment = canAccessAdmin
-    ? environments.some((env) => env.is_active && env.is_public)
-    : environments.some((env) => env.is_active)
+  // Admins see the whole catalog, so guidance still resolves the baseline
+  // user-visible entries. Normal users only receive plans/environments the API
+  // already filtered for their access, including direct/workspace grants.
+  const deployDefaults = resolveDeployDefaults({
+    plans,
+    environments,
+    savedPlanId:
+      typeof currentUser?.preferences?.default_plan === 'string'
+        ? currentUser.preferences.default_plan
+        : undefined,
+    savedEnvironmentId:
+      typeof currentUser?.preferences?.default_environment === 'string'
+        ? currentUser.preferences.default_environment
+        : undefined,
+    canAccessAdmin,
+  })
+  const hasAvailablePlan = deployDefaults.plans.length > 0
+  const hasPublicEnvironment = deployDefaults.environments.length > 0
   const catalogLoading = plansLoading || environmentsLoading
-  const catalogReady = !catalogLoading && hasAvailablePlan && hasPublicEnvironment
+  const catalogError = !catalogLoading && (plansError || environmentsError)
+  const catalogReady = !catalogLoading && !catalogError && hasAvailablePlan && hasPublicEnvironment
 
   const hasNoServers = Boolean(userId) && !serversLoading && !serversError && myServers.length === 0
   const showFirstRun = hasNoServers && catalogReady
-  const showSetupIncomplete = hasNoServers && !catalogLoading && !catalogReady
+  const showCatalogError = hasNoServers && catalogError
+  const showSetupIncomplete = hasNoServers && !catalogLoading && !catalogError && !catalogReady
   const missingSetup = [
     !hasPublicEnvironment ? 'publish a public deployment environment' : null,
     !hasAvailablePlan ? 'make an active plan available to users' : null,
@@ -90,6 +116,26 @@ function DashboardPage() {
       : missingSetup.length === 1
         ? `A NukeLab administrator still needs to ${missingSetup[0]} before servers can be deployed.`
         : 'NukeLab is ready to deploy.'
+
+  const savedDefaultNotice =
+    deployDefaults.savedPlanStale || deployDefaults.savedEnvironmentStale
+      ? `Your saved default ${
+          deployDefaults.savedPlanStale ? 'plan' : ''
+        }${deployDefaults.savedPlanStale && deployDefaults.savedEnvironmentStale ? ' and ' : ''}${
+          deployDefaults.savedEnvironmentStale ? 'environment' : ''
+        } is no longer available. ${
+          deployDefaults.plan || deployDefaults.environment
+            ? 'The current recommendation is shown below.'
+            : 'Choose a current option when you launch.'
+        }`
+      : null
+  const starterPlanSummary = summarizeDeployPlan(deployDefaults.plan, deployDefaults.plans.length)
+  const starterEnvironmentSummary = summarizeDeployEnvironment(
+    deployDefaults.environment,
+    deployDefaults.environments.length
+  )
+  const starterCostSummary = describeDeployCost(deployDefaults.plan)
+  const starterStorageSummary = 'Private volume, created or reused when you launch'
 
   const myRunningServers = myServers.filter((s) => s.status === 'running')
 
@@ -209,6 +255,50 @@ function DashboardPage() {
           </motion.section>
         )}
 
+        {/* Catalog query failure must not masquerade as a missing catalog. */}
+        {showCatalogError && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: 'easeOut' }}
+            aria-labelledby="catalog-error-heading"
+            className="bubble relative overflow-hidden p-6 lg:p-8"
+          >
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 bg-gradient-to-br from-destructive/10 via-transparent to-transparent"
+            />
+            <div className="relative max-w-xl space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-destructive/10 text-destructive ring-1 ring-destructive/20">
+                  <AlertTriangle className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <span className="text-xs font-semibold uppercase tracking-widest text-destructive">
+                  Catalog unavailable
+                </span>
+              </div>
+              <div className="space-y-2">
+                <h2 id="catalog-error-heading" className="text-xl font-semibold lg:text-2xl">
+                  Deployment catalog could not be loaded
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Plans or environments are unavailable right now, so setup cannot be confirmed. No
+                  deployment action is available until the catalog is reachable.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  void refetchPlans()
+                  void refetchEnvironments()
+                }}
+              >
+                Retry catalog
+              </Button>
+            </div>
+          </motion.section>
+        )}
+
         {/* First-run onboarding */}
         {showFirstRun && (
           <motion.section
@@ -237,8 +327,8 @@ function DashboardPage() {
                     Create your first simulation server
                   </h2>
                   <p className="text-sm text-muted-foreground">
-                    Choose a plan, runtime environment and storage to launch your workspace. You can
-                    start small and adjust resources later.
+                    Review the starting setup below and change anything you need before launching.
+                    Capacity is confirmed when you submit.
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
@@ -251,7 +341,7 @@ function DashboardPage() {
                     )}
                   >
                     <Rocket className="h-4 w-4" aria-hidden="true" />
-                    Deploy your first server
+                    Review your first server
                     <ArrowRight
                       className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
                       aria-hidden="true"
@@ -265,28 +355,21 @@ function DashboardPage() {
                   </Link>
                 </div>
               </div>
-              <div className="grid w-full gap-2 sm:grid-cols-3 lg:max-w-md">
-                {[
-                  { icon: CreditCard, title: 'Choose a plan', detail: 'CPU, memory and disk' },
-                  { icon: Boxes, title: 'Pick an environment', detail: 'Prebuilt or custom image' },
-                  { icon: HardDrive, title: 'Attach storage', detail: 'Persistent volumes' },
-                ].map((step, index) => (
-                  <div
-                    key={step.title}
-                    className="rounded-xl border border-border/50 bg-background/40 p-3"
-                  >
-                    <div className="mb-2 flex items-center justify-between">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <step.icon className="h-3.5 w-3.5" />
-                      </div>
-                      <span className="text-xs font-semibold text-muted-foreground">
-                        {String(index + 1).padStart(2, '0')}
-                      </span>
-                    </div>
-                    <p className="text-xs font-medium">{step.title}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{step.detail}</p>
-                  </div>
-                ))}
+              <div className="w-full space-y-2 lg:max-w-md">
+                <dl className="grid gap-2 sm:grid-cols-2">
+                  <StarterFact label="Plan">{starterPlanSummary}</StarterFact>
+                  <StarterFact label="Environment">{starterEnvironmentSummary}</StarterFact>
+                  <StarterFact label="Storage">{starterStorageSummary}</StarterFact>
+                  <StarterFact label="Cost">{starterCostSummary}</StarterFact>
+                </dl>
+                {savedDefaultNotice && (
+                  <p role="status" className="text-xs text-amber-400">
+                    {savedDefaultNotice}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  You can change the preselected plan, environment and storage in the deploy dialog.
+                </p>
               </div>
             </div>
           </motion.section>
@@ -535,6 +618,17 @@ function DashboardPage() {
           </div>
         </section>
       </div>
+    </div>
+  )
+}
+
+function StarterFact({ label, children }: { label: string; children: string }) {
+  return (
+    <div className="rounded-xl border border-border/50 bg-background/40 p-3">
+      <dt className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="mt-0.5 text-xs font-medium break-words">{children}</dd>
     </div>
   )
 }

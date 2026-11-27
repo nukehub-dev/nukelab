@@ -26,6 +26,7 @@ import {
   Activity,
   ListChecks,
   ListOrdered,
+  Terminal,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
@@ -115,6 +116,14 @@ const categories: AdminCategory[] = [
     href: '/admin/operations',
     requiredPermissions: [PERMISSIONS.OPERATIONS_READ_ALL, PERMISSIONS.ADMIN_ACCESS],
     color: 'bg-amber-500/10 text-amber-400',
+  },
+  {
+    label: 'Jobs',
+    description: 'Read-only cross-owner batch job state, protection, and cleanup evidence',
+    icon: Terminal,
+    href: '/admin/jobs',
+    requiredPermissions: [PERMISSIONS.OPERATIONS_READ_ALL, PERMISSIONS.ADMIN_ACCESS],
+    color: 'bg-cyan-500/10 text-cyan-400',
   },
   {
     label: 'Analytics',

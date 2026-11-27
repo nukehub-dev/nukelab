@@ -41,6 +41,7 @@ _JOURNAL_RELATIONS: dict[str, frozenset[str]] = {
     "server_launch_operations": frozenset({"executor_id", "heartbeat_at"}),
     "volume_backups": frozenset({"executor_id", "heartbeat_at"}),
     "volume_restores": frozenset({"executor_id", "heartbeat_at"}),
+    "batch_jobs": frozenset({"executor_id", "heartbeat_at", "state", "fencing_token"}),
 }
 
 _journal_schema_state: bool | None = None
@@ -403,6 +404,18 @@ celery_app.conf.update(
         "process-server-queue": {
             "task": "app.tasks.process_server_queue",
             "schedule": float(settings.queue_tick_seconds),
+        },
+        "dispatch-batch-jobs": {
+            "task": "app.tasks.dispatch_batch_jobs",
+            "schedule": float(settings.batch_jobs_dispatch_interval_seconds),
+        },
+        "monitor-batch-jobs": {
+            "task": "app.tasks.monitor_batch_jobs",
+            "schedule": float(settings.batch_jobs_monitor_interval_seconds),
+        },
+        "reconcile-batch-jobs": {
+            "task": "app.tasks.reconcile_batch_jobs",
+            "schedule": float(settings.batch_jobs_recovery_interval_seconds),
         },
         "evaluate-schedules": {
             "task": "app.tasks.evaluate_schedules",

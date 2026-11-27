@@ -16,7 +16,9 @@ from tests.db.test_launch_workflow_migration import migration_database as migrat
 PREVIOUS_REVISION = "f6b29a41d7c8"
 RECOVERY_REVISION = "b1e7c4a9d2f6"
 PORTABLE_REVISION = "c5f8a2d91e47"
-HEAD_REVISION = "a4c9e2f7b1d3"
+SCAN_REVISION = "a4c9e2f7b1d3"
+BATCH_REVISION = "b7d4e1c9a2f5"
+HEAD_REVISION = "e2c7a9f4d6b1"
 OPERATION_TABLES = ("server_launch_operations", "volume_backups", "volume_restores")
 ALL_TABLES = ("worker_heartbeats", *OPERATION_TABLES)
 
@@ -113,7 +115,9 @@ def test_recovery_schema_upgrade_downgrade_reupgrade(migration_database):
     assert script.get_heads() == [HEAD_REVISION]
     assert script.get_revision(RECOVERY_REVISION).down_revision == PREVIOUS_REVISION
     assert script.get_revision(PORTABLE_REVISION).down_revision == RECOVERY_REVISION
-    assert script.get_revision(HEAD_REVISION).down_revision == PORTABLE_REVISION
+    assert script.get_revision(SCAN_REVISION).down_revision == PORTABLE_REVISION
+    assert script.get_revision(BATCH_REVISION).down_revision == SCAN_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == BATCH_REVISION
 
     command.upgrade(config, "head")
     upgraded = asyncio.run(snapshot(database))

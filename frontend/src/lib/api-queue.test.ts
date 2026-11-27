@@ -67,6 +67,45 @@ describe('queued server transport', () => {
     }
   })
 
+  it('passes optional request headers through the shared post transport', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetch)
+
+    await api.post(
+      '/jobs',
+      { name: 'checksum' },
+      {
+        headers: { 'Idempotency-Key': 'job-key-123' },
+      }
+    )
+
+    expect(fetch.mock.calls[0][1].headers).toMatchObject({
+      Authorization: 'Bearer token',
+      'Content-Type': 'application/json',
+      'Idempotency-Key': 'job-key-123',
+    })
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ name: 'checksum' })
+  })
+
+  it('preserves a typed validation field on the shared error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail: { code: 'invalid_request', field: 'argv' } }), {
+          status: 422,
+        })
+      )
+    )
+
+    await expect(api.post('/jobs', {})).rejects.toMatchObject({
+      status: 422,
+      code: 'invalid_request',
+      field: 'argv',
+    })
+  })
+
   it('does not turn an untrusted path into a request navigation reference', async () => {
     vi.stubGlobal(
       'fetch',

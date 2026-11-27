@@ -12,10 +12,13 @@ from typing import Any
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.batch_job import ACTIVE_JOB_STATES, BatchJob
 from app.models.resource_quota import ResourceQuota
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
 from app.models.volume import Volume
+
+_RESERVED_JOB_STATES = tuple(state for state in ACTIVE_JOB_STATES if state != "queued")
 
 
 class QuotaService:
@@ -219,6 +222,26 @@ class QuotaService:
         total_gpu = sum(s.allocated_gpu for s in servers)
         total_servers = len(servers)
 
+        # Active job reservations consume the same owner CPU/memory budget and
+        # one active slot each. Job disk is deliberately excluded: the selected
+        # private volume's max_size_bytes is already counted above, so adding
+        # the plan disk reservation would charge the same storage twice.
+        jobs = (
+            await self.db.execute(
+                select(
+                    BatchJob.reserved_cpu,
+                    BatchJob.reserved_memory_mib,
+                ).where(
+                    BatchJob.user_id == uuid.UUID(user_id),
+                    BatchJob.reservation_active.is_(True),
+                    BatchJob.state.in_(_RESERVED_JOB_STATES),
+                )
+            )
+        ).all()
+        total_cpu += sum(float(job.reserved_cpu or 0) for job in jobs)
+        total_memory_mb += sum(int(job.reserved_memory_mib or 0) for job in jobs)
+        total_servers += len(jobs)
+
         quota.usage_cpu = total_cpu
         quota.usage_memory_mb = total_memory_mb
         quota.usage_disk_mb = total_disk_mb
@@ -311,7 +334,19 @@ class QuotaService:
         )
         plan_server_count = result.scalar()
 
-        if plan_server_count >= plan.max_servers_per_user:
+        # Active jobs using the same plan consume the same per-plan slots.
+        plan_job_count = await self.db.scalar(
+            select(func.count())
+            .select_from(BatchJob)
+            .where(
+                BatchJob.user_id == uuid.UUID(user_id),
+                BatchJob.plan_id == uuid.UUID(plan_id),
+                BatchJob.reservation_active.is_(True),
+                BatchJob.state.in_(_RESERVED_JOB_STATES),
+            )
+        )
+
+        if (plan_server_count or 0) + int(plan_job_count or 0) >= plan.max_servers_per_user:
             return {
                 "allowed": False,
                 "reason": f"Plan limit reached for {plan.name} (max {plan.max_servers_per_user})",

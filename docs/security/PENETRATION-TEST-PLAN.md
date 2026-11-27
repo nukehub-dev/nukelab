@@ -499,3 +499,25 @@ Use CVSS 4.0 with the following mapping:
   reservations require explicit verified recovery, never elapsed-time takeover.
 - Verify active restores pin retention/deletion, broker redelivery is idempotent,
   and no API response exposes host paths, archive bytes or helper diagnostics.
+
+## Batch job controls
+
+Single-run batch jobs add an owner command surface, a headless runtime, and a
+read-only operator view. Test each control without treating a unit test as
+runtime proof.
+
+| Control | Test focus | Regression evidence |
+|---|---|---|
+| JWT owner authorization | API tokens are rejected; guest/foreign IDs return 403/404 without confirming existence; capabilities/history/logs remain readable while submission is disabled | [test_jobs.py](../../backend/tests/api/test_jobs.py), [test_job_ownership.py](../../backend/tests/security/test_job_ownership.py) |
+| Submission policy | Cohort removal, revoked revision/permission, changed plan snapshot, paid/GPU plan, foreign/busy volume, and oversized argv/runtime fail without a reservation | [test_batch_job_admission.py](../../backend/tests/services/test_batch_job_admission.py), [test_batch_job_service.py](../../backend/tests/services/test_batch_job_service.py) |
+| Idempotency and replay | Reuse a key with the same payload returns the original job; a changed payload returns 409; broker redelivery cannot create a second runtime | [test_batch_job_admission.py](../../backend/tests/services/test_batch_job_admission.py), [test_batch_job_dispatch.py](../../backend/tests/services/test_batch_job_dispatch.py) |
+| Admin cross-owner privacy | `operations:read_all` + `ADMIN_ACCESS` + JWT are all required; owner names are bounded; argv, logs, environment values, image references, runtime identity, volume paths and fencing tokens never appear | [test_admin_jobs.py](../../backend/tests/api/test_admin_jobs.py), [test_admin_jobs_privacy.py](../../backend/tests/security/test_admin_jobs_privacy.py) |
+| Exclusive volume writer guard | `job_writer` conflicts with file mutation, sharing/metadata changes, launch mounts, backup/restore, and deletion; an unrelated volume is unaffected; release requires termination proof | [test_batch_job_volume_guard.py](../../backend/tests/services/test_batch_job_volume_guard.py) |
+| Hardened headless runtime | Fixed UID 65532, read-only rootfs, `CapDrop=ALL`, no-new-privileges, no network/ports/restart, bounded pids/memory/tmpfs, literal argv, and `/work` preparation before the job; reject malformed mounts/labels/env | [test_batch_driver.py](../../backend/tests/container/test_batch_driver.py), [test_batch_job_runtime.py](../../backend/tests/services/test_batch_job_runtime.py) |
+| Bounded input, logs and deadlines | Argument/runtime bounds reject before admission; logs keep only the newest byte-bounded tail; the deadline starts at observed start and stop/settle precedence preserves a natural early exit | [test_batch_job_service.py](../../backend/tests/services/test_batch_job_service.py), [test_batch_job_monitor.py](../../backend/tests/services/test_batch_job_monitor.py) |
+| Cleanup and recovery | Lost create/start responses retain the reservation; stale heartbeats only inspect; `recovery_required` keeps the guard; cleanup failure is recorded and retried without reopening the result | [test_batch_job_runtime.py](../../backend/tests/services/test_batch_job_runtime.py), [test_batch_job_recovery.py](../../backend/tests/services/test_batch_job_recovery.py), [test_batch_job_workers.py](../../backend/tests/tasks/test_batch_job_workers.py) |
+
+Run runtime races only on an isolated daemon. The current release has a real
+Docker driver smoke for UID, `/work`, timeout and stop proof, but no full
+API→PostgreSQL/Redis/Celery/Docker job yet; an external assessment must not treat
+the mocked browser or service suites as that end-to-end proof.

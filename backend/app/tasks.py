@@ -616,6 +616,117 @@ def process_server_queue(self):
 
 
 @celery_app.task(bind=True)
+def dispatch_batch_jobs(self):
+    """Claim queued batch jobs and deliver opaque job-id hints."""
+
+    async def dispatch():
+        from app.services.batch_job_dispatch_service import BatchJobDispatchService
+
+        async with operation_resources() as resources:
+            return await BatchJobDispatchService(resources.db, resources.driver).dispatch(
+                limit=settings.batch_jobs_dispatch_batch_size
+            )
+
+    try:
+        report = run_operation(dispatch, timeout_seconds=60.0)
+    except Exception as exc:
+        logger.warning(
+            "Batch job dispatch deferred",
+            extra={"error_class": type(exc).__name__},
+        )
+        return "Batch job dispatch deferred"
+    return (
+        f"Selected {report.selected} batch jobs: {report.admitted} admitted, "
+        f"{report.enqueued} enqueued, {report.waiting} waiting, "
+        f"{report.failed} failed, {report.errors} errors"
+    )
+
+
+@celery_app.task(bind=True)
+def run_batch_job(self, job_id: str):
+    """Create and start one admitted job under its durable checkpoints."""
+    import uuid as _uuid
+
+    try:
+        identifier = _uuid.UUID(job_id)
+    except (TypeError, ValueError):
+        return "Invalid batch job id"
+
+    async def execute():
+        from app.services.batch_job_runtime import BatchJobRuntimeService
+
+        async with operation_resources() as resources:
+            return await BatchJobRuntimeService(resources.db, resources.driver).start(identifier)
+
+    try:
+        result = run_operation(execute, timeout_seconds=settings.server_launch_timeout_seconds)
+    except Exception as exc:
+        # The durable starting row remains inspectable by the monitor. Never
+        # retry a create/start from a broker failure alone.
+        logger.warning(
+            "Batch job start deferred",
+            extra={"job_id": str(identifier), "error_class": type(exc).__name__},
+        )
+        return f"Batch job start deferred: {type(exc).__name__}"
+    return f"Batch job {result.action}"
+
+
+@celery_app.task(bind=True)
+def monitor_batch_jobs(self):
+    """Observe active batch jobs and apply proof-backed terminal outcomes."""
+
+    async def monitor():
+        from app.services.batch_job_monitor import BatchJobMonitorService
+
+        async with operation_resources() as resources:
+            return await BatchJobMonitorService(resources.db, resources.driver).monitor(
+                limit=settings.batch_jobs_monitor_batch_size
+            )
+
+    try:
+        report = run_operation(monitor, timeout_seconds=60.0)
+    except Exception as exc:
+        logger.warning(
+            "Batch job monitoring deferred",
+            extra={"error_class": type(exc).__name__},
+        )
+        return "Batch job monitoring deferred"
+    return (
+        f"Observed {report.scanned} batch jobs: {report.started} running, "
+        f"{report.finalized} finalized, {report.recovery_required} recovery required, "
+        f"{report.errors} errors"
+    )
+
+
+@celery_app.task(bind=True)
+def reconcile_batch_jobs(self):
+    """Inspect stale jobs and retry bounded container cleanup."""
+
+    async def reconcile():
+        from app.services.batch_job_reconciliation import BatchJobReconciliationService
+
+        async with operation_resources() as resources:
+            return await BatchJobReconciliationService(resources.db, resources.driver).scan(
+                limit=settings.batch_jobs_recovery_batch_size
+            )
+
+    try:
+        report = run_operation(reconcile, timeout_seconds=120.0)
+    except Exception as exc:
+        logger.warning(
+            "Batch job recovery scan deferred",
+            extra={"error_class": type(exc).__name__},
+        )
+        return "Batch job recovery scan deferred"
+    return (
+        f"Scanned {report.scanned} batch jobs: {report.finalized} finalized, "
+        f"{report.recovery_required} recovery required, "
+        f"{report.cleanup_completed} cleanups complete, "
+        f"{report.cleanup_pending} cleanups pending, {report.errors} errors"
+    )
+
+
+@celery_app.task(bind=True)
 def evaluate_schedules(self):
     """Evaluate schedules within one joined loop-owned operation."""
 
