@@ -62,7 +62,8 @@ async def test_guest_is_denied_job_permissions(client, db_session):
 
 
 @pytest.mark.asyncio
-async def test_capabilities_contract(client, user_token):
+async def test_capabilities_contract(client, user_token, monkeypatch):
+    monkeypatch.setattr(settings, "xfs_quota_enabled", False)
     response = await client.get("/api/jobs/capabilities", headers=auth_headers(user_token))
     assert response.status_code == 200
     body = response.json()
@@ -71,6 +72,8 @@ async def test_capabilities_contract(client, user_token):
         "can_submit": False,
         "billing_mode": "zero_cost",
         "secrets_enabled": False,
+        "storage_limits_enforced": False,
+        "storage_enforcement_required": False,
         "reason_code": "feature_disabled",
         "limits": {
             "max_active_jobs": 1,

@@ -48,6 +48,7 @@ from app.services.quota_service import QuotaService
 from app.services.registry_artifact_service import RegistryArtifactService
 from app.services.registry_client import RegistryError, VerifiedImage
 from app.services.resource_pool_service import ResourcePoolService
+from app.services.storage_capability_service import StorageCapabilityService
 from app.services.volume_operation_service import (
     ACTIVE_STATES as ACTIVE_VOLUME_STATES,
 )
@@ -376,10 +377,31 @@ class BatchJobAdmissionService:
             self._fail_job(job, reason, proof_class, utc_now())
             return True
 
+    async def _defer_queued(self, job_id: uuid.UUID, reason: str) -> bool:
+        """Leave a queued job waiting without reserving capacity or a guard."""
+        await self._clean_session()
+        async with self.db.begin():
+            await acquire_admission_lock(self.db)
+            job = await self._locked_job(job_id)
+            if job is None or job.state != "queued":
+                return False
+            job.reason_code = reason
+            job.updated_at = utc_now()
+            return True
+
     async def admit(
         self, job_id: uuid.UUID, *, executor_id: uuid.UUID | None
     ) -> JobAdmission | None:
         """Prove artifacts, then reserve capacity, quota and the volume writer."""
+        # Host probing is read-only and deliberately outside every admission
+        # lock. When the operator requires enforcement, a job must never start
+        # against a writable limit the storage layer cannot uphold.
+        if settings.batch_jobs_require_storage_enforcement:
+            storage = StorageCapabilityService.probe()
+            if not storage.enforced:
+                await self._defer_queued(job_id, "storage_limits_unenforced")
+                return None
+
         try:
             proof = await self._load_proof_input(job_id)
         except _ProofFailure as failure:
