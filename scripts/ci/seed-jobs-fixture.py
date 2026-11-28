@@ -8,6 +8,8 @@ Run this only against a disposable stack where the local ``nukelab-e2e-runtime:a
 image already exists. It creates or reuses:
 
 * an active zero-cost CPU plan (``jobs-e2e-cpu``);
+* an active paid CPU plan (``jobs-e2e-paid``) for the paid hold/settlement
+  scenario;
 * a filler plan sized to the configured global resource pool, used by the real
   browser scenario to occupy the last slot (``jobs-e2e-filler``);
 * an active, public environment template backed by the fixture image;
@@ -35,6 +37,7 @@ import os
 import sys
 
 JOBS_PLAN_SLUG = "jobs-e2e-cpu"
+PAID_PLAN_SLUG = "jobs-e2e-paid"
 FILLER_PLAN_SLUG = "jobs-e2e-filler"
 ENVIRONMENT_SLUG = "jobs-e2e-runtime"
 ENVIRONMENT_NAME = "Jobs E2E Approved Runtime"
@@ -42,7 +45,9 @@ DEFAULT_RUNTIME_IMAGE = "nukelab-e2e-runtime:a"
 JOB_PLAN_CPU = 1.0
 JOB_PLAN_MEMORY_MIB = 1024
 JOB_PLAN_DISK_MIB = 1024
+PAID_RATE_PER_HOUR = 60
 FILLER_DISK_MIB = 10 * 1024
+ADMIN_FIXTURE_MIN_BALANCE = 1000
 
 
 class SeedError(RuntimeError):
@@ -130,6 +135,35 @@ async def _seed() -> dict[str, object]:
             plan.is_active = True
             plan.priority = 0
 
+            paid = await db.scalar(
+                select(ServerPlan).where(ServerPlan.slug == PAID_PLAN_SLUG)
+            )
+            if paid is None:
+                paid = ServerPlan(slug=PAID_PLAN_SLUG)
+                db.add(paid)
+            paid.name = "Jobs E2E Paid CPU"
+            paid.description = (
+                "Disposable paid CPU plan for the batch-job hold/settlement scenario."
+            )
+            paid.category = "cpu"
+            paid.cpu_limit = JOB_PLAN_CPU
+            paid.memory_limit = f"{JOB_PLAN_MEMORY_MIB}m"
+            paid.disk_limit = f"{JOB_PLAN_DISK_MIB}m"
+            paid.gpu_limit = 0
+            paid.max_servers_per_user = 5
+            paid.cost_per_hour = PAID_RATE_PER_HOUR
+            paid.cooldown_seconds = 0
+            paid.allow_scheduling = True
+            paid.allow_snapshots = False
+            paid.is_public = True
+            paid.visible_to_roles = []
+            paid.is_active = True
+            paid.priority = 0
+
+            admin.nuke_balance = max(
+                int(admin.nuke_balance or 0), ADMIN_FIXTURE_MIN_BALANCE
+            )
+
             filler = await db.scalar(
                 select(ServerPlan).where(ServerPlan.slug == FILLER_PLAN_SLUG)
             )
@@ -199,6 +233,9 @@ async def _seed() -> dict[str, object]:
                 "ok": True,
                 "plan_slug": JOBS_PLAN_SLUG,
                 "plan_id": str(plan.id),
+                "paid_plan_slug": PAID_PLAN_SLUG,
+                "paid_plan_id": str(paid.id),
+                "paid_rate_per_hour": PAID_RATE_PER_HOUR,
                 "filler_plan_slug": FILLER_PLAN_SLUG,
                 "filler_plan_id": str(filler.id),
                 "environment_slug": ENVIRONMENT_SLUG,

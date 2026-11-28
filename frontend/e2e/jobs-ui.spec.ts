@@ -169,7 +169,14 @@ function detail(
       size_bytes: logState === 'available' || logState === 'truncated' ? 2048 : 0,
       expires_at: logState === 'pending' ? null : '2026-12-04T12:00:00',
     },
-    billing: { mode: 'zero_cost', charged: 0, authorized: 0, rate_per_hour: 0, state: 'none' },
+    billing: {
+      mode: 'zero_cost',
+      charged: 0,
+      authorized: 0,
+      rate_per_hour: 0,
+      state: 'none',
+      unpaid: 0,
+    },
   }
 }
 
@@ -438,6 +445,7 @@ test('paid detail reports the rate, authorized hold, charge and refund', async (
     authorized: 5,
     rate_per_hour: 10,
     state: 'settled',
+    unpaid: 0,
   }
   await mockJobs(page, {
     capability: capabilities({ billing_mode: 'paid' }),
@@ -460,6 +468,7 @@ test('held paid jobs show the authorized hold until settlement', async ({ page }
     authorized: 6,
     rate_per_hour: 10,
     state: 'held',
+    unpaid: 0,
   }
   await mockJobs(page, {
     capability: capabilities({ billing_mode: 'paid' }),

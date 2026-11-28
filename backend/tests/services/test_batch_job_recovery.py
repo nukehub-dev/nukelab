@@ -282,6 +282,7 @@ async def test_inspect_absent_runtime_after_checkpoint_is_reconcilable(committed
     assert decision.runtime_state == "absent"
     assert decision.liveness == "stopped"
     assert decision.exit_code is None
+    assert decision.observed_finished_at is not None
     assert driver.created == []
     assert driver.started == []
 
@@ -360,6 +361,8 @@ async def test_inspect_exited_runtime_is_reconcilable(committed_admitted_job):
     assert decision.proof_source == "runtime_inspection"
     assert decision.runtime_state == "present"
     assert decision.exit_code == 0
+    assert decision.observed_started_at is not None
+    assert decision.observed_finished_at is not None
     assert (await load_job(fixture.job_id)).state == "recovery_required"
     assert (await volume_operation(fixture.job_id)).state == "reserved"
 

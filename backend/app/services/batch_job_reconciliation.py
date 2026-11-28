@@ -96,6 +96,8 @@ class BatchJobReconcileDecision:
     exit_code: int | None
     runtime_state: JobReconcileRuntimeState
     liveness: JobReconcileLiveness
+    observed_started_at: datetime | None = None
+    observed_finished_at: datetime | None = None
 
     def __post_init__(self) -> None:
         for value in (self.state, self.reason_code, self.proof_source):
@@ -144,6 +146,8 @@ def _job_decision(
     exit_code: int | None = None,
     runtime_state: JobReconcileRuntimeState = "ambiguous",
     liveness: JobReconcileLiveness = "ambiguous",
+    observed_started_at: datetime | None = None,
+    observed_finished_at: datetime | None = None,
 ) -> BatchJobReconcileDecision:
     return BatchJobReconcileDecision(
         job_id=job_id,
@@ -154,6 +158,8 @@ def _job_decision(
         exit_code=exit_code,
         runtime_state=runtime_state,
         liveness=liveness,
+        observed_started_at=observed_started_at,
+        observed_finished_at=observed_finished_at,
     )
 
 
@@ -226,6 +232,11 @@ class BatchJobReconciliationService:
                 proof_source="runtime_inspection",
                 runtime_state="absent",
                 liveness=liveness,
+                observed_started_at=snapshot.started_at,
+                # Absence has no exit timestamp. Bound the billable interval to
+                # the last fenced observation instead of charging until the
+                # operator happens to reconcile.
+                observed_finished_at=snapshot.heartbeat_at or snapshot.state_changed_at,
             )
         if lookup.info is None or lookup.container_id is None:
             return _job_decision(
@@ -270,8 +281,8 @@ class BatchJobReconciliationService:
                 if state == "cancelling" or snapshot.stop_requested_at is not None
                 else None
             )
-            terminal, _outcome, reason, observed_exit, _started, _finished = classify_exit(
-                snapshot, lookup.info, forced=forced
+            terminal, _outcome, reason, observed_exit, observed_started, observed_finished = (
+                classify_exit(snapshot, lookup.info, forced=forced)
             )
             if terminal not in ("succeeded", "failed", "cancelled", "timed_out"):
                 return _job_decision(
@@ -290,6 +301,8 @@ class BatchJobReconciliationService:
                 exit_code=observed_exit,
                 runtime_state="present",
                 liveness=liveness,
+                observed_started_at=observed_started,
+                observed_finished_at=observed_finished,
             )
         if status == "created":
             return _job_decision(

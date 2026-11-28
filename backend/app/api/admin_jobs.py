@@ -485,8 +485,8 @@ async def reconcile_job(
             proof_class="runtime",
             exit_code=decision.exit_code,
             executor_terminated=True,
-            started_at=started_at,
-            finished_at=utc_now(),
+            started_at=decision.observed_started_at or started_at,
+            finished_at=decision.observed_finished_at or utc_now(),
         )
     except Exception as exc:
         logger.warning(

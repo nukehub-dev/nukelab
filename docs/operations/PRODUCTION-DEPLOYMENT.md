@@ -268,7 +268,11 @@ BATCH_JOBS_ALLOWED_USER_IDS=<owner-uuid>[,<owner-uuid>]
 
 Keep the `BATCH_JOBS_*` runtime, interval and limit values consistent across the
 backend, worker and Beat; Beat schedules using the interval settings. An empty
-cohort falls back to `jobs:write_own`. For a writable production pilot, enable
+cohort falls back to `jobs:write_own`. Paid plans require
+`BATCH_JOBS_ALLOW_PAID_PLANS=true` and `CREDITS_ENABLED=true`; restrict the paid
+plan through its visibility/role rules. A paid job holds its maximum runtime
+cost, settles actual runtime at terminal proof, and refunds the unused hold.
+For a writable production pilot, enable
 `BATCH_JOBS_REQUIRE_STORAGE_ENFORCEMENT=true` only after the volume storage path
 is XFS with `prjquota`/`pquota` and the backend has effective `CAP_SYS_ADMIN`.
 The capability probe is read-only; with enforcement required and unavailable,

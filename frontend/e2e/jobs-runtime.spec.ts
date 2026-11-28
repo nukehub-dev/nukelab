@@ -31,6 +31,7 @@ import {
 } from './helpers/api'
 import {
   JOBS_FILLER_PLAN_SLUG,
+  JOBS_PAID_PLAN_SLUG,
   JOBS_PLAN_SLUG,
   cancelJob,
   downloadVolumeText,
@@ -62,6 +63,15 @@ const VOLUME_BYTES = 256 * 1024 * 1024
 const INPUT_NAME = 'job-input.txt'
 const OUTPUT_NAME = 'job-output.txt'
 
+interface CreditsResponse {
+  balance: number
+  summary: {
+    current_balance: number
+    held: number
+    spendable: number
+  }
+}
+
 interface JobsRuntimeState {
   adminToken?: string
   adminUserId?: string
@@ -70,6 +80,7 @@ interface JobsRuntimeState {
   imageId?: string
   planId?: string
   fillerPlanId?: string
+  paidPlanId?: string
   fillerCpu?: number
   environmentId?: string
   revisionId?: string
@@ -152,6 +163,12 @@ test.describe('@jobs-runtime batch job', () => {
     const fillerPlan = await getPlanBySlug(request, state.adminToken, JOBS_FILLER_PLAN_SLUG)
     state.fillerPlanId = fillerPlan.id
     state.fillerCpu = fillerPlan.cpu_limit
+    try {
+      const paidPlan = await getPlanBySlug(request, state.adminToken, JOBS_PAID_PLAN_SLUG)
+      state.paidPlanId = paidPlan.id
+    } catch {
+      state.paidPlanId = undefined
+    }
 
     const environment = await findSeededEnvironment(
       request,
@@ -278,7 +295,7 @@ test.describe('@jobs-runtime batch job', () => {
     const capabilities: JobCapabilities = await getJobCapabilities(request, token)
     expect(capabilities.enabled).toBe(true)
     expect(capabilities.can_submit).toBe(true)
-    expect(capabilities.billing_mode).toBe('zero_cost')
+    expect(['zero_cost', 'paid']).toContain(capabilities.billing_mode)
     expect(capabilities.secrets_enabled).toBe(false)
     expect(capabilities.limits.log_tail_bytes).toBeGreaterThan(0)
 
@@ -357,7 +374,14 @@ test.describe('@jobs-runtime batch job', () => {
     expectStatus(primary, 202, 'submit primary job')
     const primaryId = trackJob(primary.body)
     expect(primary.body?.state).toBe('queued')
-    expect(primary.body?.billing).toEqual({ mode: 'zero_cost', charged: 0 })
+    expect(primary.body?.billing).toMatchObject({
+      mode: 'zero_cost',
+      charged: 0,
+      authorized: 0,
+      rate_per_hour: 0,
+      state: 'none',
+      unpaid: 0,
+    })
     expect(primary.body?.argv).toEqual(primaryBody.argv)
     expect(primary.body?.environment.revision_id).toBe(state.revisionId)
     expect(primary.body?.plan.id).toBe(state.planId)
@@ -452,7 +476,14 @@ test.describe('@jobs-runtime batch job', () => {
       outcome_code: 'succeeded',
       proof: 'runtime',
     })
-    expect(finished.billing).toEqual({ mode: 'zero_cost', charged: 0 })
+    expect(finished.billing).toMatchObject({
+      mode: 'zero_cost',
+      charged: 0,
+      authorized: 0,
+      rate_per_hour: 0,
+      state: 'none',
+      unpaid: 0,
+    })
     expect(
       await downloadVolumeText(request, token, state.volumeId, OUTPUT_NAME, state.volumeName)
     ).toBe(expectedOutput)
@@ -470,7 +501,14 @@ test.describe('@jobs-runtime batch job', () => {
     expectStatus(persisted, 200, 'read primary job after cleanup')
     expect(persisted.body?.state).toBe('succeeded')
     expect(persisted.body?.result?.exit_code).toBe(0)
-    expect(persisted.body?.billing).toEqual({ mode: 'zero_cost', charged: 0 })
+    expect(persisted.body?.billing).toMatchObject({
+      mode: 'zero_cost',
+      charged: 0,
+      authorized: 0,
+      rate_per_hour: 0,
+      state: 'none',
+      unpaid: 0,
+    })
     const persistedLogs = await getJobLogs(request, token, primaryId)
     expectStatus(persistedLogs, 200, 'read primary logs after cleanup')
     expect(persistedLogs.body?.state).toBe('available')
@@ -499,7 +537,14 @@ test.describe('@jobs-runtime batch job', () => {
     expect(failed.state, failed.reason_message ?? '').toBe('failed')
     expect(failed.reason_code).toBe('nonzero_exit')
     expect(failed.result).toMatchObject({ exit_code: 7, outcome_code: 'failed' })
-    expect(failed.billing).toEqual({ mode: 'zero_cost', charged: 0 })
+    expect(failed.billing).toMatchObject({
+      mode: 'zero_cost',
+      charged: 0,
+      authorized: 0,
+      rate_per_hour: 0,
+      state: 'none',
+      unpaid: 0,
+    })
     const failedLogs = await getJobLogs(request, token, failingId)
     expectStatus(failedLogs, 200, 'read nonzero logs')
     expect(failedLogs.body?.text).toContain(`nonzero-${state.stamp}`)
@@ -559,7 +604,14 @@ test.describe('@jobs-runtime batch job', () => {
     expect(cancelled.state).toBe('cancelled')
     expect(cancelled.result?.outcome_code).toBe('cancelled')
     expect(cancelled.reason_code).toBe('request_cancelled')
-    expect(cancelled.billing).toEqual({ mode: 'zero_cost', charged: 0 })
+    expect(cancelled.billing).toMatchObject({
+      mode: 'zero_cost',
+      charged: 0,
+      authorized: 0,
+      rate_per_hour: 0,
+      state: 'none',
+      unpaid: 0,
+    })
     await waitForNoJobContainers(cancelId, 120_000)
     const persistedCancel = await getJob(request, token, cancelId)
     expectStatus(persistedCancel, 200, 'read cancelled job after cleanup')
@@ -609,6 +661,101 @@ test.describe('@jobs-runtime batch job', () => {
         volume: state.volumeId,
         capacity_occupied: CAPACITY_ENABLED,
         log_tail_bytes: logLimit,
+      })
+    )
+  })
+
+  test('holds paid credits, settles actual runtime, and writes one ledger entry', async ({
+    request,
+  }) => {
+    test.setTimeout(MAIN_TIMEOUT_MS)
+    test.skip(!state.paidPlanId, 'Paid batch plan was not seeded for this stack.')
+    const paidPlanId = state.paidPlanId
+    const revisionId = state.revisionId
+    const volumeId = state.volumeId
+    if (!state.adminToken || !paidPlanId || !revisionId || !volumeId) {
+      throw new Error('Paid batch job fixtures were not initialized')
+    }
+    const token = state.adminToken
+    const capabilities = await getJobCapabilities(request, token)
+    test.skip(capabilities.billing_mode !== 'paid', 'Paid batch billing is disabled.')
+
+    const creditsBefore = await apiCall<CreditsResponse>(request, 'GET', '/api/credits/', token)
+    expectStatus(creditsBefore, 200, 'read credits before paid job')
+    const heldBefore = creditsBefore.body?.summary.held ?? 0
+    const spendableBefore = creditsBefore.body?.summary.spendable ?? 0
+    const balanceBefore = creditsBefore.body?.balance ?? 0
+
+    const paidBody = {
+      name: uniqueName('jobs-runtime-paid'),
+      revision_id: revisionId,
+      plan_id: paidPlanId,
+      volume_id: volumeId,
+      argv: ['/bin/sh', '-c', `sleep 2; echo 'paid-${state.stamp}'`],
+      max_runtime_seconds: 120,
+    }
+    const submitted = await submit(request, token, paidBody, `jobs-runtime-${state.stamp}-paid`)
+    expectStatus(submitted, 202, 'submit paid job')
+    const paidJobId = trackJob(submitted.body)
+    expect(submitted.body?.billing).toMatchObject({
+      mode: 'paid',
+      charged: 0,
+      authorized: 2,
+      rate_per_hour: 60,
+      state: 'held',
+      unpaid: 0,
+    })
+
+    const creditsDuring = await apiCall<CreditsResponse>(request, 'GET', '/api/credits/', token)
+    expectStatus(creditsDuring, 200, 'read credits while paid job is held')
+    expect(creditsDuring.body?.summary.held ?? 0).toBe(heldBefore + 2)
+    expect(creditsDuring.body?.summary.spendable ?? 0).toBe(spendableBefore - 2)
+    expect(creditsDuring.body?.balance ?? 0).toBe(balanceBefore)
+
+    const finished = await waitForJobTerminal(request, token, paidJobId, 180_000)
+    expect(finished.state, finished.reason_message ?? '').toBe('succeeded')
+    expect(finished.billing.mode).toBe('paid')
+    expect(finished.billing.state).toBe('settled')
+    expect(finished.billing.authorized).toBe(2)
+    expect(finished.billing.rate_per_hour).toBe(60)
+    expect(finished.billing.charged).toBeGreaterThanOrEqual(1)
+    expect(finished.billing.charged).toBeLessThanOrEqual(2)
+    expect(finished.billing.unpaid).toBe(0)
+    expect(finished.billing.authorized - finished.billing.charged).toBeGreaterThanOrEqual(0)
+
+    const creditsAfter = await apiCall<CreditsResponse>(request, 'GET', '/api/credits/', token)
+    expectStatus(creditsAfter, 200, 'read credits after paid settlement')
+    expect(creditsAfter.body?.summary.held ?? 0).toBe(heldBefore)
+    expect(creditsAfter.body?.balance ?? 0).toBe(balanceBefore - finished.billing.charged)
+    expect(creditsAfter.body?.summary.spendable ?? 0).toBe(
+      (creditsAfter.body?.balance ?? 0) - (creditsAfter.body?.summary.held ?? 0)
+    )
+
+    const history = await apiCall<{
+      transactions: Array<{
+        type: string
+        amount: number
+        metadata: Record<string, unknown>
+      }>
+    }>(request, 'GET', '/api/credits/history?transaction_type=batch_job_usage&limit=20', token)
+    expectStatus(history, 200, 'read paid job ledger history')
+    const settlements = (history.body?.transactions ?? []).filter(
+      (transaction) => transaction.metadata?.job_id === paidJobId
+    )
+    expect(settlements).toHaveLength(1)
+    expect(settlements[0].type).toBe('batch_job_usage')
+    expect(settlements[0].amount).toBe(-finished.billing.charged)
+
+    await waitForNoJobContainers(paidJobId, 120_000)
+    console.log(
+      JSON.stringify({
+        scope: 'jobs-runtime-paid-evidence',
+        job: paidJobId,
+        plan: paidPlanId,
+        authorized: finished.billing.authorized,
+        charged: finished.billing.charged,
+        rate_per_hour: finished.billing.rate_per_hour,
+        ledger_transactions: settlements.length,
       })
     )
   })

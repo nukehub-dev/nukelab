@@ -127,6 +127,7 @@ export interface JobBilling {
   authorized: number
   rate_per_hour: number
   state: JobBillingState
+  unpaid: number
 }
 
 export interface JobDetail {

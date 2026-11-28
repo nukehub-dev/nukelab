@@ -191,6 +191,7 @@ describe('paging, polling and cost', () => {
       authorized: 5,
       rate_per_hour: 10,
       state: 'settled' as const,
+      unpaid: 0,
     }
     expect(jobPaidBillingSummary({ ...billing, state: 'held', charged: 0 })).toBe('5 NUKE held')
     expect(jobPaidBillingSummary(billing)).toBe('4 NUKE charged, 1 NUKE refunded')
@@ -201,7 +202,11 @@ describe('paging, polling and cost', () => {
       '0 NUKE charged; hold released'
     )
     expect(jobPaidBillingSummary({ ...billing, charged: 0, state: 'none' })).toBe('0 NUKE charged')
+    expect(jobPaidBillingSummary({ ...billing, charged: 4, unpaid: 1 })).toBe(
+      '4 NUKE charged, 1 NUKE unpaid'
+    )
     expect(jobBillingRefund(billing)).toBe(1)
+    expect(jobBillingRefund({ ...billing, charged: 4, unpaid: 1 })).toBe(0)
     expect(formatJobCredits(1234)).toBe((1234).toLocaleString(undefined))
   })
 

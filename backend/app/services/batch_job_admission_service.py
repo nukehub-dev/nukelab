@@ -535,7 +535,7 @@ class BatchJobAdmissionService:
                 await self._fail_job(job, "plan_changed", _POLICY_PROOF, now)
                 return None
             if snapshot_values["cost_per_hour"] > 0:
-                if not settings.batch_jobs_allow_paid_plans:
+                if not (settings.batch_jobs_allow_paid_plans and settings.credits_enabled):
                     await self._fail_job(job, "paid_plan_unsupported", _POLICY_PROOF, now)
                     return None
                 if job.billing_mode != "paid" or job.billing_state != HELD:

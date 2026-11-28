@@ -560,6 +560,13 @@ after the normal pinned upgrade and schema migration complete:
    `BATCH_JOBS_*` runtime, interval and limit values consistent across
    `backend`, `celery-worker` and `celery-beat`; Beat schedules using the
    interval settings.
+   Paid plans additionally require `BATCH_JOBS_ALLOW_PAID_PLANS=true` and
+   `CREDITS_ENABLED=true`. Access follows the plan’s visibility/role rules;
+   restrict the paid plan to the intended pilot cohort. A paid submission holds
+   `ceil(rate × max_runtime / 3600)` credits (minimum 1), charges actual runtime
+   rounded up to whole NUKE (minimum 1 if started), and refunds the unused
+   authorization. Check `/jobs` billing state and the `batch_job_usage` ledger
+   entry after the first run.
 3. Verify the deployment with the read-only post-upgrade verifier described in
    the [upgrade runbook](PRODUCTION-DEPLOYMENT.md#upgrade-runbook), and confirm
    the worker can reach the configured container engine. On a deployment that

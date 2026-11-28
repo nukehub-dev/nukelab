@@ -45,9 +45,10 @@ remain owned by `.github/workflows/` and their respective domains.
 - `seed-jobs-fixture.py` runs inside the backend container, requires
   `NUKELAB_JOBS_SEED_ALLOW=1`, an enabled submission gate, and the local
   `nukelab-e2e-runtime:a` image. It idempotently creates/reuses the
-  `jobs-e2e-cpu` and `jobs-e2e-filler` plans plus the `jobs-e2e-runtime`
-  template and an approved local-identity revision. It prints one JSON object
-  with fixture ids and never prints secrets or environment values.
+  `jobs-e2e-cpu`, `jobs-e2e-paid`, and `jobs-e2e-filler` plans plus the
+  `jobs-e2e-runtime` template and an approved local-identity revision, and
+  raises the disposable admin’s balance to the fixture minimum. It prints one
+  JSON object with fixture ids and never prints secrets or environment values.
 - `jobs-drill.sh` assumes a dedicated running stack unless `--start` or
   `--build` is passed. It submits one real zero-cost job, interrupts
   `celery-worker` (default) or `redis`, restarts it, and asserts one job row,
@@ -58,7 +59,9 @@ remain owned by `.github/workflows/` and their respective domains.
   and containers.
 - The batch-job browser lane runs with `E2E_JOBS_RUNTIME=1` and, in CI,
   `E2E_JOBS_CAPACITY=1`; capacity occupation requires a dedicated stack whose
-  `RESOURCE_POOL_CPU` matches the seeded filler plan. Keep it separate from the
+  `RESOURCE_POOL_CPU` matches the seeded filler plan. The CI lane also sets
+  `BATCH_JOBS_ALLOW_PAID_PLANS=true` so the seeded paid plan exercises the hold,
+  settlement, refund, and one-ledger-entry scenario. Keep it separate from the
   `@workspace` lane and exclude `@jobs-runtime` from the general browser job.
 
 ## Work Guidance

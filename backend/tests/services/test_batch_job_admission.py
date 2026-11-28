@@ -455,6 +455,8 @@ async def test_material_plan_edit_fails_queued(db_session, test_user, field, val
 @pytest.mark.asyncio
 async def test_nonzero_snapshot_cost_never_reserves(db_session, test_user):
     fixture = await _make_job(db_session, test_user)
+    plan = await db_session.get(ServerPlan, fixture.plan_id, populate_existing=True)
+    plan.cost_per_hour = 1
     job = await db_session.get(BatchJob, fixture.job_id, populate_existing=True)
     job.plan_snapshot = {**job.plan_snapshot, "cost_per_hour": 1}
     await db_session.commit()

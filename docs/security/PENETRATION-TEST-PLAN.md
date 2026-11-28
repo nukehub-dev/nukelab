@@ -524,8 +524,10 @@ treating a unit test as runtime proof.
 Run runtime races only on an isolated daemon. The current release has a real
 API→PostgreSQL/Redis/Celery/Docker `@jobs-runtime` scenario on a disposable
 Docker stack plus worker and broker interruption drills that prove one create,
-one start, one terminal result, one released guard, and zero billing. Paid
-hold/settlement code is implemented but its integration and concurrency suites
-have not yet run on a real stack. The new explicit CI browser job and the XFS
-over-cap write still require execution on their target environments; an external
-assessment must not treat the mocked browser or service suites as those proofs.
+one start, one terminal result, one released guard, and zero billing. The same
+stack also proved a paid job end to end: a 2-NUKE hold, 1 NUKE charged for
+observed runtime, one `batch_job_usage` ledger entry, and a released hold. Paid
+integration, concurrency, and migration suites pass locally. The new explicit CI
+browser job and the XFS over-cap write still require execution on their target
+environments; an external assessment must not treat the mocked browser or
+service suites as those proofs.

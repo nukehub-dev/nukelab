@@ -616,6 +616,7 @@ jobs:
       # Zero-cost batch jobs are enabled only for the disposable job-enabled
       # stack. Production defaults remain disabled.
       BATCH_JOBS_SUBMISSION_ENABLED: "true"
+      BATCH_JOBS_ALLOW_PAID_PLANS: "true"
       BATCH_JOBS_ALLOWED_USER_IDS: ""
       BATCH_JOBS_DISPATCH_INTERVAL_SECONDS: "2"
       BATCH_JOBS_MONITOR_INTERVAL_SECONDS: "2"

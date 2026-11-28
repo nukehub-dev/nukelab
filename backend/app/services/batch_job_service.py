@@ -31,6 +31,7 @@ from app.models.batch_job import (
     BatchJob,
     BatchJobLog,
 )
+from app.models.credit_hold import CreditHold
 from app.models.environment_revision import EnvironmentRevision
 from app.models.environment_template import EnvironmentTemplate
 from app.models.server_plan import ServerPlan
@@ -275,8 +276,13 @@ class BatchJobService:
             reason_code = "storage_limits_unenforced"
         else:
             reason_code = None
-        # Paid plans are advertised only when the operator enables settlement.
-        billing_mode: BillingMode = "paid" if settings.batch_jobs_allow_paid_plans else "zero_cost"
+        # Paid plans are advertised only when the operator enables settlement
+        # and the credit subsystem itself is enabled.
+        billing_mode: BillingMode = (
+            "paid"
+            if settings.batch_jobs_allow_paid_plans and settings.credits_enabled
+            else "zero_cost"
+        )
         return JobCapabilitiesResponse(
             enabled=enabled,
             can_submit=can_submit,
@@ -532,7 +538,9 @@ class BatchJobService:
             raise JobError("plan_unavailable", 422, field="plan_id")
         if (plan.gpu_limit or 0) != 0:
             raise JobError("plan_unavailable", 422, field="plan_id")
-        if (plan.cost_per_hour or 0) > 0 and not settings.batch_jobs_allow_paid_plans:
+        if (plan.cost_per_hour or 0) > 0 and not (
+            settings.batch_jobs_allow_paid_plans and settings.credits_enabled
+        ):
             raise JobError("paid_plan_unsupported", 422, field="plan_id")
         return plan
 
@@ -709,13 +717,21 @@ class BatchJobService:
     async def detail(self, job: BatchJob, *, replayed: bool) -> BatchJobDetail:
         payload = await self.db.get(BatchJobLog, job.id, populate_existing=True)
         volume = await self.db.get(Volume, job.volume_id) if job.volume_id else None
+        hold = await self.db.scalar(select(CreditHold).where(CreditHold.job_id == job.id))
         available = bool(
             volume is not None
             and volume.owner_id == job.user_id
             and volume.status == "active"
             and volume.visibility == "private"
         )
-        return _detail(job, payload, volume=volume, available=available, replayed=replayed)
+        return _detail(
+            job,
+            payload,
+            volume=volume,
+            available=available,
+            replayed=replayed,
+            unpaid=int(hold.unpaid_credits or 0) if hold is not None else 0,
+        )
 
     def _logs_response(self, job: BatchJob, payload: BatchJobLog | None) -> JobLogsResponse:
         state = _effective_log_state(job, payload)
@@ -820,6 +836,7 @@ def _detail(
     volume: Volume | None,
     available: bool,
     replayed: bool,
+    unpaid: int = 0,
 ) -> BatchJobDetail:
     revision_snapshot = job.revision_snapshot if isinstance(job.revision_snapshot, dict) else {}
     plan_snapshot = job.plan_snapshot if isinstance(job.plan_snapshot, dict) else {}
@@ -887,6 +904,7 @@ def _detail(
             authorized=int(job.authorized_credits or 0),
             rate_per_hour=int(job.billing_rate_per_hour or 0),
             state=job.billing_state or "none",
+            unpaid=max(0, int(unpaid)),
         ),
     )
 

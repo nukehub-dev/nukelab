@@ -214,10 +214,10 @@ class Settings(BaseSettings):
     queue_max_pending_total: int = Field(default=500, gt=0)
 
     # Single-run batch jobs. Submission is disabled by default until an operator
-    # enables a pilot cohort; the zero-cost path is the only supported billing mode.
+    # enables a pilot cohort; zero-cost plans always work.
     batch_jobs_submission_enabled: bool = False
-    # Inert compatibility flag: paid settlement is unsupported until the
-    # settlement gate lands, so capabilities always report zero_cost.
+    # Gate for nonzero-cost plans. Paid submissions create one spendable-credit
+    # hold for the maximum runtime and settle actual usage with a refund.
     batch_jobs_allow_paid_plans: bool = False
     # Optional operator-approved pilot cohort. Empty means the permission grant
     # (jobs:write_own) defines eligibility. Invalid entries are ignored.

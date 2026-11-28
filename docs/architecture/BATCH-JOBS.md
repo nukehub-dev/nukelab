@@ -174,8 +174,9 @@ bounded observed interval:
   charge writes none.
 
 `recovery_required` retains the hold until the proof-only finalizer settles or
-releases it. Owner and admin job responses expose only mode, charged,
-authorized, rate, and state; hold ids and transaction internals stay private.
+releases it. Owner job responses expose only mode, charged, authorized, rate,
+state, and unpaid; admin job rows stay sanitized and expose no hold ids or
+transaction internals.
 
 ## Runtime profile
 
@@ -323,9 +324,9 @@ is no admin cancel, retry, force, or manual reservation-release endpoint.
 
 Implemented and executed for the 2.4.0 batch-job change set (2026-11-28):
 
-- Backend full suite: 5,088 passed, 6 skipped, 0 failed.
-- Frontend: 246 unit tests passed; lint/format/type-check/build passed.
-- Targeted mocked browser suites passed: `jobs-ui` (11),
+- Backend full suite: 5,122 passed, 6 skipped, 0 failed.
+- Frontend: 247 unit tests passed; lint/format/type-check/build passed.
+- Targeted mocked browser suites passed: `jobs-ui` (14),
   `guided-first-launch` (9), `admin-jobs-ui` (13), and the existing
   queue/admin-setup regressions (10).
 - Real API→PostgreSQL/Redis/Celery/Docker `@jobs-runtime` scenario passed on a
@@ -336,6 +337,13 @@ Implemented and executed for the 2.4.0 batch-job change set (2026-11-28):
 - Worker-death and Redis-broker-loss interruption drills passed: one job row,
   one create/start event, one terminal result, one released guard, zero negative
   credit transactions, and cleanup complete.
+- A real paid job passed on the same stack: a 2-NUKE authorization hold was
+  visible during execution, actual runtime settled at 1 NUKE, the unused 1 NUKE
+  was refunded, and exactly one `batch_job_usage` ledger entry was written.
+- Paid integration/concurrency/migration suites passed, including foreign-owner
+  isolation, insufficient spendable balance, queued cancel/expiry, pre-start
+  failure, terminal success/failure/timeout, `recovery_required` hold retention,
+  and partial-balance unpaid settlement.
 - Last-slot CPU/memory/disk and volume writer/mount/backup/restore/share/delete
   races passed, including retained `recovery_required` protection.
 - Storage capability and fail-closed submission/admission coverage passed. The
@@ -356,10 +364,9 @@ Carried gaps:
 - No staging pinned upgrade/rollback/off-host restore rehearsal, and no registry
   `preload_only` staging proof.
 - Podman batch enablement is not verified.
-- Paid hold/settlement code and its migration are implemented but the paid
-  billing integration, concurrency, and migration suites have not been executed
-  yet; paid plans remain disabled by default. Scoped workload secrets are not
-  implemented; the pilot stays secrets-disabled.
+- Paid plans remain disabled by default and the new paid path has not yet run on
+  a GitHub runner. Scoped workload secrets are not implemented; the pilot stays
+  secrets-disabled.
 
 ## Related documents
 

@@ -344,8 +344,10 @@ export function formatJobCredits(value: number): string {
 }
 
 /** Refund returned after settlement: the authorized hold minus the captured charge. */
-export function jobBillingRefund(billing: Pick<JobBilling, 'authorized' | 'charged'>): number {
-  return Math.max(0, billing.authorized - billing.charged)
+export function jobBillingRefund(
+  billing: Pick<JobBilling, 'authorized' | 'charged' | 'unpaid'>
+): number {
+  return Math.max(0, billing.authorized - billing.charged - billing.unpaid)
 }
 
 /** Owner-facing paid billing summary derived only from the server's billing snapshot. */
@@ -353,10 +355,18 @@ export function jobPaidBillingSummary(billing: JobBilling): string {
   switch (billing.state) {
     case 'held':
       return `${formatJobCredits(billing.authorized)} NUKE held`
-    case 'settled':
+    case 'settled': {
+      const refunded = jobBillingRefund(billing)
+      const unpaid = Math.max(0, billing.unpaid)
+      if (unpaid > 0) {
+        return `${formatJobCredits(billing.charged)} NUKE charged, ${formatJobCredits(
+          unpaid
+        )} NUKE unpaid`
+      }
       return `${formatJobCredits(billing.charged)} NUKE charged, ${formatJobCredits(
-        jobBillingRefund(billing)
+        refunded
       )} NUKE refunded`
+    }
     case 'released':
       return '0 NUKE charged; hold released'
     case 'none':

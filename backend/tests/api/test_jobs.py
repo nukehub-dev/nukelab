@@ -172,6 +172,7 @@ async def test_submit_replay_detail_list_cancel_and_logs(
         "authorized": 0,
         "rate_per_hour": 0,
         "state": "none",
+        "unpaid": 0,
     }
     job_id = detail["id"]
 

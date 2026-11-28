@@ -128,6 +128,7 @@ class JobBilling(BaseModel):
     authorized: int = 0
     rate_per_hour: int = 0
     state: str = "none"
+    unpaid: int = 0
 
 
 class BatchJobSummary(BaseModel):

@@ -219,6 +219,7 @@ async def test_paid_submit_creates_one_hold_and_reports_authorization(db_session
 async def test_paid_submit_with_insufficient_credits_returns_402_without_rows(
     db_session, test_user
 ):
+    user_id = test_user.id
     test_user.nuke_balance = 50
     await db_session.commit()
     resources = await make_resources(
@@ -232,17 +233,17 @@ async def test_paid_submit_with_insufficient_credits_returns_402_without_rows(
 
     assert (
         await db_session.scalar(
-            select(func.count()).select_from(BatchJob).where(BatchJob.user_id == test_user.id)
+            select(func.count()).select_from(BatchJob).where(BatchJob.user_id == user_id)
         )
         == 0
     )
     assert (
         await db_session.scalar(
-            select(func.count()).select_from(CreditHold).where(CreditHold.user_id == test_user.id)
+            select(func.count()).select_from(CreditHold).where(CreditHold.user_id == user_id)
         )
         == 0
     )
-    assert await CreditHoldService.spendable_balance(db_session, test_user.id) == 50
+    assert await CreditHoldService.spendable_balance(db_session, user_id) == 50
 
 
 @pytest.mark.asyncio
@@ -268,6 +269,7 @@ async def test_queue_cancel_releases_the_hold(db_session, test_user):
 
 @pytest.mark.asyncio
 async def test_queue_expiry_releases_the_hold(db_session, test_user):
+    user_id = test_user.id
     resources = await make_resources(db_session, test_user, cost_per_hour=10)
     detail = await submit_job(db_session, test_user, resources)
     job = await db_session.get(BatchJob, detail.id, populate_existing=True)
@@ -283,7 +285,7 @@ async def test_queue_expiry_releases_the_hold(db_session, test_user):
     assert job.charged_credits == 0
     hold = await hold_for(db_session, detail.id)
     assert hold.state == RELEASED
-    assert await CreditHoldService.spendable_balance(db_session, test_user.id) == 100
+    assert await CreditHoldService.spendable_balance(db_session, user_id) == 100
     assert (
         await db_session.scalar(
             select(func.count())
@@ -372,6 +374,7 @@ async def test_admission_releases_when_paid_flag_turns_off(db_session, test_user
 
 @pytest.mark.asyncio
 async def test_terminal_success_charges_observed_runtime_and_refunds(db_session, test_user):
+    user_id = test_user.id
     resources = await make_resources(
         db_session, test_user, cost_per_hour=36, max_runtime_seconds=1800
     )
@@ -406,8 +409,9 @@ async def test_terminal_success_charges_observed_runtime_and_refunds(db_session,
     assert hold.charged_credits == 6
     assert hold.transaction_id == job.billing_transaction_id
 
+    transaction_id = job.billing_transaction_id
     transaction = await db_session.scalar(
-        select(CreditTransaction).where(CreditTransaction.id == job.billing_transaction_id)
+        select(CreditTransaction).where(CreditTransaction.id == transaction_id)
     )
     assert transaction.type == "batch_job_usage"
     assert transaction.amount == -6
@@ -430,9 +434,9 @@ async def test_terminal_success_charges_observed_runtime_and_refunds(db_session,
     job = await db_session.get(BatchJob, detail.id, populate_existing=True)
     assert job.charged_credits == 6
     assert job.billing_state == SETTLED
-    assert job.billing_transaction_id == transaction.id
-    assert await transaction_count(db_session, test_user.id) == 1
-    assert await CreditHoldService.spendable_balance(db_session, test_user.id) == 94
+    assert job.billing_transaction_id == transaction_id
+    assert await transaction_count(db_session, user_id) == 1
+    assert await CreditHoldService.spendable_balance(db_session, user_id) == 94
 
 
 @pytest.mark.asyncio
@@ -474,7 +478,43 @@ async def test_terminal_failure_and_timeout_charge_actual_runtime(
 
 
 @pytest.mark.asyncio
+async def test_partial_balance_settlement_reports_unpaid_on_job_detail(db_session, test_user):
+    user_id = test_user.id
+    resources = await make_resources(
+        db_session, test_user, cost_per_hour=36, max_runtime_seconds=1800
+    )
+    detail = await submit_job(db_session, test_user, resources)
+    admission = await admit(db_session, detail.id)
+    assert isinstance(admission, JobAdmission)
+
+    owner = await db_session.get(User, user_id, populate_existing=True)
+    owner.nuke_balance = 6
+    await db_session.commit()
+    finished = utc_now()
+    released = await BatchJobAdmissionService(db_session, admission_driver()).release_terminal(
+        detail.id,
+        fencing_token=admission.fencing_token,
+        state="succeeded",
+        outcome_code="succeeded",
+        exit_code=0,
+        started_at=finished - timedelta(seconds=3600),
+        finished_at=finished,
+        executor_terminated=True,
+    )
+    assert released is not None
+    assert released.charged_credits == 6
+    assert released.billing_state == SETTLED
+
+    owner = await db_session.get(User, user_id, populate_existing=True)
+    serialized = await BatchJobService(db_session).get(owner, detail.id)
+    assert serialized.billing.authorized == 18
+    assert serialized.billing.charged == 6
+    assert serialized.billing.unpaid == 12
+
+
+@pytest.mark.asyncio
 async def test_prestart_failure_releases_the_full_hold(db_session, test_user):
+    user_id = test_user.id
     resources = await make_resources(db_session, test_user, cost_per_hour=10)
     detail = await submit_job(db_session, test_user, resources)
 
@@ -488,12 +528,13 @@ async def test_prestart_failure_releases_the_full_hold(db_session, test_user):
     hold = await hold_for(db_session, detail.id)
     assert hold.state == RELEASED
     assert hold.charged_credits == 0
-    assert await transaction_count(db_session, test_user.id) == 0
-    assert await CreditHoldService.spendable_balance(db_session, test_user.id) == 100
+    assert await transaction_count(db_session, user_id) == 0
+    assert await CreditHoldService.spendable_balance(db_session, user_id) == 100
 
 
 @pytest.mark.asyncio
 async def test_recovery_required_retains_the_hold(db_session, test_user):
+    user_id = test_user.id
     resources = await make_resources(db_session, test_user, cost_per_hour=10)
     detail = await submit_job(db_session, test_user, resources)
     admission = await admit(db_session, detail.id)
@@ -516,7 +557,7 @@ async def test_recovery_required_retains_the_hold(db_session, test_user):
     assert job.reservation_active is True
     hold = await hold_for(db_session, detail.id)
     assert hold.state == HELD
-    assert await CreditHoldService.spendable_balance(db_session, test_user.id) == 95
+    assert await CreditHoldService.spendable_balance(db_session, user_id) == 95
     driver.delete_container.assert_not_awaited()
 
 

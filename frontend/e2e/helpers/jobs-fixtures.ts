@@ -14,6 +14,7 @@ import { apiCall, poll, runDocker, sleep, type ApiResult } from './combined-fixt
 
 export const JOBS_PLAN_SLUG = 'jobs-e2e-cpu'
 export const JOBS_FILLER_PLAN_SLUG = 'jobs-e2e-filler'
+export const JOBS_PAID_PLAN_SLUG = 'jobs-e2e-paid'
 export const JOBS_ENVIRONMENT_SLUG = 'jobs-e2e-runtime'
 export const JOBS_ENVIRONMENT_NAME = 'Jobs E2E Approved Runtime'
 
@@ -81,7 +82,14 @@ export interface JobDetail {
     size_bytes: number
     expires_at: string | null
   }
-  billing: { mode: string; charged: number }
+  billing: {
+    mode: string
+    charged: number
+    authorized: number
+    rate_per_hour: number
+    state: string
+    unpaid: number
+  }
 }
 
 export interface JobListResponse {

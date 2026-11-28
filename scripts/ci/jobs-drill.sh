@@ -255,7 +255,10 @@ _preflight() {
     _assert_eq "job capabilities status" "$HTTP_STATUS" "200"
     _assert_eq "job submission enabled" "$(_json_path "$HTTP_BODY" enabled)" "true"
     _assert_eq "job submission allowed" "$(_json_path "$HTTP_BODY" can_submit)" "true"
-    _assert_eq "job billing mode" "$(_json_path "$HTTP_BODY" billing_mode)" "zero_cost"
+    case "$(_json_path "$HTTP_BODY" billing_mode)" in
+        zero_cost | paid) ;;
+        *) die "job billing mode: expected zero_cost or paid" ;;
+    esac
 
     PG_USER="$("$ENGINE" exec nukelab-postgres printenv POSTGRES_USER)"
     PG_DB="$("$ENGINE" exec nukelab-postgres printenv POSTGRES_DB)"
