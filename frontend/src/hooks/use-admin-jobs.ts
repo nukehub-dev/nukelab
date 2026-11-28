@@ -1,11 +1,17 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { QueryClient } from '@tanstack/react-query'
+import {
+  adminJobAccess,
+  buildAdminJobsQuery,
+  fetchAdminJobs,
+  reconcileAdminJob,
+} from '../lib/admin-jobs'
 import { queryClient } from '../lib/api'
-import { adminJobAccess, buildAdminJobsQuery, fetchAdminJobs } from '../lib/admin-jobs'
 import { useAuthStore } from '../stores/auth-store'
-import type { AdminJobFilters, AdminJobPage } from '../types/admin-jobs'
+import type { AdminJobFilters, AdminJobPage, AdminJobReconcileResult } from '../types/admin-jobs'
 
 export const adminJobKeys = {
   all: ['admin-jobs'] as const,
@@ -24,10 +30,15 @@ useAuthStore.subscribe((state, previous) => {
   }
 })
 
+/** List rows refresh from the server after a proof-backed reconcile. */
+export function invalidateAdminJobData(client: QueryClient): Promise<void> {
+  return client.invalidateQueries({ queryKey: adminJobKeys.all })
+}
+
 /**
- * Read-only admin job query. There is deliberately no cancel, retry, or
- * reconcile mutation here: job recovery has no operator release path in this
- * release, and owner mutation stays in the owner Jobs surface.
+ * Read-only admin job list. Reconcile is a separate, proof-only mutation; the
+ * list never applies an optimistic row update because only the server knows
+ * whether runtime evidence supports a terminal transition.
  */
 export function useAdminJobs(filters: AdminJobFilters = {}) {
   const ownerId = useAuthStore((state) => state.user?.id)
@@ -40,5 +51,19 @@ export function useAdminJobs(filters: AdminJobFilters = {}) {
     queryFn: () => fetchAdminJobs(filters),
     enabled: !!ownerId && canRead,
     retry: false,
+  })
+}
+
+interface ReconcileJobVariables {
+  id: string
+  reason: string
+}
+
+export function useReconcileAdminJob() {
+  const client = useQueryClient()
+
+  return useMutation<AdminJobReconcileResult, Error, ReconcileJobVariables>({
+    mutationFn: ({ id, reason }) => reconcileAdminJob(id, reason),
+    onSuccess: () => invalidateAdminJobData(client),
   })
 }

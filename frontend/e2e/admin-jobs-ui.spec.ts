@@ -21,7 +21,7 @@ const admin = {
   display_name: 'Ada Admin',
   avatar_url: '',
   role: 'admin',
-  permissions: ['admin:access', 'operations:read_all'],
+  permissions: ['admin:access', 'operations:read_all', 'operations:manage_all'],
   nuke_balance: 0,
   daily_allowance: 0,
   login_count: 0,
@@ -81,6 +81,12 @@ const defaultJobs: AdminJobEntry[] = [
   }),
 ]
 
+function reconcileableJobs(): AdminJobEntry[] {
+  return defaultJobs.map((entry) =>
+    entry.id === ids.recovery ? { ...entry, can_reconcile: true } : entry
+  )
+}
+
 function summaryOf(jobs: AdminJobEntry[]): AdminJobSummary {
   const summary: AdminJobSummary = {
     total: jobs.length,
@@ -112,6 +118,11 @@ async function mockAdminJobs(
     extraFields?: boolean
     totalOverride?: number
     gateFirst?: boolean
+    reconcile?: (job: AdminJobEntry) => {
+      status?: number
+      body: unknown
+      jobs?: AdminJobEntry[]
+    }
   } = {}
 ) {
   const currentAdmin = options.user ?? admin
@@ -120,6 +131,7 @@ async function mockAdminJobs(
     jobs,
     calls: [] as URL[],
     reads: 0,
+    reconcileRequests: [] as Array<{ id: string; body: Record<string, unknown> }>,
     failuresLeft: options.failFirst ? 1 : 0,
     entered: Promise.resolve() as Promise<void>,
     release: () => {},
@@ -197,6 +209,44 @@ async function mockAdminJobs(
       })
     }
 
+    const reconcileMatch = path.match(/^\/admin\/jobs\/([^/]+)\/reconcile$/)
+    if (reconcileMatch && request.method() === 'POST') {
+      const id = reconcileMatch[1]
+      const body = (request.postDataJSON() ?? {}) as Record<string, unknown>
+      state.reconcileRequests.push({ id, body })
+      const target = state.jobs.find((entry) => entry.id === id)
+      if (!target) return fulfill({ detail: { code: 'job_not_found' } }, 404)
+
+      if (options.reconcile) {
+        const response = options.reconcile(target)
+        if (response.jobs) state.jobs = response.jobs
+        return fulfill(response.body, response.status ?? 200)
+      }
+
+      const updated: AdminJobEntry = {
+        ...target,
+        state: 'succeeded',
+        reason_code: null,
+        finished_at: '2026-11-27T12:10:00',
+        reservation_active: false,
+        guard_active: false,
+        log_state: 'available',
+        cleanup_state: 'succeeded',
+        cleanup_attempts: target.cleanup_attempts + 1,
+        can_reconcile: false,
+      }
+      state.jobs = state.jobs.map((entry) => (entry.id === id ? updated : entry))
+      return fulfill({
+        job: updated,
+        applied: true,
+        already_terminal: false,
+        outcome: 'applied',
+        terminal_state: 'succeeded',
+        proof_source: 'executor_absent',
+        reason_code: null,
+      })
+    }
+
     return fulfill({})
   })
 
@@ -231,8 +281,8 @@ test('empty state explains that no batch jobs are recorded', async ({ page }) =>
     timeout: 15_000,
   })
   await expect(page.getByText('No batch jobs recorded')).toBeVisible()
-  await expect(page.getByText('Read-only operator visibility')).toBeVisible()
-  await expect(page.getByText(/no manual release or reconcile action/)).toBeVisible()
+  await expect(page.getByText('Proof-backed recovery only')).toBeVisible()
+  await expect(page.getByText(/no manual release or cancel control/)).toBeVisible()
 })
 
 test('load error offers a retry and then renders confirmed rows', async ({ page }) => {
@@ -292,6 +342,125 @@ test('operator rows omit command, log, and environment content', async ({ page }
     expect(text).not.toContain(forbidden)
   }
   await expect(page.getByRole('button', { name: /cancel|reconcile|view logs/i })).toHaveCount(0)
+})
+
+test('read-only operator sees no reconcile action on reconcilable rows', async ({ page }) => {
+  await mockAdminJobs(page, {
+    user: { ...admin, permissions: ['admin:access', 'operations:read_all'] },
+    jobs: reconcileableJobs(),
+  })
+
+  await page.goto('/admin/jobs')
+  await expect(page.getByTestId(`table-row-${ids.recovery}`)).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId(`admin-job-reconcile-${ids.recovery}`)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /reconcile/i })).toHaveCount(0)
+})
+
+test('manage operator sees reconcile only on rows the server marks reconcilable', async ({
+  page,
+}) => {
+  await mockAdminJobs(page, { jobs: reconcileableJobs() })
+
+  await page.goto('/admin/jobs')
+  await expect(page.getByTestId(`table-row-${ids.recovery}`)).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId(`admin-job-reconcile-${ids.recovery}`)).toBeVisible()
+  await expect(page.getByTestId(`admin-job-reconcile-${ids.running}`)).toHaveCount(0)
+  await expect(page.getByTestId(`admin-job-reconcile-${ids.succeeded}`)).toHaveCount(0)
+})
+
+test('successful reconcile posts the reason, refreshes the row, and reports the proof result', async ({
+  page,
+}) => {
+  const state = await mockAdminJobs(page, { jobs: reconcileableJobs() })
+  await page.goto('/admin/jobs')
+  const row = page.getByTestId(`table-row-${ids.recovery}`)
+  await expect(row).toBeVisible({ timeout: 15_000 })
+  const readsBefore = state.reads
+
+  await page.getByTestId(`admin-job-reconcile-${ids.recovery}`).click()
+  const dialog = page.getByTestId('admin-job-reconcile-dialog')
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByText('f4e3f70f')).toBeVisible()
+  await expect(dialog.getByText('Recovery required').first()).toBeVisible()
+
+  const reason = 'Operator verified the executor exited.'
+  await dialog.getByTestId('admin-job-reconcile-reason').fill(reason)
+  await expect(dialog.getByTestId('admin-job-reconcile-submit')).toBeEnabled()
+  await dialog.getByTestId('admin-job-reconcile-submit').click()
+
+  await expect.poll(() => state.reconcileRequests.length).toBe(1)
+  expect(state.reconcileRequests[0]).toEqual({
+    id: ids.recovery,
+    body: { reason },
+  })
+
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByTestId('admin-job-reconcile-outcome')).toContainText(
+    'Reconciliation applied'
+  )
+  await expect(page.getByTestId('admin-job-reconcile-outcome')).toContainText('Executor absent')
+  await expect.poll(() => state.reads).toBeGreaterThan(readsBefore)
+  await expect(row.getByTestId('admin-job-status-pills')).toContainText('Succeeded')
+  await expect(page.getByTestId(`admin-job-reconcile-${ids.recovery}`)).toHaveCount(0)
+})
+
+test('proof-insufficient reconcile keeps the row unchanged and shows the safe message', async ({
+  page,
+}) => {
+  const state = await mockAdminJobs(page, {
+    jobs: reconcileableJobs(),
+    reconcile: () => ({
+      status: 409,
+      body: { detail: { code: 'proof_insufficient' } },
+    }),
+  })
+  await page.goto('/admin/jobs')
+  const row = page.getByTestId(`table-row-${ids.recovery}`)
+  await expect(row).toBeVisible({ timeout: 15_000 })
+  const readsBefore = state.reads
+
+  await page.getByTestId(`admin-job-reconcile-${ids.recovery}`).click()
+  const dialog = page.getByTestId('admin-job-reconcile-dialog')
+  await expect(dialog).toBeVisible()
+  await dialog.getByTestId('admin-job-reconcile-reason').fill('Operator checked the runtime again.')
+  await dialog.getByTestId('admin-job-reconcile-submit').click()
+
+  await expect(dialog.getByTestId('admin-job-reconcile-error')).toContainText(
+    'Proof still insufficient'
+  )
+  await expect(dialog.getByTestId('admin-job-reconcile-error')).toContainText(
+    'No job state, reservation, or volume guard was changed'
+  )
+  await expect(row.getByTestId('admin-job-status-pills')).toContainText('Recovery required')
+  await expect(row.getByText('Reservation held')).toBeVisible()
+  await expect(row.getByText('Volume guard active')).toBeVisible()
+  await expect(page.getByTestId('admin-job-reconcile-outcome')).toHaveCount(0)
+  expect(state.reads).toBe(readsBefore)
+})
+
+test('reconcile reason validation blocks empty and short reasons', async ({ page }) => {
+  const state = await mockAdminJobs(page, { jobs: reconcileableJobs() })
+  await page.goto('/admin/jobs')
+  await expect(page.getByTestId(`table-row-${ids.recovery}`)).toBeVisible({ timeout: 15_000 })
+
+  await page.getByTestId(`admin-job-reconcile-${ids.recovery}`).click()
+  const dialog = page.getByTestId('admin-job-reconcile-dialog')
+  const reason = dialog.getByTestId('admin-job-reconcile-reason')
+  const submit = dialog.getByTestId('admin-job-reconcile-submit')
+
+  await expect(dialog.getByText(/Required, 8-500 characters/)).toBeVisible()
+  await expect(submit).toBeDisabled()
+
+  await reason.fill('1234567')
+  await expect(dialog.getByText('7/500')).toBeVisible()
+  await expect(submit).toBeDisabled()
+
+  await reason.fill('12345678')
+  await expect(submit).toBeEnabled()
+
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(dialog).toHaveCount(0)
+  expect(state.reconcileRequests).toHaveLength(0)
 })
 
 test('long owner/target labels wrap inside their column instead of overlapping protection', async ({
