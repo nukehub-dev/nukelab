@@ -3,6 +3,7 @@
 
 import type {
   CreateJobRequest,
+  JobBilling,
   JobBillingMode,
   JobCapabilities,
   JobFormField,
@@ -104,6 +105,8 @@ const JOB_ERROR_COPY: Record<string, string> = {
   revision_unavailable: 'The selected environment revision is no longer available.',
   plan_unavailable: 'The selected resource plan is no longer available.',
   paid_plan_unsupported: 'Paid plans are not supported for batch jobs on this deployment.',
+  insufficient_credits:
+    'Not enough NUKE credits for the maximum runtime. Reduce the runtime or add credits.',
   volume_unavailable: 'The selected work volume is no longer available.',
   volume_busy: 'The selected work volume is busy with another operation.',
   job_limit_reached: 'You already have the maximum number of active or queued jobs.',
@@ -317,13 +320,49 @@ export function jobRequestSignature(request: CreateJobRequest): string {
   })
 }
 
+/**
+ * Maximum hold for a paid job: the rate times the maximum runtime, rounded up to
+ * whole NUKE credits with a one-credit minimum for any started paid job.
+ */
 export function jobMaximumCost(
   costPerHour: number,
   runtimeSeconds: number,
   billingMode: JobBillingMode
 ): number {
   if (billingMode === 'zero_cost') return 0
-  return Math.max(0, costPerHour) * (Math.max(0, runtimeSeconds) / 3600)
+  const rate = Math.max(0, costPerHour)
+  const seconds = Math.max(0, runtimeSeconds)
+  if (!Number.isFinite(rate) || !Number.isFinite(seconds) || rate === 0 || seconds === 0) {
+    return 0
+  }
+  return Math.max(1, Math.ceil((rate * seconds) / 3600))
+}
+
+/** NUKE credits are whole units in owner-facing billing copy. */
+export function formatJobCredits(value: number): string {
+  return Math.max(0, value).toLocaleString(undefined, { maximumFractionDigits: 0 })
+}
+
+/** Refund returned after settlement: the authorized hold minus the captured charge. */
+export function jobBillingRefund(billing: Pick<JobBilling, 'authorized' | 'charged'>): number {
+  return Math.max(0, billing.authorized - billing.charged)
+}
+
+/** Owner-facing paid billing summary derived only from the server's billing snapshot. */
+export function jobPaidBillingSummary(billing: JobBilling): string {
+  switch (billing.state) {
+    case 'held':
+      return `${formatJobCredits(billing.authorized)} NUKE held`
+    case 'settled':
+      return `${formatJobCredits(billing.charged)} NUKE charged, ${formatJobCredits(
+        jobBillingRefund(billing)
+      )} NUKE refunded`
+    case 'released':
+      return '0 NUKE charged; hold released'
+    case 'none':
+    default:
+      return '0 NUKE charged'
+  }
 }
 
 export function disabledJobCapabilities(reasonCode = 'feature_disabled'): JobCapabilities {

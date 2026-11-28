@@ -22,6 +22,8 @@ export type JobLogState = 'pending' | 'available' | 'truncated' | 'unavailable' 
 
 export type JobBillingMode = 'zero_cost' | 'paid'
 
+export type JobBillingState = 'none' | 'held' | 'settled' | 'released'
+
 export interface JobLimits {
   max_active_jobs: number
   max_queued_jobs: number
@@ -122,6 +124,9 @@ export interface JobLogSummary {
 export interface JobBilling {
   mode: JobBillingMode
   charged: number
+  authorized: number
+  rate_per_hour: number
+  state: JobBillingState
 }
 
 export interface JobDetail {
@@ -177,6 +182,7 @@ export type JobErrorCode =
   | 'revision_unavailable'
   | 'plan_unavailable'
   | 'paid_plan_unsupported'
+  | 'insufficient_credits'
   | 'volume_unavailable'
   | 'volume_busy'
   | 'job_limit_reached'
