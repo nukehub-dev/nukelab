@@ -7,6 +7,7 @@ import { AlertTriangle, Cpu, HardDrive, Info, MemoryStick, Play, Terminal, Zap }
 import { ApiError } from '../../lib/api'
 import {
   createJobIdempotencyKey,
+  formatJobCredits,
   isJobFormField,
   jobErrorMessage,
   jobErrorField,
@@ -203,7 +204,12 @@ export function NewJobDialog({
     const name = form.name.trim()
     if (!name) errors.name = 'Enter a name for this job.'
     if (!selectedRevision) errors.revision_id = 'Select an approved environment revision.'
-    if (!selectedPlan) errors.plan_id = 'Select an available zero-cost plan.'
+    if (!selectedPlan) {
+      errors.plan_id =
+        capabilities.billing_mode === 'zero_cost'
+          ? 'Select an available zero-cost plan.'
+          : 'Select an available plan.'
+    }
     if (!selectedVolume) errors.volume_id = 'Select an owned private volume.'
     if (!form.executable.trim()) {
       errors.argv = 'Enter the executable to run.'
@@ -458,7 +464,9 @@ export function NewJobDialog({
               </p>
             ) : plansQuery.data && plans.length === 0 ? (
               <p role="status" className="text-xs text-amber-400">
-                No eligible zero-cost CPU plan is available. Contact an administrator.
+                {capabilities.billing_mode === 'zero_cost'
+                  ? 'No eligible zero-cost CPU plan is available. Contact an administrator.'
+                  : 'No eligible CPU plan is available. Contact an administrator.'}
               </p>
             ) : null}
             <FieldMessage id="job-plan-error" message={fieldErrors.plan_id} />
@@ -594,12 +602,30 @@ export function NewJobDialog({
                 </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Maximum cost</dt>
-                <dd className="mt-0.5 font-medium text-foreground">
-                  {capabilities.billing_mode === 'zero_cost' || !selectedPlan
+                <dt className="text-muted-foreground">
+                  {capabilities.billing_mode === 'paid' ? 'Maximum hold' : 'Maximum cost'}
+                </dt>
+                <dd
+                  className="mt-0.5 font-medium text-foreground"
+                  data-testid={
+                    capabilities.billing_mode === 'paid' ? 'job-maximum-hold' : undefined
+                  }
+                >
+                  {capabilities.billing_mode === 'zero_cost'
                     ? 'Zero cost'
-                    : `${maximumCost.toLocaleString(undefined, { maximumFractionDigits: 2 })} NUKE`}
+                    : selectedPlan
+                      ? `${formatJobCredits(maximumCost)} NUKE`
+                      : 'Select a plan'}
                 </dd>
+                {capabilities.billing_mode === 'paid' && selectedPlan && (
+                  <p
+                    data-testid="job-hold-refund-note"
+                    className="mt-1 text-[11px] leading-relaxed text-muted-foreground"
+                  >
+                    Held until the job finishes. Unused credits are refunded after the terminal
+                    result.
+                  </p>
+                )}
               </div>
             </dl>
             {selectedPlan && (

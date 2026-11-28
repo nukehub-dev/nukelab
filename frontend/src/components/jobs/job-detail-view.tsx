@@ -26,8 +26,10 @@ import {
 import { ApiError } from '../../lib/api'
 import {
   canCancelJob,
+  formatJobCredits,
   jobErrorMessage,
   jobOutcomeLabel,
+  jobPaidBillingSummary,
   jobProofLabel,
   jobReasonCopy,
   jobStateDescription,
@@ -316,6 +318,7 @@ function EnvironmentSection({ job }: { job: JobDetail }) {
 }
 
 function PlanSection({ job }: { job: JobDetail }) {
+  const paid = job.billing.mode === 'paid'
   return (
     <DetailSection title="Plan snapshot" icon={Cpu}>
       <p className="text-sm font-medium">{job.plan.name}</p>
@@ -338,11 +341,16 @@ function PlanSection({ job }: { job: JobDetail }) {
         </span>
       </div>
       <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DetailField label="Rate">{job.plan.cost_per_hour} NUKE/hr</DetailField>
+        <DetailField label="Rate">
+          {paid ? `${job.billing.rate_per_hour} NUKE/hr` : `${job.plan.cost_per_hour} NUKE/hr`}
+        </DetailField>
+        {paid && (
+          <DetailField label="Authorized hold">
+            {formatJobCredits(job.billing.authorized)} NUKE
+          </DetailField>
+        )}
         <DetailField label="Billing">
-          {job.billing.mode === 'zero_cost'
-            ? 'Zero cost'
-            : `${job.billing.charged.toLocaleString(undefined, { maximumFractionDigits: 2 })} NUKE charged`}
+          {paid ? jobPaidBillingSummary(job.billing) : 'Zero cost'}
         </DetailField>
         <DetailField label="Maximum runtime">
           {formatDuration(job.limits.max_runtime_seconds)}
@@ -661,7 +669,7 @@ export function JobDetailView({ jobId }: { jobId: string }) {
                 <DetailField label="Billing">
                   {job.data.billing.mode === 'zero_cost'
                     ? 'Zero cost; no charge recorded'
-                    : `${job.data.billing.charged.toLocaleString(undefined, { maximumFractionDigits: 2 })} NUKE charged`}
+                    : jobPaidBillingSummary(job.data.billing)}
                 </DetailField>
                 <DetailField label="Execution proof">
                   {jobProofLabel(job.data.result.proof)}

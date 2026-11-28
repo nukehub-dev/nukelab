@@ -169,7 +169,7 @@ function detail(
       size_bytes: logState === 'available' || logState === 'truncated' ? 2048 : 0,
       expires_at: logState === 'pending' ? null : '2026-12-04T12:00:00',
     },
-    billing: { mode: 'zero_cost', charged: 0 },
+    billing: { mode: 'zero_cost', charged: 0, authorized: 0, rate_per_hour: 0, state: 'none' },
   }
 }
 
@@ -209,7 +209,9 @@ async function mockJobs(
     logs?: JobLogs
     missing?: boolean
     list?: JobSummary[]
+    plans?: Array<typeof plan>
     submitFailures?: number
+    submitError?: { status: number; code: string }
     replayed?: boolean
   } = {}
 ) {
@@ -253,11 +255,13 @@ async function mockJobs(
     if (path === '/notifications/unread-count') return fulfill({ unread_count: 0 })
     if (path === '/notifications/')
       return fulfill({ notifications: [], unread_count: 0, total: 0, page: 1, page_size: 20 })
-    if (path === '/plans/' && method === 'GET')
+    if (path === '/plans/' && method === 'GET') {
+      const plans = options.plans ?? [plan]
       return fulfill({
         success: true,
-        data: { items: [plan], total: 1, page: 1, limit: 100, pages: 1 },
+        data: { items: plans, total: plans.length, page: 1, limit: 100, pages: 1 },
       })
+    }
     if (path === '/volumes/') return fulfill({ volumes: [volume] })
     if (path === '/jobs/capabilities') return fulfill(state.capability)
     if (path === '/jobs/eligible-revisions') return fulfill({ items: [revision] })
@@ -269,6 +273,9 @@ async function mockJobs(
       const body = request.postDataJSON() as Record<string, unknown>
       state.creates.push(body)
       state.idempotencyKeys.push(request.headers()['idempotency-key'] ?? null)
+      if (options.submitError) {
+        return fulfill({ detail: { code: options.submitError.code } }, options.submitError.status)
+      }
       if (state.creates.length <= (options.submitFailures ?? 0)) {
         return fulfill({ detail: { code: 'invalid_request' } }, 503)
       }
@@ -387,6 +394,81 @@ test('eligible selections submit once with an idempotency key and open the detai
     max_runtime_seconds: 600,
   })
   expect(state.idempotencyKeys[0]).toMatch(/^[\x21-\x7e]{1,128}$/)
+})
+
+test('paid plans quote a rounded hold, note refunds, and surface insufficient credits', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const state = await mockJobs(page, {
+    capability: capabilities({ billing_mode: 'paid' }),
+    plans: [{ ...plan, cost_per_hour: 10 }],
+    submitError: { status: 402, code: 'insufficient_credits' },
+  })
+  await page.goto('/jobs')
+  await page.getByTestId('new-job').click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('heading', { name: 'New job' })).toBeVisible({ timeout: 15_000 })
+  await fillEligibleJob(page)
+  await dialog.getByTestId('job-runtime').fill('900')
+
+  await expect(dialog.getByTestId('job-plan-trigger')).toContainText('Small research plan')
+  await expect(dialog.getByTestId('job-maximum-hold')).toHaveText('3 NUKE')
+  await expect(dialog.getByTestId('job-hold-refund-note')).toContainText(
+    'Unused credits are refunded after the terminal result'
+  )
+
+  await dialog.getByTestId('job-submit').click()
+  await expect(
+    dialog.getByText(
+      'Not enough NUKE credits for the maximum runtime. Reduce the runtime or add credits.'
+    )
+  ).toBeVisible()
+  await expect(page).toHaveURL(/\/jobs$/)
+  expect(state.creates).toHaveLength(1)
+  expect(state.creates[0]).toMatchObject({ max_runtime_seconds: 900 })
+})
+
+test('paid detail reports the rate, authorized hold, charge and refund', async ({ page }) => {
+  const paidJob = detail('succeeded')
+  paidJob.plan = { ...paidJob.plan, cost_per_hour: 10 }
+  paidJob.billing = {
+    mode: 'paid',
+    charged: 4,
+    authorized: 5,
+    rate_per_hour: 10,
+    state: 'settled',
+  }
+  await mockJobs(page, {
+    capability: capabilities({ billing_mode: 'paid' }),
+    job: paidJob,
+  })
+
+  await page.goto(`/jobs/${ids.job}`)
+  await expect(page.getByText('4 NUKE charged, 1 NUKE refunded').first()).toBeVisible({
+    timeout: 15_000,
+  })
+  await expect(page.getByText('10 NUKE/hr')).toBeVisible()
+  await expect(page.getByText('5 NUKE', { exact: true })).toBeVisible()
+})
+
+test('held paid jobs show the authorized hold until settlement', async ({ page }) => {
+  const heldJob = detail('running')
+  heldJob.billing = {
+    mode: 'paid',
+    charged: 0,
+    authorized: 6,
+    rate_per_hour: 10,
+    state: 'held',
+  }
+  await mockJobs(page, {
+    capability: capabilities({ billing_mode: 'paid' }),
+    job: heldJob,
+  })
+
+  await page.goto(`/jobs/${ids.job}`)
+  await expect(page.getByText('6 NUKE held').first()).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('6 NUKE', { exact: true })).toBeVisible()
 })
 
 test('safe retries keep the idempotency key while a material edit rotates it', async ({ page }) => {

@@ -7,15 +7,18 @@ import {
   canCancelJob,
   createJobIdempotencyKey,
   disabledJobCapabilities,
+  formatJobCredits,
   isJobActive,
   isJobListActive,
   isJobTerminal,
   isValidJobIdempotencyKey,
+  jobBillingRefund,
   jobErrorField,
   jobErrorMessage,
   jobLogStateDescription,
   jobLogStateLabel,
   jobMaximumCost,
+  jobPaidBillingSummary,
   jobPollInterval,
   jobReasonCopy,
   jobRequestSignature,
@@ -94,6 +97,11 @@ describe('owner messages', () => {
     expect(jobErrorMessage('permission_revoked', 'fallback')).toContain('permission')
     expect(jobErrorMessage('plan_unavailable', 'fallback')).toContain('plan')
     expect(jobErrorMessage('cohort_not_allowed', 'fallback')).toContain('pilot cohort')
+    expect(jobErrorMessage('insufficient_credits', 'fallback')).toContain(
+      'Not enough NUKE credits for the maximum runtime'
+    )
+    expect(jobErrorMessage('insufficient_credits', 'fallback')).toContain('Reduce the runtime')
+    expect(jobErrorField('insufficient_credits')).toBeNull()
   })
 
   it('labels log states without reusing server-view copy', () => {
@@ -164,10 +172,37 @@ describe('paging, polling and cost', () => {
     expect(jobPollInterval(false, 0, false)).toBe(false)
   })
 
-  it('computes a zero-cost or maximum plan cost', () => {
+  it('rounds the paid hold up to whole NUKE credits with a one-credit minimum', () => {
     expect(jobMaximumCost(2, 1800, 'zero_cost')).toBe(0)
     expect(jobMaximumCost(2, 1800, 'paid')).toBe(1)
     expect(jobMaximumCost(2, 3600, 'paid')).toBe(2)
+    expect(jobMaximumCost(2, 3601, 'paid')).toBe(3)
+    expect(jobMaximumCost(10, 900, 'paid')).toBe(3)
+    expect(jobMaximumCost(10, 60, 'paid')).toBe(1)
+    expect(jobMaximumCost(3600, 1, 'paid')).toBe(1)
+    expect(jobMaximumCost(0, 3600, 'paid')).toBe(0)
+    expect(jobMaximumCost(2, 0, 'paid')).toBe(0)
+  })
+
+  it('formats paid billing states from the server snapshot', () => {
+    const billing = {
+      mode: 'paid' as const,
+      charged: 4,
+      authorized: 5,
+      rate_per_hour: 10,
+      state: 'settled' as const,
+    }
+    expect(jobPaidBillingSummary({ ...billing, state: 'held', charged: 0 })).toBe('5 NUKE held')
+    expect(jobPaidBillingSummary(billing)).toBe('4 NUKE charged, 1 NUKE refunded')
+    expect(jobPaidBillingSummary({ ...billing, charged: 5 })).toBe(
+      '5 NUKE charged, 0 NUKE refunded'
+    )
+    expect(jobPaidBillingSummary({ ...billing, charged: 0, state: 'released' })).toBe(
+      '0 NUKE charged; hold released'
+    )
+    expect(jobPaidBillingSummary({ ...billing, charged: 0, state: 'none' })).toBe('0 NUKE charged')
+    expect(jobBillingRefund(billing)).toBe(1)
+    expect(formatJobCredits(1234)).toBe((1234).toLocaleString(undefined))
   })
 
   it('provides disabled capabilities with complete limits', () => {
