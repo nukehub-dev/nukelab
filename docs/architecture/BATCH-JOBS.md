@@ -45,7 +45,9 @@ cohort, so removing access does not erase existing history.
 - Reservation and exclusion: `reservation_active`, reserved CPU/memory/disk,
   volume operation ID and fencing token.
 - Runtime identity, fenced executor and heartbeat, terminal result, cleanup
-  state, log metadata, and zero-cost billing fields.
+  state, log metadata, and billing journal (`billing_mode`, `authorized_credits`,
+  `billing_rate_per_hour`, `billing_state`, `charged_credits`,
+  `billing_transaction_id`).
 
 `batch_job_logs` keeps one bounded payload row per job with encoding, truncation,
 size, capture time, and expiry. `job_writer` is an exclusive
@@ -54,9 +56,16 @@ restore, or job-writer guard per volume. Expired log payloads are physically
 removed by a bounded scheduled purge; the terminal result and log metadata stay
 intact.
 
-The migrations are `b7d4e1c9a2f5` (tables/indexes) and `e2c7a9f4d6b1`
-(reservation columns and `job_writer` exclusion). The current Alembic head is
-`e2c7a9f4d6b1`. See [DATA-MODEL.md](DATA-MODEL.md) for field-level detail.
+`credit_holds` stores one authorization per paid job: owner and job references,
+held amount, lifecycle state (`held`/`settled`/`released`), captured charge,
+unpaid remainder, the single `batch_job_usage` transaction when the charge is
+positive, and creation/settlement times. A unique job index prevents duplicate
+authorizations; `(user_id, state)` serves spendable-balance sums.
+
+The migrations are `b7d4e1c9a2f5` (tables/indexes), `e2c7a9f4d6b1`
+(reservation columns and `job_writer` exclusion), and `f1a2b3c4d5e6` (billing
+journal and `credit_holds`). The current Alembic head is `f1a2b3c4d5e6`. See
+[DATA-MODEL.md](DATA-MODEL.md) for field-level detail.
 
 ## Lifecycle
 
@@ -87,17 +96,22 @@ queued ──admit──> starting ──observed running──> running ──e
 
 Submission validates a bounded name, literal argument vector, and maximum
 runtime. It requires an approved, non-revoked environment revision the actor can
-use, an active CPU-only zero-cost plan the actor can use, and an owned active
-private volume. Plans with GPUs or a nonzero hourly cost are rejected.
+use, an active CPU-only plan the actor can use, and an owned active private
+volume. Plans with GPUs are rejected. A nonzero hourly cost is accepted only when
+`BATCH_JOBS_ALLOW_PAID_PLANS=true`.
 
 `Idempotency-Key` is mandatory (1–128 visible ASCII characters). The unique
 owner/key-hash index plus the canonical request fingerprint make retries safe:
 the same payload returns the original job with `replayed=true` and HTTP 200; a
 different payload with the same key returns 409. A new submission returns 202.
 
-Only zero-cost billing is implemented. `billing_mode` is always `zero_cost`,
-`charged_credits` stays zero, and `BATCH_JOBS_ALLOW_PAID_PLANS` is inert. The
-capabilities response reports `secrets_enabled=false`.
+Billing is frozen from the plan snapshot at submission. A zero-cost plan creates
+no hold. A paid plan creates one `credit_holds` row for
+`ceil(rate × max_runtime_seconds / 3600)` credits (minimum 1) in the same
+transaction as the job, after taking the shared admission lock and locking the
+user row. Insufficient spendable balance returns 402 `insufficient_credits` and
+creates neither row. The capabilities response reports `billing_mode=paid` only
+when the paid flag is on and always reports `secrets_enabled=false`.
 
 ## Admission
 
@@ -116,8 +130,10 @@ Under the admission lock, admission rechecks:
 
 - job state, queue expiry, owner activity, current `jobs:write_own`, and cohort;
 - current revision approval, revocation, template activity, and identity match;
-- plan activity, actor access, CPU-only shape, unchanged plan snapshot, and
-  zero cost;
+- plan activity, actor access, CPU-only shape, unchanged plan snapshot, and the
+  paid flag when the frozen cost is nonzero;
+- for a paid plan, one `held` authorization whose amount matches
+  `authorized_credits` and a freshly locked user balance that still covers it;
 - owned private active volume and availability;
 - per-owner active cap and the optional fleet cap (submission separately bounds
   the queued count);
@@ -125,10 +141,41 @@ Under the admission lock, admission rechecks:
 - user quota, including the plan's per-user slot count.
 
 Capacity or a busy volume leaves the job queued with a wait reason. Policy,
-quota, or artifact failures finish the queued job without creating a runtime.
-Successful admission acquires one `job_writer` guard, writes the reservation and
-runtime identity, and commits `starting` exactly once before any runtime I/O.
-Active jobs count in `QuotaService` and `ResourcePoolService` accounting.
+quota, billing, or artifact failures finish the queued job without creating a
+runtime and release any hold. Successful admission acquires one `job_writer`
+guard, writes the reservation and runtime identity, and commits `starting`
+exactly once before any runtime I/O. Active jobs count in `QuotaService` and
+`ResourcePoolService` accounting.
+
+## Billing and credits
+
+Zero-cost plans never create a hold and keep `billing_state="none"`. Paid plans
+freeze `billing_rate_per_hour` and `authorized_credits` on the job and create one
+`held` row in `credit_holds` at submission. Every debit path — interactive
+launch, restart/resume, periodic server billing, stop reconciliation, and admin
+deductions — uses spendable balance (total balance minus active held amounts),
+so an interactive action cannot consume credits reserved for a queued or running
+job.
+
+Queued cancellation, queue expiry, admission rejection, and pre-start failure
+release the hold at zero charge. A proof-backed terminal result settles one
+bounded observed interval:
+
+- `seconds = 0` when the start was never observed; otherwise
+  `(finished_at - started_at)` clamped to `[0, max_runtime_seconds]`.
+- `charge = 0` when `seconds == 0` or the rate is zero; otherwise
+  `min(authorized, max(1, ceil(rate × seconds / 3600)))`.
+- The unused authorization (`authorized - bounded charge`) is refunded. If the
+  user balance cannot cover the bounded charge, the captured charge is clamped
+  to the balance and the remainder is stored as unpaid debt — settlement never
+  raises and never rolls back the terminal result.
+- A positive charge writes exactly one `batch_job_usage` transaction carrying
+  job, rate, authorization, observed seconds, refund and unpaid metadata. A zero
+  charge writes none.
+
+`recovery_required` retains the hold until the proof-only finalizer settles or
+releases it. Owner and admin job responses expose only mode, charged,
+authorized, rate, and state; hold ids and transaction internals stay private.
 
 ## Runtime profile
 
@@ -176,8 +223,9 @@ checkpoint, but never creates another runtime after a create checkpoint.
 Finalization is one fenced transaction owned by
 `BatchJobAdmissionService.release_terminal()`: it requires executor termination
 proof, writes the terminal state/outcome/exit code and observed runtime identity,
-stores the bounded log payload, and releases the volume guard. A caller without
-that proof receives `executor_unconfirmed` and the reservation stays protected.
+stores the bounded log payload, settles the credit hold from the observed
+runtime, and releases the volume guard. A caller without that proof receives
+`executor_unconfirmed` and the reservation and hold stay protected.
 Repeated terminal release is idempotent and never rewrites the recorded result.
 An OOM kill is recorded as failed, a nonzero exit as `nonzero_exit`, missing exit
 evidence as `runtime_unverifiable`, and the timeout wrapper's 124/137 exit after
@@ -265,8 +313,9 @@ is no admin cancel, retry, force, or manual reservation-release endpoint.
   backup/restore, launch mount intent, and volume deletion until proved
   termination.
 - Regression coverage lives in `backend/tests/security/test_job_ownership.py`,
-  `test_admin_jobs_privacy.py`, the job API/service/runtime/monitor/recovery
-  suites, `tests/services/test_batch_job_volume_guard.py`, and
+  `test_admin_jobs_privacy.py`, `test_paid_job_holds.py`, the job
+  API/service/runtime/monitor/recovery/billing/credit-hold suites,
+  `tests/services/test_batch_job_volume_guard.py`, and
   `tests/container/test_batch_driver.py`. The security test mapping is in
   [PENETRATION-TEST-PLAN.md](../security/PENETRATION-TEST-PLAN.md#batch-job-controls).
 
@@ -307,8 +356,10 @@ Carried gaps:
 - No staging pinned upgrade/rollback/off-host restore rehearsal, and no registry
   `preload_only` staging proof.
 - Podman batch enablement is not verified.
-- Paid credit settlement and scoped workload secrets are not implemented; the
-  pilot stays zero-cost and secrets-disabled.
+- Paid hold/settlement code and its migration are implemented but the paid
+  billing integration, concurrency, and migration suites have not been executed
+  yet; paid plans remain disabled by default. Scoped workload secrets are not
+  implemented; the pilot stays secrets-disabled.
 
 ## Related documents
 

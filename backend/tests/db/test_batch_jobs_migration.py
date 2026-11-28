@@ -17,7 +17,8 @@ from tests.db.test_launch_workflow_migration import migration_database as migrat
 
 PREVIOUS_REVISION = "a4c9e2f7b1d3"
 BATCH_REVISION = "b7d4e1c9a2f5"
-HEAD_REVISION = "e2c7a9f4d6b1"
+ADMISSION_REVISION = "e2c7a9f4d6b1"
+HEAD_REVISION = "f1a2b3c4d5e6"
 
 REQUIRED_JOB_COLUMNS = {
     "user_id",
@@ -68,9 +69,25 @@ REQUIRED_JOB_COLUMNS = {
     "log_expires_at",
     "billing_mode",
     "charged_credits",
+    "authorized_credits",
+    "billing_rate_per_hour",
+    "billing_state",
     "billing_transaction_id",
     "created_at",
     "updated_at",
+}
+
+REQUIRED_HOLD_COLUMNS = {
+    "id",
+    "user_id",
+    "job_id",
+    "amount",
+    "state",
+    "charged_credits",
+    "unpaid_credits",
+    "transaction_id",
+    "created_at",
+    "settled_at",
 }
 
 
@@ -96,6 +113,13 @@ async def schema_state(database):
                 "WHERE table_schema='public' AND table_name='batch_job_logs'"
             )
         }
+        hold_columns = {
+            row["column_name"]
+            for row in await connection.fetch(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema='public' AND table_name='credit_holds'"
+            )
+        }
         indexes = {
             row["indexname"]: row["indexdef"]
             for row in await connection.fetch(
@@ -110,13 +134,22 @@ async def schema_state(database):
                 "WHERE schemaname='public' AND tablename='volume_operations'"
             )
         }
+        hold_indexes = {
+            row["indexname"]: row["indexdef"]
+            for row in await connection.fetch(
+                "SELECT indexname, indexdef FROM pg_indexes "
+                "WHERE schemaname='public' AND tablename='credit_holds'"
+            )
+        }
         revision = await connection.fetchval("SELECT version_num FROM alembic_version")
         return {
             "tables": tables,
             "columns": columns,
             "log_columns": log_columns,
+            "hold_columns": hold_columns,
             "indexes": indexes,
             "volume_indexes": volume_indexes,
+            "hold_indexes": hold_indexes,
             "revision": revision,
         }
     finally:
@@ -173,8 +206,29 @@ async def seed_rows(database):
             job,
             created,
         )
+        hold = uuid.uuid4()
+        await connection.execute(
+            "INSERT INTO credit_holds (id,user_id,job_id,amount,created_at) "
+            "VALUES ($1,$2,$3,$4,$5)",
+            hold,
+            owner,
+            job,
+            7,
+            created,
+        )
         row = await connection.fetchrow("SELECT * FROM batch_jobs WHERE id=$1", job)
         log = await connection.fetchrow("SELECT * FROM batch_job_logs WHERE job_id=$1", job)
+        hold_row = await connection.fetchrow("SELECT * FROM credit_holds WHERE job_id=$1", job)
+        with pytest.raises(asyncpg.exceptions.UniqueViolationError):
+            await connection.execute(
+                "INSERT INTO credit_holds (id,user_id,job_id,amount,created_at) "
+                "VALUES ($1,$2,$3,$4,$5)",
+                uuid.uuid4(),
+                owner,
+                job,
+                7,
+                created,
+            )
         with pytest.raises(asyncpg.exceptions.UniqueViolationError):
             await connection.execute(
                 "INSERT INTO batch_jobs "
@@ -191,7 +245,7 @@ async def seed_rows(database):
                 created,
                 uuid.uuid4(),
             )
-        return row, log
+        return row, log, hold_row
     finally:
         await connection.close()
 
@@ -201,13 +255,15 @@ def test_batch_job_migration_upgrade_downgrade_and_reupgrade(migration_database)
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [HEAD_REVISION]
     assert script.get_revision(BATCH_REVISION).down_revision == PREVIOUS_REVISION
-    assert script.get_revision(HEAD_REVISION).down_revision == BATCH_REVISION
+    assert script.get_revision(ADMISSION_REVISION).down_revision == BATCH_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == ADMISSION_REVISION
 
     command.upgrade(config, "head")
     upgraded = asyncio.run(schema_state(database))
     assert upgraded["revision"] == HEAD_REVISION
-    assert {"batch_jobs", "batch_job_logs"} <= upgraded["tables"]
+    assert {"batch_jobs", "batch_job_logs", "credit_holds"} <= upgraded["tables"]
     assert REQUIRED_JOB_COLUMNS <= upgraded["columns"]
+    assert upgraded["hold_columns"] == REQUIRED_HOLD_COLUMNS
     assert upgraded["log_columns"] == {
         "job_id",
         "text",
@@ -240,11 +296,19 @@ def test_batch_job_migration_upgrade_downgrade_and_reupgrade(migration_database)
     assert "UNIQUE INDEX" in exclusive
     assert "job_writer" in exclusive
     assert "backup" in exclusive and "restore" in exclusive
+    hold_user = upgraded["hold_indexes"]["ix_credit_holds_user_state"]
+    assert "(user_id, state)" in hold_user
+    hold_job = upgraded["hold_indexes"]["uq_credit_holds_job_id"]
+    assert "UNIQUE INDEX" in hold_job
+    assert "(job_id)" in hold_job
 
-    row, log = asyncio.run(seed_rows(database))
+    row, log, hold = asyncio.run(seed_rows(database))
     assert row["state"] == "queued"
     assert row["billing_mode"] == "zero_cost"
     assert row["charged_credits"] == 0
+    assert row["authorized_credits"] == 0
+    assert row["billing_rate_per_hour"] == 0
+    assert row["billing_state"] == "none"
     assert row["reservation_active"] is False
     assert row["log_state"] == "pending"
     assert row["log_truncated"] is False
@@ -252,6 +316,32 @@ def test_batch_job_migration_upgrade_downgrade_and_reupgrade(migration_database)
     assert log["encoding"] == "utf-8"
     assert log["truncated"] is False
     assert log["size_bytes"] == 0
+    assert hold["amount"] == 7
+    assert hold["state"] == "held"
+    assert hold["charged_credits"] == 0
+    assert hold["unpaid_credits"] == 0
+    assert hold["transaction_id"] is None
+    assert hold["settled_at"] is None
+
+    command.downgrade(config, ADMISSION_REVISION)
+    downgraded = asyncio.run(schema_state(database))
+    assert downgraded["revision"] == ADMISSION_REVISION
+    assert "credit_holds" not in downgraded["tables"]
+    assert downgraded["hold_columns"] == set()
+    assert {
+        "authorized_credits",
+        "billing_rate_per_hour",
+        "billing_state",
+    }.isdisjoint(downgraded["columns"])
+    assert {
+        "reserved_cpu",
+        "reserved_memory_mib",
+        "reserved_disk_mib",
+        "volume_fencing_token",
+        "cleanup_state",
+        "cleanup_attempts",
+        "last_cleanup_at",
+    } <= downgraded["columns"]
 
     command.downgrade(config, BATCH_REVISION)
     downgraded = asyncio.run(schema_state(database))
@@ -272,12 +362,14 @@ def test_batch_job_migration_upgrade_downgrade_and_reupgrade(migration_database)
     command.downgrade(config, PREVIOUS_REVISION)
     downgraded = asyncio.run(schema_state(database))
     assert downgraded["revision"] == PREVIOUS_REVISION
-    assert downgraded["tables"].isdisjoint({"batch_jobs", "batch_job_logs"})
+    assert downgraded["tables"].isdisjoint({"batch_jobs", "batch_job_logs", "credit_holds"})
     assert downgraded["columns"] == set()
     assert downgraded["log_columns"] == set()
+    assert downgraded["hold_columns"] == set()
 
     command.upgrade(config, "head")
     reupgraded = asyncio.run(schema_state(database))
     assert reupgraded["revision"] == HEAD_REVISION
-    assert {"batch_jobs", "batch_job_logs"} <= reupgraded["tables"]
+    assert {"batch_jobs", "batch_job_logs", "credit_holds"} <= reupgraded["tables"]
     assert REQUIRED_JOB_COLUMNS <= reupgraded["columns"]
+    assert reupgraded["hold_columns"] == REQUIRED_HOLD_COLUMNS

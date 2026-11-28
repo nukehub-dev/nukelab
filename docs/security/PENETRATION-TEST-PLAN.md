@@ -509,7 +509,8 @@ treating a unit test as runtime proof.
 | Control | Test focus | Regression evidence |
 |---|---|---|
 | JWT owner authorization | API tokens are rejected; guest/foreign IDs return 403/404 without confirming existence; capabilities/history/logs remain readable while submission is disabled | [test_jobs.py](../../backend/tests/api/test_jobs.py), [test_job_ownership.py](../../backend/tests/security/test_job_ownership.py) |
-| Submission policy | Cohort removal, revoked revision/permission, changed plan snapshot, paid/GPU plan, foreign/busy volume, and oversized argv/runtime fail without a reservation | [test_batch_job_admission.py](../../backend/tests/services/test_batch_job_admission.py), [test_batch_job_service.py](../../backend/tests/services/test_batch_job_service.py) |
+| Submission policy | Cohort removal, revoked revision/permission, changed plan snapshot, GPU plan, foreign/busy volume, oversized argv/runtime, and paid flag/hold rejection fail without a reservation | [test_batch_job_admission.py](../../backend/tests/services/test_batch_job_admission.py), [test_batch_job_service.py](../../backend/tests/services/test_batch_job_service.py) |
+| Credit hold and settlement | Paid submission creates one hold under the admission/user lock; insufficient spendable balance returns 402 with no row; foreign owners cannot release a hold; admission requires a held authorization matching the frozen charge; terminal results settle actual runtime, refund unused authorization, record unpaid instead of raising, and retain the hold for `recovery_required` | [test_credit_holds.py](../../backend/tests/services/test_credit_holds.py), [test_batch_job_billing.py](../../backend/tests/services/test_batch_job_billing.py), [test_paid_job_holds.py](../../backend/tests/security/test_paid_job_holds.py) |
 | Idempotency and replay | Reuse a key with the same payload returns the original job; a changed payload returns 409; broker redelivery cannot create a second runtime | [test_batch_job_admission.py](../../backend/tests/services/test_batch_job_admission.py), [test_batch_job_dispatch.py](../../backend/tests/services/test_batch_job_dispatch.py) |
 | Admin cross-owner privacy | `operations:read_all` + `ADMIN_ACCESS` + JWT are all required; owner names are bounded; argv, logs, environment values, image references, runtime identity, volume paths and fencing tokens never appear | [test_admin_jobs.py](../../backend/tests/api/test_admin_jobs.py), [test_admin_jobs_privacy.py](../../backend/tests/security/test_admin_jobs_privacy.py) |
 | Proof-only reconcile authorization | `operations:manage_all` + `ADMIN_ACCESS` + JWT and a bounded reason are required; ambiguous/running/non-recovery rows return 409 and release nothing; terminal rows are idempotent; audit failure blocks mutation; no force/override input is accepted | [test_admin_jobs.py](../../backend/tests/api/test_admin_jobs.py), [test_batch_job_recovery.py](../../backend/tests/services/test_batch_job_recovery.py), [test_admin_jobs_privacy.py](../../backend/tests/security/test_admin_jobs_privacy.py) |
@@ -523,7 +524,8 @@ treating a unit test as runtime proof.
 Run runtime races only on an isolated daemon. The current release has a real
 API→PostgreSQL/Redis/Celery/Docker `@jobs-runtime` scenario on a disposable
 Docker stack plus worker and broker interruption drills that prove one create,
-one start, one terminal result, one released guard, and zero billing. The new
-explicit CI browser job and the XFS over-cap write still require execution on
-their target environments; an external assessment must not treat the mocked
-browser or service suites as those proofs.
+one start, one terminal result, one released guard, and zero billing. Paid
+hold/settlement code is implemented but its integration and concurrency suites
+have not yet run on a real stack. The new explicit CI browser job and the XFS
+over-cap write still require execution on their target environments; an external
+assessment must not treat the mocked browser or service suites as those proofs.

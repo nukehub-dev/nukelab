@@ -90,6 +90,17 @@ async def test_capabilities_contract(client, user_token, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_capabilities_report_paid_mode_when_enabled(client, user_token, monkeypatch):
+    monkeypatch.setattr(settings, "xfs_quota_enabled", False)
+    monkeypatch.setattr(settings, "batch_jobs_allow_paid_plans", True)
+    response = await client.get("/api/jobs/capabilities", headers=auth_headers(user_token))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["billing_mode"] == "paid"
+    assert body["secrets_enabled"] is False
+
+
+@pytest.mark.asyncio
 async def test_eligible_revisions_endpoint_is_sanitized(client, db_session, test_user, user_token):
     template, revision = await make_environment(db_session)
     await db_session.commit()
@@ -155,7 +166,13 @@ async def test_submit_replay_detail_list_cancel_and_logs(
     assert detail["limits"] == {"max_runtime_seconds": 600}
     assert detail["result"] is None
     assert detail["logs"]["state"] == "pending"
-    assert detail["billing"] == {"mode": "zero_cost", "charged": 0}
+    assert detail["billing"] == {
+        "mode": "zero_cost",
+        "charged": 0,
+        "authorized": 0,
+        "rate_per_hour": 0,
+        "state": "none",
+    }
     job_id = detail["id"]
 
     replay = await client.post("/api/jobs", headers=headers, json=body)

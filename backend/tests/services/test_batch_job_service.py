@@ -213,7 +213,7 @@ async def test_capabilities_reflect_flag_permission_and_limits(db_session, test_
     assert enabled.enabled is True
     assert enabled.can_submit is True
     assert enabled.reason_code is None
-    assert enabled.billing_mode == "zero_cost"
+    assert enabled.billing_mode == "paid"
 
     test_user.is_active = False
     inactive = await service.capabilities(test_user)
@@ -330,6 +330,9 @@ async def test_submit_persists_intent_snapshots_and_sanitized_detail(
     assert detail.logs.size_bytes == 0
     assert detail.billing.mode == "zero_cost"
     assert detail.billing.charged == 0
+    assert detail.billing.authorized == 0
+    assert detail.billing.rate_per_hour == 0
+    assert detail.billing.state == "none"
     serialized = json.dumps(detail.model_dump(mode="json"))
     assert "PILOT_TOKEN" not in serialized
     assert "must-not-leak" not in serialized
@@ -339,6 +342,9 @@ async def test_submit_persists_intent_snapshots_and_sanitized_detail(
     assert stored.state == "queued"
     assert stored.reservation_active is False
     assert stored.billing_mode == "zero_cost"
+    assert stored.authorized_credits == 0
+    assert stored.billing_rate_per_hour == 0
+    assert stored.billing_state == "none"
     assert stored.revision_snapshot["configuration"]["environment_variables"] == {
         "PILOT_TOKEN": "must-not-leak"
     }
@@ -480,21 +486,26 @@ async def test_submit_enforces_queued_and_active_owner_limits(db_session, test_u
 
 
 @pytest.mark.asyncio
-async def test_submit_always_rejects_nonzero_cost_plans(
+async def test_nonzero_cost_plan_requires_paid_flag_and_creates_a_hold(
     db_session, test_user, enabled_jobs, monkeypatch
 ):
     _, revision, plan, volume = await make_resources(db_session, test_user, cost_per_hour=5)
-    for flag in (False, True):
-        monkeypatch.setattr(settings, "batch_jobs_allow_paid_plans", flag)
-        with pytest.raises(JobError) as exc:
-            await BatchJobService(db_session).submit(
-                test_user,
-                f"paid-key-{flag}",
-                submit_request(revision, plan, volume),
-            )
-        assert exc.value.code == "paid_plan_unsupported"
-        assert exc.value.status_code == 422
+    service = BatchJobService(db_session)
+
+    monkeypatch.setattr(settings, "batch_jobs_allow_paid_plans", False)
+    with pytest.raises(JobError) as exc:
+        await service.submit(test_user, "paid-key-off", submit_request(revision, plan, volume))
+    assert exc.value.code == "paid_plan_unsupported"
+    assert exc.value.status_code == 422
     assert await db_session.scalar(select(BatchJob).where(BatchJob.user_id == test_user.id)) is None
+
+    monkeypatch.setattr(settings, "batch_jobs_allow_paid_plans", True)
+    detail = await service.submit(test_user, "paid-key-on", submit_request(revision, plan, volume))
+    assert detail.billing.mode == "paid"
+    assert detail.billing.authorized == 1
+    assert detail.billing.rate_per_hour == 5
+    assert detail.billing.state == "held"
+    assert detail.billing.charged == 0
 
 
 @pytest.mark.asyncio
@@ -849,14 +860,18 @@ async def test_log_states_pending_available_truncated_expired_and_unavailable(
 
 
 def test_model_registration_and_migration_head():
+    from app.models.credit_hold import CreditHold
+
     assert BatchJob.__tablename__ == "batch_jobs"
     assert BatchJobLog.__tablename__ == "batch_job_logs"
+    assert CreditHold.__tablename__ == "credit_holds"
     assert "batch_jobs" in Base.metadata.tables
     assert "batch_job_logs" in Base.metadata.tables
+    assert "credit_holds" in Base.metadata.tables
 
     root = Path(__file__).parents[2]
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["e2c7a9f4d6b1"]
-    assert script.get_revision("e2c7a9f4d6b1").down_revision == "b7d4e1c9a2f5"
+    assert script.get_heads() == ["f1a2b3c4d5e6"]
+    assert script.get_revision("f1a2b3c4d5e6").down_revision == "e2c7a9f4d6b1"

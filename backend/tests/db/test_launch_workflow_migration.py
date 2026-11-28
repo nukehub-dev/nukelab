@@ -20,7 +20,8 @@ from app.db.base import Base
 
 PREVIOUS_REVISION = "34ce1a62ffe8"
 BATCH_REVISION = "b7d4e1c9a2f5"
-HEAD_REVISION = "e2c7a9f4d6b1"
+ADMISSION_REVISION = "e2c7a9f4d6b1"
+HEAD_REVISION = "f1a2b3c4d5e6"
 NEW_TABLES = {
     "environment_revisions",
     "server_launch_records",
@@ -30,6 +31,7 @@ NEW_TABLES = {
     "volume_restores",
     "batch_jobs",
     "batch_job_logs",
+    "credit_holds",
 }
 
 
@@ -93,8 +95,13 @@ def test_fresh_upgrade_downgrade_and_reupgrade(migration_database):
     assert ScriptDirectory.from_config(config).get_heads() == [HEAD_REVISION]
     command.upgrade(config, "head")
     assert NEW_TABLES <= asyncio.run(tables(name))
-    # The first downgrade removes only the admission reservation columns.
-    command.downgrade(config, "-1")
+    # The first downgrade removes only the paid billing journal.
+    command.downgrade(config, ADMISSION_REVISION)
+    after_billing = asyncio.run(tables(name))
+    assert "credit_holds" not in after_billing
+    assert NEW_TABLES - {"credit_holds"} <= after_billing
+    # The next downgrade removes only the admission reservation columns.
+    command.downgrade(config, BATCH_REVISION)
     after_admission = asyncio.run(tables(name))
     assert "batch_jobs" in after_admission
     # The next downgrade removes the additive batch tables.
@@ -102,16 +109,27 @@ def test_fresh_upgrade_downgrade_and_reupgrade(migration_database):
     after_batch = asyncio.run(tables(name))
     assert "batch_jobs" not in after_batch
     assert "batch_job_logs" not in after_batch
-    assert NEW_TABLES - {"batch_jobs", "batch_job_logs"} <= after_batch
+    assert (
+        NEW_TABLES
+        - {
+            "batch_jobs",
+            "batch_job_logs",
+            "credit_holds",
+        }
+        <= after_batch
+    )
     # Four more steps reach the pre-workflow baseline used by this rehearsal.
     command.downgrade(config, "-1")
     command.downgrade(config, "-1")
     command.downgrade(config, "-1")
     command.downgrade(config, "-1")
     assert "volume_restores" not in asyncio.run(tables(name))
-    assert NEW_TABLES - {"volume_restores", "batch_jobs", "batch_job_logs"} <= asyncio.run(
-        tables(name)
-    )
+    assert NEW_TABLES - {
+        "volume_restores",
+        "batch_jobs",
+        "batch_job_logs",
+        "credit_holds",
+    } <= asyncio.run(tables(name))
     command.upgrade(config, "head")
     command.downgrade(config, PREVIOUS_REVISION)
     assert NEW_TABLES.isdisjoint(asyncio.run(tables(name)))

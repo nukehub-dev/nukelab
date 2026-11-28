@@ -8,6 +8,7 @@ __all__ = [
     "ApiToken",
     "BatchJob",
     "BatchJobLog",
+    "CreditHold",
     "CreditRequest",
     "CreditRequestMessage",
     "CreditTransaction",
@@ -55,6 +56,7 @@ from app.models.alert_rule import AlertRule as AlertRule
 from app.models.api_token import ApiToken as ApiToken
 from app.models.batch_job import BatchJob as BatchJob
 from app.models.batch_job import BatchJobLog as BatchJobLog
+from app.models.credit_hold import CreditHold as CreditHold
 from app.models.credit_request import CreditRequest as CreditRequest
 from app.models.credit_request import CreditRequestMessage as CreditRequestMessage
 from app.models.credit_transaction import CreditTransaction as CreditTransaction

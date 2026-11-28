@@ -148,11 +148,13 @@ class BatchJob(Base):
     log_size_bytes = Column(Integer, nullable=False, default=0, server_default="0")
     log_expires_at = Column(DateTime, nullable=True)
 
-    # Zero-cost pilot by default; paid fields stay ready for a proven settlement contract.
     billing_mode = Column(
         String(20), nullable=False, default="zero_cost", server_default="zero_cost"
     )
     charged_credits = Column(Integer, nullable=False, default=0, server_default="0")
+    authorized_credits = Column(Integer, nullable=False, default=0, server_default="0")
+    billing_rate_per_hour = Column(Integer, nullable=False, default=0, server_default="0")
+    billing_state = Column(String(20), nullable=False, default="none", server_default="none")
     billing_transaction_id = Column(UUID(as_uuid=True), nullable=True)
 
     created_at = Column(DateTime, nullable=False, default=utc_now)

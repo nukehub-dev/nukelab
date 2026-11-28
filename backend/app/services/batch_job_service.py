@@ -57,6 +57,12 @@ from app.schemas.batch_job import (
 )
 from app.schemas.environment_manifest import canonical_json
 from app.services.admission_service import acquire_admission_lock
+from app.services.credit_hold_service import (
+    HELD,
+    RELEASED,
+    CreditHoldError,
+    CreditHoldService,
+)
 from app.services.environment_revision_service import (
     EnvironmentRevisionService,
     RevisionUnavailable,
@@ -92,6 +98,7 @@ _REASON_MESSAGES = {
     "queue_expired": "The queued job expired. Submit a new job.",
     "storage_limits_unenforced": "Writable storage limits are not kernel-enforced on this host.",
     "insufficient_credits": "The account does not have enough credits.",
+    "billing_unavailable": "Job credit authorization is unavailable. Submit a new job.",
     "job_deadline_exceeded": "The job exceeded its maximum runtime.",
     "recovery_required": (
         "Job outcome requires operator verification. Contact support before resubmitting."
@@ -200,6 +207,16 @@ def _request_fingerprint(payload: dict[str, Any]) -> str:
     return hashlib.sha256(canonical_json(payload).encode()).hexdigest()
 
 
+def _ceil_div(numerator: int, denominator: int) -> int:
+    return -(-numerator // denominator)
+
+
+def _authorized_credits(rate_per_hour: int, max_runtime_seconds: int) -> int:
+    if rate_per_hour <= 0:
+        return 0
+    return max(1, _ceil_div(rate_per_hour * max_runtime_seconds, 3600))
+
+
 def _idempotency_key_hash(key: str) -> str:
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
@@ -258,8 +275,8 @@ class BatchJobService:
             reason_code = "storage_limits_unenforced"
         else:
             reason_code = None
-        # Paid settlement is not implemented in this release; never advertise it.
-        billing_mode: BillingMode = "zero_cost"
+        # Paid plans are advertised only when the operator enables settlement.
+        billing_mode: BillingMode = "paid" if settings.batch_jobs_allow_paid_plans else "zero_cost"
         return JobCapabilitiesResponse(
             enabled=enabled,
             can_submit=can_submit,
@@ -387,7 +404,9 @@ class BatchJobService:
             raise JobError("revision_unavailable", 422, field="revision_id")
 
         now = utc_now()
-        billing_mode: BillingMode = "zero_cost"
+        rate_per_hour = int(plan.cost_per_hour or 0)
+        billing_mode: BillingMode = "paid" if rate_per_hour > 0 else "zero_cost"
+        authorized_credits = _authorized_credits(rate_per_hour, max_runtime_seconds)
         job = BatchJob(
             user_id=user.id,
             name=name,
@@ -409,14 +428,38 @@ class BatchJobService:
             fencing_token=uuid.uuid4(),
             billing_mode=billing_mode,
             charged_credits=0,
+            authorized_credits=authorized_credits,
+            billing_rate_per_hour=rate_per_hour,
+            billing_state=HELD if billing_mode == "paid" else "none",
             log_state="pending",
             log_truncated=False,
             log_size_bytes=0,
             created_at=now,
             updated_at=now,
         )
+        if billing_mode == "paid":
+            # Serialize paid balance reservation with interactive launch/queue
+            # reservation. Lock order is admission -> user -> hold; the job row
+            # and hold commit together so a failed hold leaves no job.
+            if not self.db.in_transaction():
+                await self.db.begin()
+            await acquire_admission_lock(self.db)
         self.db.add(job)
         try:
+            await self.db.flush()
+            if billing_mode == "paid":
+                try:
+                    await CreditHoldService.create_hold(
+                        self.db,
+                        user_id=user.id,
+                        job_id=job.id,
+                        amount=authorized_credits,
+                    )
+                except CreditHoldError as exc:
+                    await self.db.rollback()
+                    if exc.code == "insufficient_credits":
+                        raise JobError("insufficient_credits", 402) from None
+                    raise JobError("billing_unavailable", 409) from None
             await self.db.commit()
         except IntegrityError as exc:
             await self.db.rollback()
@@ -489,7 +532,7 @@ class BatchJobService:
             raise JobError("plan_unavailable", 422, field="plan_id")
         if (plan.gpu_limit or 0) != 0:
             raise JobError("plan_unavailable", 422, field="plan_id")
-        if (plan.cost_per_hour or 0) > 0:
+        if (plan.cost_per_hour or 0) > 0 and not settings.batch_jobs_allow_paid_plans:
             raise JobError("paid_plan_unsupported", 422, field="plan_id")
         return plan
 
@@ -627,6 +670,10 @@ class BatchJobService:
                 job.proof_class = "control_plane"
                 job.reservation_active = False
                 job.updated_at = now
+                released = await CreditHoldService.release(self.db, job.id)
+                if released or job.billing_state == HELD or job.billing_mode == "paid":
+                    job.billing_state = RELEASED
+                    job.charged_credits = 0
             elif job.state in ("starting", "running"):
                 job.state = "cancelling"
                 job.reason_code = "cancellation_requested"
@@ -834,7 +881,13 @@ def _detail(
                 (payload.expires_at if payload is not None else None) or job.log_expires_at
             ),
         ),
-        billing=JobBilling(mode=billing_mode, charged=int(job.charged_credits or 0)),
+        billing=JobBilling(
+            mode=billing_mode,
+            charged=int(job.charged_credits or 0),
+            authorized=int(job.authorized_credits or 0),
+            rate_per_hour=int(job.billing_rate_per_hour or 0),
+            state=job.billing_state or "none",
+        ),
     )
 
 
