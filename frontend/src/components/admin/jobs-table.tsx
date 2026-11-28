@@ -1,7 +1,16 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { AlertTriangle, Clock, HeartPulse, Inbox, ShieldCheck, Terminal, Timer } from 'lucide-react'
+import {
+  AlertTriangle,
+  Clock,
+  HeartPulse,
+  Inbox,
+  ShieldCheck,
+  Terminal,
+  Timer,
+  Wrench,
+} from 'lucide-react'
 import { DataTable } from '../data/data-table'
 import { useIsDesktopViewport } from '../../hooks/use-is-desktop'
 import { Button } from '../ui/button'
@@ -35,10 +44,12 @@ interface AdminJobsTableProps {
   isError?: boolean
   errorMessage?: string
   hasFilters?: boolean
+  canManage?: boolean
   onClearFilters?: () => void
   onPageChange: (page: number) => void
   onLimitChange: (limit: number) => void
   onRetry?: () => void
+  onReconcile?: (entry: AdminJobEntry) => void
   density?: 'compact' | 'comfortable'
 }
 
@@ -110,7 +121,39 @@ function JobEvidenceCell({ entry }: { entry: AdminJobEntry }) {
   )
 }
 
-export function AdminJobMobileCard({ entry }: { entry: AdminJobEntry }) {
+function JobActionCell({
+  entry,
+  onReconcile,
+}: {
+  entry: AdminJobEntry
+  onReconcile?: (entry: AdminJobEntry) => void
+}) {
+  if (!entry.can_reconcile || !onReconcile) {
+    return <span className="text-xs text-muted-foreground">—</span>
+  }
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className="gap-1.5"
+      aria-label={`Reconcile job ${shortAdminJobReference(entry.id)}`}
+      data-testid={`admin-job-reconcile-${entry.id}`}
+      onClick={() => onReconcile(entry)}
+    >
+      <Wrench className="h-3.5 w-3.5" />
+      Reconcile
+    </Button>
+  )
+}
+
+export function AdminJobMobileCard({
+  entry,
+  onReconcile,
+}: {
+  entry: AdminJobEntry
+  onReconcile?: (entry: AdminJobEntry) => void
+}) {
   const recovery = isAdminJobRecoveryRequired(entry.state)
   const reason = adminJobReasonPresentation(entry.reason_code)
   return (
@@ -165,15 +208,31 @@ export function AdminJobMobileCard({ entry }: { entry: AdminJobEntry }) {
 
       {recovery ? (
         <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-          Uncertain outcome. Follow the operator recovery procedure; no manual release exists and
-          the reservation and volume guard stay in place until runtime proof is available.
+          Uncertain outcome. Proof-backed reconciliation is the only recovery action; it cannot
+          force a state, and the reservation and volume guard stay in place until runtime proof is
+          available.
         </p>
       ) : (
         entry.guard_active && (
           <p className="rounded-lg border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">
-            The volume guard is still active. Read-only view; no release control is exposed.
+            The volume guard is still active. No release control is exposed without runtime proof.
           </p>
         )
+      )}
+
+      {onReconcile && entry.can_reconcile && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="w-full gap-1.5"
+          aria-label={`Reconcile job ${shortAdminJobReference(entry.id)}`}
+          data-testid={`admin-job-card-reconcile-${entry.id}`}
+          onClick={() => onReconcile(entry)}
+        >
+          <Wrench className="h-3.5 w-3.5" />
+          Reconcile with proof
+        </Button>
       )}
     </div>
   )
@@ -211,8 +270,9 @@ function JobsEmptyState({
 }
 
 /**
- * Bounded, read-only job table. It intentionally has no row actions: there is
- * no admin cancel, retry, log, argv, or reconcile control for this view.
+ * Bounded job table. Only operators with manage permission see a row action,
+ * and only when the server marks the row reconcilable. It still exposes no
+ * admin cancel, retry, log, argv, or raw runtime control.
  */
 export function AdminJobsTable({
   entries,
@@ -224,10 +284,12 @@ export function AdminJobsTable({
   isError = false,
   errorMessage,
   hasFilters = false,
+  canManage = false,
   onClearFilters,
   onPageChange,
   onLimitChange,
   onRetry,
+  onReconcile,
   density = 'comfortable',
 }: AdminJobsTableProps) {
   const isDesktop = useIsDesktopViewport()
@@ -290,6 +352,15 @@ export function AdminJobsTable({
     },
   ]
 
+  if (canManage && onReconcile) {
+    columns.push({
+      id: 'action',
+      header: 'Action',
+      enableSorting: false,
+      cell: ({ row }) => <JobActionCell entry={row.original} onReconcile={onReconcile} />,
+    })
+  }
+
   return (
     <DataTable
       columns={columns}
@@ -315,7 +386,9 @@ export function AdminJobsTable({
       filters={[]}
       searchable={false}
       emptyState={<JobsEmptyState hasFilters={hasFilters} onClearFilters={onClearFilters} />}
-      mobileCardRenderer={(entry) => <AdminJobMobileCard entry={entry} />}
+      mobileCardRenderer={(entry) => (
+        <AdminJobMobileCard entry={entry} onReconcile={canManage ? onReconcile : undefined} />
+      )}
       enableRowSelection={false}
       defaultMobileView={!isDesktop}
       density={density}

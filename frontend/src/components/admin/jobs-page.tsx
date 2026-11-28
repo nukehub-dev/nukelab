@@ -7,19 +7,29 @@ import { ResourcePageLayout } from '../layout/resource-page-layout'
 import { Button } from '../ui/button'
 import { Select, SelectItem } from '../ui/select'
 import { AdminJobsTable } from './jobs-table'
-import { useAdminJobs } from '../../hooks/use-admin-jobs'
+import { AdminJobReconcileDialog, AdminJobReconcileOutcome } from './job-reconcile-dialog'
+import { useAdminJobs, useReconcileAdminJob } from '../../hooks/use-admin-jobs'
 import { useDataTable } from '../../hooks/use-data-table'
 import { usePageGuard } from '../../hooks/use-page-guard'
 import {
   ADMIN_JOB_AGE_OPTIONS,
   ADMIN_JOB_READ_PERMISSIONS,
+  adminJobAccess,
+  adminJobReconcileErrorInfo,
   adminJobsLoadErrorInfo,
   emptyAdminJobSummary,
   sanitizeAdminJobSummary,
   type AdminJobAgeFilter,
 } from '../../lib/admin-jobs'
+import type { AdminJobReconcileErrorInfo } from '../../lib/admin-jobs'
+import { useAuthStore } from '../../stores/auth-store'
 import { useThemeStore } from '../../stores/theme-store'
-import type { AdminJobFilters, AdminJobListState } from '../../types/admin-jobs'
+import type {
+  AdminJobEntry,
+  AdminJobFilters,
+  AdminJobListState,
+  AdminJobReconcileResult,
+} from '../../types/admin-jobs'
 
 const STATE_OPTIONS: Array<{ value: AdminJobListState; label: string }> = [
   { value: 'all', label: 'All jobs' },
@@ -52,6 +62,46 @@ export function AdminJobsPageContent() {
   const hasFilters = stateFilter !== 'all' || ageFilter !== 'all'
   const activeCount = summary.queued + summary.starting + summary.running + summary.cancelling
   const failedCount = summary.failed + summary.timed_out
+
+  const canManage = useAuthStore(
+    (state) => adminJobAccess((permissions) => state.hasAllPermissions(permissions)).canManage
+  )
+  const reconcile = useReconcileAdminJob()
+  const [reconcileEntry, setReconcileEntry] = useState<AdminJobEntry | null>(null)
+  const [reconcileResult, setReconcileResult] = useState<AdminJobReconcileResult | null>(null)
+  const [reconcileError, setReconcileError] = useState<AdminJobReconcileErrorInfo | null>(null)
+
+  const openReconcile = (entry: AdminJobEntry) => {
+    if (!canManage || !entry.can_reconcile) return
+    reconcile.reset()
+    setReconcileError(null)
+    setReconcileEntry(entry)
+  }
+
+  const closeReconcile = () => {
+    if (reconcile.isPending) return
+    setReconcileEntry(null)
+    setReconcileError(null)
+  }
+
+  const submitReconcile = (reason: string) => {
+    if (!reconcileEntry) return
+    setReconcileError(null)
+    reconcile.mutate(
+      { id: reconcileEntry.id, reason },
+      {
+        onSuccess: (result) => {
+          setReconcileError(null)
+          setReconcileResult(result)
+          setReconcileEntry(null)
+        },
+        onError: (mutationError) => {
+          setReconcileResult(null)
+          setReconcileError(adminJobReconcileErrorInfo(mutationError))
+        },
+      }
+    )
+  }
 
   const clearFilters = () => {
     setStateFilter('all')
@@ -111,14 +161,22 @@ export function AdminJobsPageContent() {
         <div className="bubble flex items-start gap-3 p-4">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <div className="min-w-0">
-            <p className="text-sm font-medium">Read-only operator visibility</p>
+            <p className="text-sm font-medium">Proof-backed recovery only</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Command arguments, logs, and environment values stay with the job owner. Uncertain
-              jobs require the operator recovery procedure; there is no manual release or reconcile
-              action, and reservations or volume guards stay in place until runtime proof exists.
+              Command arguments, logs, and environment values stay with the job owner. Reconcile is
+              offered only when the server marks a job reconcilable and only to operators with
+              manage permission. It reruns read-only proof inspection; it cannot force a state or
+              release a reservation or volume guard. There is no manual release or cancel control.
             </p>
           </div>
         </div>
+
+        {reconcileResult && (
+          <AdminJobReconcileOutcome
+            result={reconcileResult}
+            onDismiss={() => setReconcileResult(null)}
+          />
+        )}
 
         <div className="bubble space-y-3 p-4">
           <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -192,13 +250,25 @@ export function AdminJobsPageContent() {
           isError={isError}
           errorMessage={isError ? adminJobsLoadErrorInfo(error).message : undefined}
           hasFilters={hasFilters}
+          canManage={canManage}
           onClearFilters={clearFilters}
           onPageChange={setPage}
           onLimitChange={setLimit}
           onRetry={() => void refetch()}
+          onReconcile={openReconcile}
           density={density}
         />
       </ResourcePageLayout>
+
+      {reconcileEntry && (
+        <AdminJobReconcileDialog
+          entry={reconcileEntry}
+          busy={reconcile.isPending}
+          error={reconcileError}
+          onSubmit={submitReconcile}
+          onClose={closeReconcile}
+        />
+      )}
     </div>
   )
 }

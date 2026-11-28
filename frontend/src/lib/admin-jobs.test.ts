@@ -4,7 +4,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from './api'
 import {
+  ADMIN_JOB_MANAGE_PERMISSIONS,
   ADMIN_JOB_READ_PERMISSIONS,
+  ADMIN_JOB_REASON_MAX_LENGTH,
+  ADMIN_JOB_REASON_MIN_LENGTH,
+  AdminJobReconcileRequestError,
   adminJobAccess,
   adminJobCleanupStateLabel,
   adminJobCreatedLabel,
@@ -13,19 +17,27 @@ import {
   adminJobLogStateLabel,
   adminJobOwnerLabel,
   adminJobPlanLabel,
+  adminJobProofSourceLabel,
   adminJobReasonPresentation,
+  adminJobReasonValidationError,
+  adminJobReconcileErrorInfo,
+  adminJobReconcilePath,
   adminJobStatePresentation,
   adminJobVolumeLabel,
   adminJobsLoadErrorInfo,
   adminJobsPath,
   buildAdminJobsQuery,
+  canSubmitAdminJobReason,
   emptyAdminJobSummary,
   fetchAdminJobs,
   isAdminJobActive,
   isAdminJobRecoveryRequired,
+  normalizeAdminJobReason,
+  reconcileAdminJob,
   safeAdminJobCode,
   sanitizeAdminJobEntry,
   sanitizeAdminJobPage,
+  sanitizeAdminJobReconcileResult,
   sanitizeAdminJobSummary,
   shortAdminJobReference,
 } from './admin-jobs'
@@ -104,12 +116,41 @@ afterEach(() => {
 })
 
 describe('admin jobs access', () => {
-  it('requires both operations read and admin access', () => {
+  it('requires both operations read and admin access to read', () => {
     expect([...ADMIN_JOB_READ_PERMISSIONS]).toEqual(['operations:read_all', 'admin:access'])
-    expect(adminJobAccess(granted([...ADMIN_JOB_READ_PERMISSIONS]))).toEqual({ canRead: true })
-    expect(adminJobAccess(granted(['operations:read_all']))).toEqual({ canRead: false })
-    expect(adminJobAccess(granted(['admin:access']))).toEqual({ canRead: false })
-    expect(adminJobAccess(granted([]))).toEqual({ canRead: false })
+    expect(adminJobAccess(granted([...ADMIN_JOB_READ_PERMISSIONS]))).toEqual({
+      canRead: true,
+      canManage: false,
+    })
+    expect(adminJobAccess(granted(['operations:read_all']))).toEqual({
+      canRead: false,
+      canManage: false,
+    })
+    expect(adminJobAccess(granted(['admin:access']))).toEqual({
+      canRead: false,
+      canManage: false,
+    })
+    expect(adminJobAccess(granted([]))).toEqual({ canRead: false, canManage: false })
+  })
+
+  it('requires operations manage plus the read permissions for reconcile', () => {
+    expect([...ADMIN_JOB_MANAGE_PERMISSIONS]).toEqual([
+      'operations:manage_all',
+      'operations:read_all',
+      'admin:access',
+    ])
+    expect(adminJobAccess(granted([...ADMIN_JOB_MANAGE_PERMISSIONS]))).toEqual({
+      canRead: true,
+      canManage: true,
+    })
+    expect(adminJobAccess(granted(['operations:manage_all', 'admin:access']))).toEqual({
+      canRead: false,
+      canManage: false,
+    })
+    expect(adminJobAccess(granted(['operations:manage_all', 'operations:read_all']))).toEqual({
+      canRead: false,
+      canManage: false,
+    })
   })
 })
 
@@ -239,6 +280,165 @@ describe('admin jobs filters and transport', () => {
       code: null,
       message: 'Could not load batch jobs. Try again.',
     })
+  })
+})
+
+describe('admin jobs reconcile', () => {
+  function reconcilePayload(overrides: Record<string, unknown> = {}) {
+    return {
+      job: entry({ state: 'succeeded', can_reconcile: false }),
+      applied: true,
+      already_terminal: false,
+      outcome: 'applied',
+      terminal_state: 'succeeded',
+      proof_source: 'executor_absent',
+      reason_code: null,
+      ...overrides,
+    }
+  }
+
+  it('trims and bounds the reason between 8 and 500 characters', () => {
+    expect(ADMIN_JOB_REASON_MIN_LENGTH).toBe(8)
+    expect(ADMIN_JOB_REASON_MAX_LENGTH).toBe(500)
+    expect(adminJobReasonValidationError('')).toBe('Enter a reason.')
+    expect(adminJobReasonValidationError('   ')).toBe('Enter a reason.')
+    expect(adminJobReasonValidationError('short')).toBe('Reason must be at least 8 characters.')
+    expect(adminJobReasonValidationError('12345678')).toBeNull()
+    expect(adminJobReasonValidationError(` ${'x'.repeat(8)} `)).toBeNull()
+    expect(adminJobReasonValidationError('x'.repeat(501))).toBe(
+      'Reason must be 500 characters or fewer.'
+    )
+    expect(adminJobReasonValidationError('valid\u0007reason')).toBe(
+      'Reason must not contain control characters.'
+    )
+    expect(normalizeAdminJobReason('  operator checked proof  ')).toBe('operator checked proof')
+    expect(canSubmitAdminJobReason('12345678', false)).toBe(true)
+    expect(canSubmitAdminJobReason('12345678', true)).toBe(false)
+    expect(canSubmitAdminJobReason('short', false)).toBe(false)
+  })
+
+  it('posts the bounded reason and sanitizes the proof result', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(
+        reconcilePayload({
+          job: {
+            ...entry({ state: 'succeeded', can_reconcile: false }),
+            argv: ['python', '/work/secret.py'],
+            logs: { text: 'log-secret output' },
+          },
+          raw_runtime: '/var/lib/private/runtime',
+        })
+      )
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const reason = '  operator verified executor termination  '
+    const result = await reconcileAdminJob(jobId, reason)
+
+    expect(result.outcome).toBe('applied')
+    expect(result.applied).toBe(true)
+    expect(result.terminal_state).toBe('succeeded')
+    expect(result.job).not.toHaveProperty('argv')
+    expect(result.job).not.toHaveProperty('logs')
+    expect(result).not.toHaveProperty('raw_runtime')
+    expect(adminJobReconcilePath(jobId)).toBe(`/admin/jobs/${jobId}/reconcile`)
+    expect(fetchMock.mock.calls[0][0]).toBe(`/api/admin/jobs/${jobId}/reconcile`)
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ reason: 'operator verified executor termination' }),
+    })
+  })
+
+  it('keeps the row unchanged when proof is insufficient', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            detail: {
+              code: 'proof_insufficient',
+              message: 'raw /var/lib/private/runtime payload',
+            },
+          },
+          409
+        )
+      )
+    )
+
+    const error = await reconcileAdminJob(jobId, 'operator checked the runtime').catch(
+      (reason: unknown) => reason
+    )
+
+    expect(error).toBeInstanceOf(AdminJobReconcileRequestError)
+    expect(error).toMatchObject({ status: 409, code: 'proof_insufficient' })
+    expect((error as Error).message).not.toContain('/var/lib/private')
+    expect(adminJobReconcileErrorInfo(error)).toEqual({
+      code: 'proof_insufficient',
+      message:
+        'Proof is still insufficient. No job state, reservation, or volume guard was changed.',
+    })
+  })
+
+  it('maps 409 not-reconcilable and 404 not-found to bounded messages', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ detail: { code: 'job_not_reconcilable' } }, 409))
+    )
+    const notReconcilable = await reconcileAdminJob(jobId, 'operator checked the runtime').catch(
+      (reason: unknown) => reason
+    )
+    expect(adminJobReconcileErrorInfo(notReconcilable)).toEqual({
+      code: 'job_not_reconcilable',
+      message:
+        'This job is already terminal or no longer reconcilable. Refresh the list to see its current state.',
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ detail: { code: 'job_not_found' } }, 404))
+    )
+    const notFound = await reconcileAdminJob(jobId, 'operator checked the runtime').catch(
+      (reason: unknown) => reason
+    )
+    expect(adminJobReconcileErrorInfo(notFound)).toEqual({
+      code: 'job_not_found',
+      message: 'The job no longer exists. Refresh the list and try again.',
+    })
+  })
+
+  it('rejects an invalid reason before making a request', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await reconcileAdminJob(jobId, 'short').catch((reason: unknown) => reason)
+
+    expect(error).toMatchObject({ status: 422, code: 'invalid_reason' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('normalizes bounded outcome fields and labels proof sources', () => {
+    expect(sanitizeAdminJobEntry(entry({ can_reconcile: true })).can_reconcile).toBe(true)
+    expect(
+      sanitizeAdminJobEntry(entry({ id: 'not-a-uuid', can_reconcile: true })).can_reconcile
+    ).toBe(false)
+
+    const result = sanitizeAdminJobReconcileResult(
+      reconcilePayload({
+        outcome: 'unexpected',
+        applied: false,
+        already_terminal: true,
+        terminal_state: '/private/path',
+        proof_source: 'executor_absent',
+        reason_code: 'password=secret',
+      })
+    )
+
+    expect(result.outcome).toBe('already_terminal')
+    expect(result.terminal_state).toBeNull()
+    expect(result.proof_source).toBe('executor_absent')
+    expect(result.reason_code).toBeNull()
+    expect(adminJobProofSourceLabel(result.proof_source)).toBe('Executor absent')
+    expect(adminJobProofSourceLabel('/private/path')).toBe('Not reported')
   })
 })
 

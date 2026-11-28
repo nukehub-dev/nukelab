@@ -10,6 +10,8 @@ import type {
   AdminJobFilters,
   AdminJobListState,
   AdminJobPage,
+  AdminJobReconcileOutcome,
+  AdminJobReconcileResult,
   AdminJobState,
   AdminJobSummary,
 } from '../types/admin-jobs'
@@ -18,6 +20,14 @@ export const ADMIN_JOB_READ_PERMISSIONS = [
   PERMISSIONS.OPERATIONS_READ_ALL,
   PERMISSIONS.ADMIN_ACCESS,
 ] as const
+
+export const ADMIN_JOB_MANAGE_PERMISSIONS = [
+  PERMISSIONS.OPERATIONS_MANAGE_ALL,
+  ...ADMIN_JOB_READ_PERMISSIONS,
+] as const
+
+export const ADMIN_JOB_REASON_MIN_LENGTH = 8
+export const ADMIN_JOB_REASON_MAX_LENGTH = 500
 
 export const ADMIN_JOB_STATES: readonly AdminJobState[] = [
   'queued',
@@ -55,15 +65,46 @@ export type AdminJobAgeFilter = (typeof ADMIN_JOB_AGE_OPTIONS)[number]['value']
 
 export interface AdminJobAccess {
   canRead: boolean
+  canManage: boolean
 }
 
-/** The admin jobs view is strictly read-only; no manage permission exists. */
+/** Reads need read_all; the proof-only reconcile action needs manage_all. */
 export function adminJobAccess(
   hasAllPermissions: (permissions: string[]) => boolean
 ): AdminJobAccess {
   return {
     canRead: hasAllPermissions([...ADMIN_JOB_READ_PERMISSIONS]),
+    canManage: hasAllPermissions([...ADMIN_JOB_MANAGE_PERMISSIONS]),
   }
+}
+
+export function normalizeAdminJobReason(value: string): string {
+  return value.trim()
+}
+
+/** Reasons are trimmed, bounded, and never blank before they reach the API. */
+export function adminJobReasonValidationError(value: string): string | null {
+  const reason = normalizeAdminJobReason(value)
+  if (!reason) return 'Enter a reason.'
+  if (Array.from(reason).length < ADMIN_JOB_REASON_MIN_LENGTH) {
+    return `Reason must be at least ${ADMIN_JOB_REASON_MIN_LENGTH} characters.`
+  }
+  if (Array.from(reason).length > ADMIN_JOB_REASON_MAX_LENGTH) {
+    return `Reason must be ${ADMIN_JOB_REASON_MAX_LENGTH} characters or fewer.`
+  }
+  if (
+    Array.from(reason).some((character) => {
+      const code = character.codePointAt(0) ?? 0
+      return code < 32 || code === 127
+    })
+  ) {
+    return 'Reason must not contain control characters.'
+  }
+  return null
+}
+
+export function canSubmitAdminJobReason(reason: string, busy: boolean): boolean {
+  return !busy && adminJobReasonValidationError(reason) === null
 }
 
 export type AdminJobStatusTone =
@@ -237,6 +278,22 @@ export function adminJobCleanupStateLabel(value: unknown): string {
   return labels[code] ?? humanizeCode(code)
 }
 
+const PROOF_SOURCE_LABELS: Record<string, string> = {
+  executor_absent: 'Executor absent',
+  executor_exited: 'Executor exited',
+  runtime_absent: 'Runtime absent',
+  runtime_exited: 'Runtime exited',
+  labels_verified: 'Runtime labels verified',
+  exit_evidence: 'Exit evidence verified',
+  none: 'No proof source',
+}
+
+export function adminJobProofSourceLabel(value: unknown): string {
+  const code = safeAdminJobCode(value)
+  if (!code) return 'Not reported'
+  return PROOF_SOURCE_LABELS[code] ?? humanizeCode(code)
+}
+
 export function adminJobHeartbeatLabel(seconds: unknown): string {
   if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return 'No heartbeat'
   return formatHeartbeatAge(seconds)
@@ -331,8 +388,9 @@ export function sanitizeAdminJobEntry(entry: AdminJobEntry): AdminJobEntry {
     log_state: safeAdminJobCode(entry.log_state) ?? 'unknown',
     cleanup_state: safeAdminJobCode(entry.cleanup_state) ?? 'unknown',
     cleanup_attempts: boundedInteger(entry.cleanup_attempts, 0, 2_000_000_000) ?? 0,
-    // No runtime finalizer exists for jobs in this release.
-    can_reconcile: false,
+    // Preserve the server's proof-backed action flag, but never for a row with
+    // an invalid reference that cannot address the reconcile endpoint.
+    can_reconcile: isAdminJobReference(entry.id) && entry.can_reconcile === true,
   }
 }
 
@@ -387,6 +445,10 @@ export function adminJobsPath(filters: AdminJobFilters = {}): string {
   return `/admin/jobs?${buildAdminJobsQuery(filters)}`
 }
 
+export function adminJobReconcilePath(id: string): string {
+  return `/admin/jobs/${encodeURIComponent(id)}/reconcile`
+}
+
 export function fetchAdminJobs(filters: AdminJobFilters = {}): Promise<AdminJobPage> {
   return api.get<AdminJobPage>(adminJobsPath(filters)).then((page) => sanitizeAdminJobPage(page))
 }
@@ -396,11 +458,27 @@ export interface AdminJobErrorInfo {
   message: string
 }
 
+export type AdminJobReconcileErrorInfo = AdminJobErrorInfo
+
+export class AdminJobReconcileRequestError extends Error {
+  readonly status: number
+  readonly code: string | null
+
+  constructor(message: string, status: number, code: string | null) {
+    super(message)
+    this.name = 'AdminJobReconcileRequestError'
+    this.status = status
+    this.code = code
+  }
+}
+
 function jobErrorStatus(error: unknown): number {
+  if (error instanceof AdminJobReconcileRequestError) return error.status
   return error instanceof ApiError ? error.status : 0
 }
 
 function jobErrorCode(error: unknown): string | null {
+  if (error instanceof AdminJobReconcileRequestError) return error.code
   if (error instanceof ApiError) return error.code ?? null
   if (error && typeof error === 'object' && 'code' in error) {
     const value = (error as { code?: unknown }).code
@@ -436,5 +514,137 @@ export function adminJobsLoadErrorInfo(error: unknown): AdminJobErrorInfo {
   return {
     code,
     message: 'Could not load batch jobs. Try again.',
+  }
+}
+
+const RECONCILE_OUTCOMES: readonly AdminJobReconcileOutcome[] = [
+  'applied',
+  'already_terminal',
+  'no_change',
+]
+
+function isAdminJobReconcileOutcome(value: unknown): value is AdminJobReconcileOutcome {
+  return typeof value === 'string' && (RECONCILE_OUTCOMES as readonly string[]).includes(value)
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function invalidReconcileResponse(): AdminJobReconcileRequestError {
+  return new AdminJobReconcileRequestError(
+    'The server returned an unexpected response. Refresh before retrying.',
+    200,
+    'invalid_response'
+  )
+}
+
+/**
+ * Normalizes the reconcile response before it reaches UI state. The server
+ * already strips argv, logs, environment values, and runtime identity; this
+ * keeps the dialog and result banner bounded even if the payload drifts.
+ */
+export function sanitizeAdminJobReconcileResult(value: unknown): AdminJobReconcileResult {
+  const record = asRecord(value)
+  const job = asRecord(record?.job)
+  if (!record || !job) throw invalidReconcileResponse()
+
+  const applied = record.applied === true
+  const alreadyTerminal = record.already_terminal === true
+  const outcome = isAdminJobReconcileOutcome(record.outcome)
+    ? record.outcome
+    : applied
+      ? 'applied'
+      : alreadyTerminal
+        ? 'already_terminal'
+        : 'no_change'
+
+  return {
+    job: sanitizeAdminJobEntry(job as unknown as AdminJobEntry),
+    applied,
+    already_terminal: alreadyTerminal,
+    outcome,
+    terminal_state: safeAdminJobCode(record.terminal_state),
+    proof_source: safeAdminJobCode(record.proof_source),
+    reason_code: safeAdminJobCode(record.reason_code),
+  }
+}
+
+export function adminJobReconcileErrorMessage(code: string | null, status: number): string {
+  switch (code) {
+    case 'proof_insufficient':
+      return 'Proof is still insufficient. No job state, reservation, or volume guard was changed.'
+    case 'job_not_reconcilable':
+      return 'This job is already terminal or no longer reconcilable. Refresh the list to see its current state.'
+    case 'job_not_found':
+      return 'The job no longer exists. Refresh the list and try again.'
+    case 'permission_denied':
+    case 'permission_revoked':
+      return 'You do not have permission to reconcile this job.'
+    case 'invalid_reason':
+      return `Enter a reason between ${ADMIN_JOB_REASON_MIN_LENGTH} and ${ADMIN_JOB_REASON_MAX_LENGTH} characters without control characters.`
+    case 'invalid_job_reference':
+      return 'This job reference is invalid. Refresh the list and try again.'
+    case 'invalid_response':
+      return 'The server returned an unexpected response. Refresh before retrying.'
+    default:
+      break
+  }
+  if (status === 404) return 'The job no longer exists. Refresh the list and try again.'
+  if (status === 403) return 'You do not have permission to reconcile this job.'
+  if (status === 422) {
+    return `Enter a reason between ${ADMIN_JOB_REASON_MIN_LENGTH} and ${ADMIN_JOB_REASON_MAX_LENGTH} characters without control characters.`
+  }
+  if (status === 503) {
+    return 'Job proof inspection is temporarily unavailable. Try again later. No change was made.'
+  }
+  if (status === 401) return 'Your session expired. Sign in again.'
+  if (status >= 500) return 'The server could not complete the request. No change was confirmed.'
+  if (status === 0) return 'The request could not reach the server. No change was confirmed.'
+  return 'The request failed. No change was confirmed.'
+}
+
+export function adminJobReconcileErrorInfo(error: unknown): AdminJobReconcileErrorInfo {
+  const code = jobErrorCode(error)
+  const status = jobErrorStatus(error)
+  return { code, message: adminJobReconcileErrorMessage(code, status) }
+}
+
+/**
+ * Submits a bounded reason and returns only the sanitized proof outcome.
+ * Validation and API failures are converted to a sanitized error so raw
+ * server payloads never reach the dialog.
+ */
+export async function reconcileAdminJob(
+  id: string,
+  reason: string
+): Promise<AdminJobReconcileResult> {
+  if (!isAdminJobReference(id)) {
+    throw new AdminJobReconcileRequestError(
+      'This job reference is invalid. Refresh the list and try again.',
+      422,
+      'invalid_job_reference'
+    )
+  }
+  const normalized = normalizeAdminJobReason(reason)
+  const validation = adminJobReasonValidationError(normalized)
+  if (validation) {
+    throw new AdminJobReconcileRequestError(validation, 422, 'invalid_reason')
+  }
+
+  try {
+    const body = await api.post<unknown>(adminJobReconcilePath(id), { reason: normalized })
+    return sanitizeAdminJobReconcileResult(body)
+  } catch (error) {
+    if (error instanceof AdminJobReconcileRequestError) throw error
+    const code = jobErrorCode(error)
+    const status = jobErrorStatus(error)
+    throw new AdminJobReconcileRequestError(
+      adminJobReconcileErrorMessage(code, status),
+      status,
+      code
+    )
   }
 }

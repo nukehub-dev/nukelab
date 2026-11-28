@@ -77,3 +77,24 @@ export interface AdminJobFilters {
   limit?: number
   offset?: number
 }
+
+export type AdminJobReconcileOutcome = 'applied' | 'already_terminal' | 'no_change'
+
+export interface AdminJobReconcileRequest {
+  reason: string
+}
+
+/**
+ * Sanitized result of a proof-backed reconcile. The server applies only a
+ * fenced terminal transition supported by runtime proof; ambiguous evidence
+ * returns `no_change` and releases nothing.
+ */
+export interface AdminJobReconcileResult {
+  job: AdminJobEntry
+  applied: boolean
+  already_terminal: boolean
+  outcome: AdminJobReconcileOutcome
+  terminal_state: string | null
+  proof_source: string | null
+  reason_code: string | null
+}
