@@ -39,6 +39,8 @@ export interface JobCapabilities {
   can_submit: boolean
   billing_mode: JobBillingMode
   secrets_enabled: boolean
+  storage_limits_enforced: boolean
+  storage_enforcement_required: boolean
   reason_code: string | null
   limits: JobLimits
 }

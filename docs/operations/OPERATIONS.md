@@ -581,9 +581,20 @@ cancelled by their owners or left to expire.
 Do not delete `batch_jobs`, `batch_job_logs`, `job_writer` volume-operation rows,
 or job containers to "clean up". A `recovery_required` job retains its
 reservation and volume guard; inspect it in `/jobs` or `/admin/jobs` and follow
-the [uncertain-work procedure](#113-investigating-uncertain-work). There is no
-proof-backed admin reconcile or manual reservation-release path in this release,
-so do not clear `reservation_active` or the guard by hand.
+the [uncertain-work procedure](#113-investigating-uncertain-work). An operator
+with `operations:manage_all` and `ADMIN_ACCESS` can open the job in `/admin/jobs`
+and choose **Reconcile**. The action requires a bounded reason and reruns the
+read-only classifier; it applies only an exited runtime with recorded identity
+and exit evidence, or an absent runtime behind a recorded checkpoint with a
+stale executor claim. A 409 `proof_insufficient` means nothing changed and the
+guard remains. There is no force or manual release path; never clear
+`reservation_active` or the guard by hand.
+
+Expired job logs are hidden at read time and then removed by the bounded
+`purge_batch_job_logs` Beat task; the terminal result, timestamps, billing, and
+cleanup state stay intact. A terminal job sends one deduplicated owner
+notification. Notification delivery failure does not change the result, reopen
+the job, or release protection.
 
 ## 12. Registry verification and environment revisions
 

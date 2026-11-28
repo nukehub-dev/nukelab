@@ -853,7 +853,7 @@ async def test_cancel_is_idempotent_and_running_cancel_releases_guard_once(
         second = await service.cancel(owner, queued_job_id)
     assert first.state == "cancelled"
     assert second.state == "cancelled"
-    assert second.charged_credits == 0
+    assert second.billing.charged == 0
     assert await _active_guards([fixture.volume_ids[1]]) == []
 
     running_job_id = fixture.job_ids[0]
@@ -866,7 +866,7 @@ async def test_cancel_is_idempotent_and_running_cancel_releases_guard_once(
         second = await service.cancel(owner, running_job_id)
     assert first.state == "cancelling"
     assert second.state == "cancelling"
-    assert second.charged_credits == 0
+    assert second.billing.charged == 0
     guards = await _active_guards([fixture.volume_ids[0]])
     assert len(guards) == 1
     assert guards[0].kind == "job_writer"

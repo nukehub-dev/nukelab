@@ -188,6 +188,9 @@ The owner/admin history surfaces remain readable while submission is disabled.
 | `BATCH_JOBS_MAX_INPUT_BYTES` | `16384` | Maximum combined UTF-8 argument bytes |
 | `BATCH_JOBS_LOG_TAIL_BYTES` | `262144` | Maximum retained log tail (256 KiB) |
 | `BATCH_JOBS_LOG_RETENTION_SECONDS` | `604800` | Read-time log retention (7 days) |
+| `BATCH_JOBS_LOG_PURGE_INTERVAL_SECONDS` | `3600` | Celery Beat cadence for the bounded physical log purge |
+| `BATCH_JOBS_LOG_PURGE_BATCH_SIZE` | `100` | Maximum expired log payload rows physically removed per purge pass |
+| `BATCH_JOBS_REQUIRE_STORAGE_ENFORCEMENT` | `false` | When true, capabilities and submission fail closed with `storage_limits_unenforced` unless the volume storage path has kernel-enforced XFS project quotas; admission keeps queued jobs waiting |
 | `BATCH_JOBS_MAX_ACTIVE_FLEET` | `5` | Maximum active job reservations platform-wide; `0` means unlimited |
 | `BATCH_JOBS_HEARTBEAT_STALE_SECONDS` | `90` | Heartbeat age that triggers inspection, never takeover |
 | `BATCH_JOBS_STOP_TIMEOUT_SECONDS` | `30` | Stop/cleanup timeout and `/work` preparation helper bound |

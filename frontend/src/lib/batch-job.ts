@@ -332,6 +332,8 @@ export function disabledJobCapabilities(reasonCode = 'feature_disabled'): JobCap
     can_submit: false,
     billing_mode: 'zero_cost',
     secrets_enabled: false,
+    storage_limits_enforced: false,
+    storage_enforcement_required: false,
     reason_code: reasonCode,
     limits: {
       max_active_jobs: 1,

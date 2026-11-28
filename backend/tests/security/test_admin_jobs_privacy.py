@@ -372,10 +372,18 @@ async def test_reconcile_response_and_audit_never_disclose_payloads(
     )
     job.volume_fencing_token = guard.fencing_token
     db_session.add(guard)
+    job_id = job.id
+    volume_id = volume.id
+    revision_id = revision.id
+    revision_fingerprint = str(revision.fingerprint)
+    job_fence = str(job.fencing_token)
+    volume_fence = str(job.volume_fencing_token)
+    executor_id = str(job.executor_id)
+    admin_id = admin_user.id
     await db_session.commit()
 
     response = await client.post(
-        f"/api/admin/jobs/{job.id}/reconcile",
+        f"/api/admin/jobs/{job_id}/reconcile",
         headers=auth(admin_token),
         json={"reason": "operator verified the absent recorded runtime"},
     )
@@ -392,12 +400,12 @@ async def test_reconcile_response_and_audit_never_disclose_payloads(
 
     forbidden = [
         *FORBIDDEN_VALUES,
-        str(volume.id),
-        str(revision.id),
-        str(revision.fingerprint),
-        str(job.fencing_token),
-        str(job.volume_fencing_token),
-        str(job.executor_id),
+        str(volume_id),
+        str(revision_id),
+        revision_fingerprint,
+        job_fence,
+        volume_fence,
+        executor_id,
     ]
     text = json.dumps(data)
     for value in forbidden:
@@ -408,7 +416,7 @@ async def test_reconcile_response_and_audit_never_disclose_payloads(
     logs = (
         await db_session.scalars(
             select(ActivityLog)
-            .where(ActivityLog.target_id == job.id)
+            .where(ActivityLog.target_id == job_id)
             .order_by(ActivityLog.created_at, ActivityLog.id)
         )
     ).all()
@@ -416,8 +424,8 @@ async def test_reconcile_response_and_audit_never_disclose_payloads(
     entry = logs[0]
     assert entry.action == "jobs.reconcile_applied"
     assert entry.target_type == "batch_job"
-    assert entry.target_id == job.id
-    assert entry.actor_id == admin_user.id
+    assert entry.target_id == job_id
+    assert entry.actor_id == admin_id
     assert set(entry.details) <= AUDIT_KEYS
     audit_text = json.dumps(entry.details)
     for value in forbidden:

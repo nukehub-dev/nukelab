@@ -480,18 +480,38 @@ export async function downloadVolumeText(
   request: APIRequestContext,
   token: string,
   volumeId: string,
-  relativePath: string
+  relativePath: string,
+  volumeName?: string
 ): Promise<string> {
   const response = await request.get(`/api/volumes/${volumeId}/download`, {
     headers: { Authorization: `Bearer ${token}` },
     params: { path: relativePath },
     timeout: 60_000,
   })
-  if (!response.ok()) {
-    throw new Error(
-      `Download ${relativePath} from volume ${volumeId} failed (${response.status()}): ` +
-        (await response.text()).slice(0, 300)
+  if (response.ok()) return response.text()
+  if (process.env.E2E_JOBS_VOLUME_READ === 'docker' && volumeName) {
+    // Local stacks may expose the Docker volume root only through the daemon.
+    // CI keeps the API download path authoritative; this opt-in fallback lets
+    // the runtime scenario prove the bytes without host root access.
+    const output = runDocker(
+      [
+        'run',
+        '--rm',
+        '--network',
+        'none',
+        '-v',
+        `${volumeName}:/work:ro`,
+        '--entrypoint',
+        '/bin/cat',
+        process.env.E2E_RUNTIME_IMAGE || 'nukelab-e2e-runtime:a',
+        `/work/${relativePath}`,
+      ],
+      60_000
     )
+    return output ? `${output}\n` : output
   }
-  return response.text()
+  throw new Error(
+    `Download ${relativePath} from volume ${volumeId} failed (${response.status()}): ` +
+      (await response.text()).slice(0, 300)
+  )
 }

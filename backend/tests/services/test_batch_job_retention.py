@@ -6,6 +6,7 @@
 from datetime import timedelta
 
 import pytest
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.time_utils import utc_now
@@ -172,6 +173,10 @@ async def test_purge_is_bounded_by_the_requested_batch_size():
             remaining = [await db.get(BatchJobLog, fixture.job_id) for fixture in fixtures]
         assert remaining == [None, None, None]
     finally:
+        async with AsyncSession(test_engine) as cleanup, cleanup.begin():
+            await cleanup.execute(
+                delete(BatchJob).where(BatchJob.id.in_([fixture.job_id for fixture in fixtures]))
+            )
         for fixture in fixtures:
             await cleanup_owner(fixture.owner_id)
 

@@ -188,9 +188,15 @@ test.describe('@jobs-runtime batch job', () => {
 
     const input = `jobs-runtime-input-${state.stamp}\n`
     seedJobVolume(state.volumeName, state.runtimeImage as string, INPUT_NAME, input)
-    expect(await downloadVolumeText(request, state.adminToken, state.volumeId, INPUT_NAME)).toBe(
-      input
-    )
+    expect(
+      await downloadVolumeText(
+        request,
+        state.adminToken,
+        state.volumeId,
+        INPUT_NAME,
+        state.volumeName
+      )
+    ).toBe(input)
   })
 
   test.afterAll(async ({ request }) => {
@@ -447,9 +453,9 @@ test.describe('@jobs-runtime batch job', () => {
       proof: 'runtime',
     })
     expect(finished.billing).toEqual({ mode: 'zero_cost', charged: 0 })
-    expect(await downloadVolumeText(request, token, state.volumeId, OUTPUT_NAME)).toBe(
-      expectedOutput
-    )
+    expect(
+      await downloadVolumeText(request, token, state.volumeId, OUTPUT_NAME, state.volumeName)
+    ).toBe(expectedOutput)
 
     const primaryLogs = await getJobLogs(request, token, primaryId)
     expectStatus(primaryLogs, 200, 'read primary logs')
@@ -469,9 +475,9 @@ test.describe('@jobs-runtime batch job', () => {
     expectStatus(persistedLogs, 200, 'read primary logs after cleanup')
     expect(persistedLogs.body?.state).toBe('available')
     expect(persistedLogs.body?.text).toContain(`job-stdout-${state.stamp}`)
-    expect(await downloadVolumeText(request, token, state.volumeId, OUTPUT_NAME)).toBe(
-      expectedOutput
-    )
+    expect(
+      await downloadVolumeText(request, token, state.volumeId, OUTPUT_NAME, state.volumeName)
+    ).toBe(expectedOutput)
 
     // ── Nonzero exit ───────────────────────────────────────────────────────
     const failing = await submit(

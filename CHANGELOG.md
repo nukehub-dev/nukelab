@@ -33,10 +33,21 @@ section.
   catalog defaults are preselected, stale saved plan/environment defaults are
   surfaced instead of submitted, and catalog failures no longer look like a
   missing catalog.
-- Read-only cross-owner batch-job visibility at `/admin/jobs` with sanitized
-  state, reason, owner/environment/plan/volume labels, reservation and
-  volume-guard flags, heartbeat age, and log/cleanup state. There is no admin
-  cancel, retry, reconcile, or manual-release action.
+- Sanitized cross-owner batch-job visibility at `/admin/jobs` with state,
+  reason, owner/environment/plan/volume labels, reservation and volume-guard
+  flags, heartbeat age, and log/cleanup state. Operators with
+  `operations:manage_all` get a proof-only reconcile action for
+  `recovery_required` rows; ambiguous evidence returns 409 and releases nothing.
+- Bounded physical purge of expired batch-job log payloads and one deduplicated
+  owner completion notification per terminal result. Purge preserves the
+  terminal result and metadata; notification failure never changes the result or
+  releases protection.
+- A read-only storage-enforcement capability probe. Capabilities report whether
+  the configured volume storage path has kernel-enforced XFS project quotas, and
+  `BATCH_JOBS_REQUIRE_STORAGE_ENFORCEMENT=true` fails submission/admission closed
+  instead of advertising an unenforced writable limit.
+- An explicit `@jobs-runtime` real-stack browser gate, a disposable fixture
+  seeder, and an opt-in worker/broker interruption drill workflow.
 - `./nukelabctl doctor --post-upgrade` verifies a running deployment read-only:
   service containers, public API health and release version, image identity,
   Alembic head compatibility, Celery worker/Beat presence, unresolved recovery
@@ -46,19 +57,23 @@ section.
 
 ### Changed
 
-- Batch dispatch, execution, monitoring, and recovery run from
-  `celery-worker`/Beat with configurable bounded intervals. Active batch
+- Batch dispatch, execution, monitoring, recovery, and expired-log purge run
+  from `celery-worker`/Beat with configurable bounded intervals. Active batch
   reservations participate in the existing resource-pool and quota accounting.
 - Volume mutation, backup/restore, mount intent, and deletion now share the
   `job_writer` exclusive guard, so a job's `/work` volume cannot change while
   the runtime outcome is unresolved.
+- The admin Jobs table keeps long owner/environment labels inside their columns
+  instead of overlapping protection evidence, with a browser layout regression.
 
 ### Security
 
 - Owner job routes require JWT and `jobs:read_own`/`jobs:write_own`; foreign job
   IDs return 404. Admin job rows require a JWT session plus `operations:read_all`
   and `ADMIN_ACCESS`, and never expose argv, logs, environment values, image
-  references, volume paths, runtime identity, or fencing tokens.
+  references, volume paths, runtime identity, or fencing tokens. Proof-only
+  reconcile additionally requires `operations:manage_all`, a bounded reason, and
+  a successful audit write; there is no force or manual-release path.
 - Batch containers run without network access, ports, capabilities, rootfs
   writes, restart policy, or platform credentials. Argument count/bytes, runtime,
   pids, memory, tmpfs, and log output are bounded; terminal release requires
@@ -69,25 +84,34 @@ section.
 - Batch submission remains disabled by default for the pilot. Zero-cost billing
   is the only implemented mode; `BATCH_JOBS_ALLOW_PAID_PLANS` is inert and paid
   credit settlement is not implemented.
-- No full API→PostgreSQL/Redis/Celery/Docker batch job has run end to end yet,
-  and the required disposable real-stack browser scenario plus worker-death/
-  broker-loss interruption drill are not wired into CI. No staging pinned
-  upgrade, rollback, off-host restore, or registry `preload_only` rehearsal has
-  completed. Writable `/work` disk enforcement and the last-slot capacity/volume
-  race remain a storage/staging gate.
-- Podman job enablement, scoped workload secrets, job completion notifications,
-  and an admin proof-backed reconcile/manual-release path remain pending.
+- The new explicit real-stack CI browser job and the nightly interruption-drill
+  workflow have not yet run on a GitHub runner. No staging pinned upgrade,
+  rollback, off-host restore, or registry `preload_only` rehearsal has completed.
+- The real-stack job, worker/broker interruption drill, and last-slot/volume
+  race suites passed locally on a disposable Docker stack. An actual over-cap
+  write on XFS project-quota storage still needs target-storage evidence; the
+  current host reports unenforced storage.
+- Podman job enablement and scoped workload secrets remain pending. Paid
+  settlement remains deferred and the pilot stays zero-cost.
 
 ### Verification
 
-- Backend full suite passed: 4,995 passed, 6 skipped, 0 failed.
-- Frontend unit tests (234), lint, format check, type check, and production build
+- Backend full suite passed: 5,088 passed, 6 skipped, 0 failed.
+- Frontend unit tests (246), lint, format check, type check, and production build
   passed.
 - Targeted mocked browser suites passed: jobs UI 11, guided first launch 9, admin
-  jobs UI 8, and the existing queue/admin-setup regressions 10.
-- A real Docker driver smoke passed for `/work` preparation, UID 65532, output,
-  timeout exit 124, stop exit 137, and cleanup. Shell lint and
-  `docker compose config -q` passed.
+  jobs UI 13, and the existing queue/admin-setup regressions 10.
+- A real API→PostgreSQL/Redis/Celery/Docker `@jobs-runtime` scenario passed on a
+  rebuilt disposable stack: capacity queueing, one hardened runtime (UID 65532,
+  read-only rootfs, `CapDrop=ALL`, no network, no ports, no restart), output and
+  bounded logs, nonzero exit, cancellation, owner isolation, and cleanup.
+- Worker-death and Redis-broker-loss interruption drills passed with one job row,
+  one create, one start, one terminal result, one released guard, zero negative
+  credit transactions, and cleanup complete.
+- Storage capability and last-slot/volume race suites passed; the host storage
+  root is not kernel-enforced, so the over-cap write remains a target-storage
+  gate. Shell lint, `docker compose config -q`, and `./nukelabctl selftest`
+  passed.
 
 ## [2.3.0] - 2026-11-22
 

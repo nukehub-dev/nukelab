@@ -268,12 +268,18 @@ BATCH_JOBS_ALLOWED_USER_IDS=<owner-uuid>[,<owner-uuid>]
 
 Keep the `BATCH_JOBS_*` runtime, interval and limit values consistent across the
 backend, worker and Beat; Beat schedules using the interval settings. An empty
-cohort falls back to `jobs:write_own`. Disabling submission later blocks only new
-submissions; existing jobs, history, logs and cancellation continue. Keep the
-worker and Beat running until no job is queued or active, and do not delete job
-rows, `job_writer` guards, or containers to drain the pilot. `recovery_required`
-jobs need operator inspection and there is no manual reservation-release path in
-this release.
+cohort falls back to `jobs:write_own`. For a writable production pilot, enable
+`BATCH_JOBS_REQUIRE_STORAGE_ENFORCEMENT=true` only after the volume storage path
+is XFS with `prjquota`/`pquota` and the backend has effective `CAP_SYS_ADMIN`.
+The capability probe is read-only; with enforcement required and unavailable,
+submission fails with `storage_limits_unenforced` instead of advertising an
+unenforced limit. Disabling submission later blocks only new submissions;
+existing jobs, history, logs and cancellation continue. Keep the worker and Beat
+running until no job is queued or active, and do not delete job rows,
+`job_writer` guards, or containers to drain the pilot. `recovery_required` jobs
+need operator inspection; proof-backed reconcile is available in `/admin/jobs`
+for operators with `operations:manage_all`, and ambiguous evidence releases
+nothing.
 
 The full rollout, verification and drain procedure is in
 [OPERATIONS.md](OPERATIONS.md#115-batch-job-rollout-and-drain), and the lifecycle is

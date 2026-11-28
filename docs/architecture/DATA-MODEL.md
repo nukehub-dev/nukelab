@@ -283,7 +283,8 @@ expiry `(queue_expires_at, id)`, active recovery
 `batch_job_logs` has one row per job: `job_id` primary key, bounded `text`,
 `encoding`, `truncated`, `size_bytes`, `captured_at`, and `expires_at`. Payloads
 are capped by `BATCH_JOBS_LOG_TAIL_BYTES` and hidden by the API after
-`expires_at`; this release has no background physical-purge job. See
+`expires_at`; the bounded `purge_batch_job_logs` task removes expired payload
+rows and leaves the terminal result and log metadata intact. See
 [BATCH-JOBS.md](BATCH-JOBS.md) for the lifecycle and admission contract.
 
 ### VolumeBackup and VolumeRestore

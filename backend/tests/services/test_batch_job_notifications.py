@@ -42,19 +42,20 @@ async def _notifications(db, user_id) -> list[Notification]:
 
 @pytest.mark.asyncio
 async def test_success_creates_one_bounded_notification(db_session, test_user):
+    user_id = test_user.id
     job_id = uuid.uuid4()
     created = await BatchJobNotifier(db_session).notify_terminal(
         job_id=job_id,
-        owner_id=test_user.id,
+        owner_id=user_id,
         job_name="  safe\n job  ",
         state="succeeded",
     )
 
     assert created is True
-    notifications = await _notifications(db_session, test_user.id)
+    notifications = await _notifications(db_session, user_id)
     assert len(notifications) == 1
     notification = notifications[0]
-    assert notification.user_id == test_user.id
+    assert notification.user_id == user_id
     assert notification.type == "job"
     assert notification.severity == "success"
     assert notification.action_url == f"/jobs/{job_id}"
@@ -69,16 +70,17 @@ async def test_success_creates_one_bounded_notification(db_session, test_user):
 
 @pytest.mark.asyncio
 async def test_failure_state_is_reported_without_extra_payload(db_session, test_user):
+    user_id = test_user.id
     job_id = uuid.uuid4()
     created = await BatchJobNotifier(db_session).notify_terminal(
         job_id=job_id,
-        owner_id=test_user.id,
+        owner_id=user_id,
         job_name="nightly check",
         state="failed",
     )
 
     assert created is True
-    notification = (await _notifications(db_session, test_user.id))[0]
+    notification = (await _notifications(db_session, user_id))[0]
     assert notification.severity == "error"
     assert "failed" in notification.title.lower()
     assert "failed" in notification.message
@@ -92,29 +94,31 @@ async def test_failure_state_is_reported_without_extra_payload(db_session, test_
 
 @pytest.mark.asyncio
 async def test_repeated_notification_creates_one_row(db_session, test_user):
+    user_id = test_user.id
     job_id = uuid.uuid4()
     notifier = BatchJobNotifier(db_session)
 
     first = await notifier.notify_terminal(
         job_id=job_id,
-        owner_id=test_user.id,
+        owner_id=user_id,
         job_name="repeat",
         state="succeeded",
     )
     second = await notifier.notify_terminal(
         job_id=job_id,
-        owner_id=test_user.id,
+        owner_id=user_id,
         job_name="repeat",
         state="succeeded",
     )
 
     assert first is True
     assert second is False
-    assert len(await _notifications(db_session, test_user.id)) == 1
+    assert len(await _notifications(db_session, user_id)) == 1
 
 
 @pytest.mark.asyncio
 async def test_suppressed_primary_event_falls_back_to_in_app(db_session, test_user):
+    user_id = test_user.id
     test_user.preferences = {
         "notifications": {
             "events": [
@@ -129,32 +133,33 @@ async def test_suppressed_primary_event_falls_back_to_in_app(db_session, test_us
 
     created = await BatchJobNotifier(db_session).notify_terminal(
         job_id=uuid.uuid4(),
-        owner_id=test_user.id,
+        owner_id=user_id,
         job_name="fallback",
         state="succeeded",
     )
 
     assert created is True
-    notifications = await _notifications(db_session, test_user.id)
+    notifications = await _notifications(db_session, user_id)
     assert len(notifications) == 1
     assert notifications[0].extra_data["event_key"] == EVENT_KEY
 
 
 @pytest.mark.asyncio
 async def test_delivery_failure_is_swallowed(db_session, test_user):
+    user_id = test_user.id
     with patch(
         "app.services.notification_service.NotificationService.create",
         side_effect=RuntimeError("notification store unavailable"),
     ):
         created = await BatchJobNotifier(db_session).notify_terminal(
             job_id=uuid.uuid4(),
-            owner_id=test_user.id,
+            owner_id=user_id,
             job_name="failure",
             state="succeeded",
         )
 
     assert created is False
-    assert await _notifications(db_session, test_user.id) == []
+    assert await _notifications(db_session, user_id) == []
 
 
 @pytest.mark.asyncio

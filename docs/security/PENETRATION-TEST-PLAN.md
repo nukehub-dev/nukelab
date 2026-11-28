@@ -503,8 +503,8 @@ Use CVSS 4.0 with the following mapping:
 ## Batch job controls
 
 Single-run batch jobs add an owner command surface, a headless runtime, and a
-read-only operator view. Test each control without treating a unit test as
-runtime proof.
+sanitized operator view with proof-only reconcile. Test each control without
+treating a unit test as runtime proof.
 
 | Control | Test focus | Regression evidence |
 |---|---|---|
@@ -512,12 +512,18 @@ runtime proof.
 | Submission policy | Cohort removal, revoked revision/permission, changed plan snapshot, paid/GPU plan, foreign/busy volume, and oversized argv/runtime fail without a reservation | [test_batch_job_admission.py](../../backend/tests/services/test_batch_job_admission.py), [test_batch_job_service.py](../../backend/tests/services/test_batch_job_service.py) |
 | Idempotency and replay | Reuse a key with the same payload returns the original job; a changed payload returns 409; broker redelivery cannot create a second runtime | [test_batch_job_admission.py](../../backend/tests/services/test_batch_job_admission.py), [test_batch_job_dispatch.py](../../backend/tests/services/test_batch_job_dispatch.py) |
 | Admin cross-owner privacy | `operations:read_all` + `ADMIN_ACCESS` + JWT are all required; owner names are bounded; argv, logs, environment values, image references, runtime identity, volume paths and fencing tokens never appear | [test_admin_jobs.py](../../backend/tests/api/test_admin_jobs.py), [test_admin_jobs_privacy.py](../../backend/tests/security/test_admin_jobs_privacy.py) |
+| Proof-only reconcile authorization | `operations:manage_all` + `ADMIN_ACCESS` + JWT and a bounded reason are required; ambiguous/running/non-recovery rows return 409 and release nothing; terminal rows are idempotent; audit failure blocks mutation; no force/override input is accepted | [test_admin_jobs.py](../../backend/tests/api/test_admin_jobs.py), [test_batch_job_recovery.py](../../backend/tests/services/test_batch_job_recovery.py), [test_admin_jobs_privacy.py](../../backend/tests/security/test_admin_jobs_privacy.py) |
+| Storage enforcement truthfulness | Capabilities report kernel enforcement; required-but-unenforced submission fails closed; admission leaves the job queued without a reservation or guard; the probe performs no writes | [test_batch_job_storage_capability.py](../../backend/tests/services/test_batch_job_storage_capability.py) |
+| Retention and completion delivery | Expired payloads are physically removed without altering the result; completion notifications are deduplicated, bounded, and best effort; delivery failure leaves the result and guard release intact | [test_batch_job_retention.py](../../backend/tests/services/test_batch_job_retention.py), [test_batch_job_notifications.py](../../backend/tests/services/test_batch_job_notifications.py) |
 | Exclusive volume writer guard | `job_writer` conflicts with file mutation, sharing/metadata changes, launch mounts, backup/restore, and deletion; an unrelated volume is unaffected; release requires termination proof | [test_batch_job_volume_guard.py](../../backend/tests/services/test_batch_job_volume_guard.py) |
 | Hardened headless runtime | Fixed UID 65532, read-only rootfs, `CapDrop=ALL`, no-new-privileges, no network/ports/restart, bounded pids/memory/tmpfs, literal argv, and `/work` preparation before the job; reject malformed mounts/labels/env | [test_batch_driver.py](../../backend/tests/container/test_batch_driver.py), [test_batch_job_runtime.py](../../backend/tests/services/test_batch_job_runtime.py) |
 | Bounded input, logs and deadlines | Argument/runtime bounds reject before admission; logs keep only the newest byte-bounded tail; the deadline starts at observed start and stop/settle precedence preserves a natural early exit | [test_batch_job_service.py](../../backend/tests/services/test_batch_job_service.py), [test_batch_job_monitor.py](../../backend/tests/services/test_batch_job_monitor.py) |
 | Cleanup and recovery | Lost create/start responses retain the reservation; stale heartbeats only inspect; `recovery_required` keeps the guard; cleanup failure is recorded and retried without reopening the result | [test_batch_job_runtime.py](../../backend/tests/services/test_batch_job_runtime.py), [test_batch_job_recovery.py](../../backend/tests/services/test_batch_job_recovery.py), [test_batch_job_workers.py](../../backend/tests/tasks/test_batch_job_workers.py) |
 
 Run runtime races only on an isolated daemon. The current release has a real
-Docker driver smoke for UID, `/work`, timeout and stop proof, but no full
-API→PostgreSQL/Redis/Celery/Docker job yet; an external assessment must not treat
-the mocked browser or service suites as that end-to-end proof.
+API→PostgreSQL/Redis/Celery/Docker `@jobs-runtime` scenario on a disposable
+Docker stack plus worker and broker interruption drills that prove one create,
+one start, one terminal result, one released guard, and zero billing. The new
+explicit CI browser job and the XFS over-cap write still require execution on
+their target environments; an external assessment must not treat the mocked
+browser or service suites as those proofs.

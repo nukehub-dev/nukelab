@@ -180,12 +180,12 @@ def _job(
         },
         reservation_active=reservation_active,
         volume_operation_id=overrides.pop("volume_operation_id", None),
-        runtime_identity={"path": "/var/lib/private/runtime"},
-        container_id="container-private-id",
-        container_name="nukelab-job-private-name",
-        executor_id=uuid.uuid4(),
+        runtime_identity=overrides.pop("runtime_identity", {"path": "/var/lib/private/runtime"}),
+        container_id=overrides.pop("container_id", "container-private-id"),
+        container_name=overrides.pop("container_name", "nukelab-job-private-name"),
+        executor_id=overrides.pop("executor_id", uuid.uuid4()),
         heartbeat_at=heartbeat_at,
-        fencing_token=uuid.uuid4(),
+        fencing_token=overrides.pop("fencing_token", uuid.uuid4()),
         outcome_code="succeeded" if state == "succeeded" else None,
         proof_class="observed",
         exit_code=0 if state == "succeeded" else None,
@@ -668,6 +668,7 @@ async def test_proof_backed_reconcile_releases_reservation_and_guard_once(
         started_at=now - timedelta(minutes=2),
         finished_at=now - timedelta(minutes=1),
     )
+    admin_id = admin_user.id
     headers = auth(admin_token)
 
     response = await client.post(
@@ -699,7 +700,7 @@ async def test_proof_backed_reconcile_releases_reservation_and_guard_once(
 
     logs = await _activity(db_session, job.id)
     assert [log.action for log in logs] == ["jobs.reconcile_applied"]
-    assert logs[0].actor_id == admin_user.id
+    assert logs[0].actor_id == admin_id
     details = logs[0].details
     assert details["reason"] == "operator verified the recorded container exit"
     assert details["outcome"] == "applied"

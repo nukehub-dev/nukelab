@@ -15,7 +15,8 @@ and no scoped secret injection.
 | Submit | `POST /api/jobs` | JWT + `jobs:write_own`, submission enabled, cohort match, `Idempotency-Key` |
 | List/detail/logs | `GET /api/jobs`, `GET /api/jobs/{id}`, `GET /api/jobs/{id}/logs` | JWT + `jobs:read_own` |
 | Cancel | `POST /api/jobs/{id}/cancel` | JWT + `jobs:write_own` |
-| Admin read-only view | `GET /api/admin/jobs`, `GET /api/admin/jobs/{id}` | JWT + `operations:read_all` + `ADMIN_ACCESS` |
+| Admin visibility | `GET /api/admin/jobs`, `GET /api/admin/jobs/{id}` | JWT + `operations:read_all` + `ADMIN_ACCESS` |
+| Proof-only reconcile | `POST /api/admin/jobs/{id}/reconcile` | JWT + `operations:manage_all` + `ADMIN_ACCESS` + bounded reason |
 
 Owner routes are JWT-only; API-token authentication is not accepted. Foreign and
 unknown job IDs both return `job_not_found` (404). Disabling submission does not
@@ -49,7 +50,9 @@ cohort, so removing access does not erase existing history.
 `batch_job_logs` keeps one bounded payload row per job with encoding, truncation,
 size, capture time, and expiry. `job_writer` is an exclusive
 `volume_operations.kind`; a partial unique index allows one active backup,
-restore, or job-writer guard per volume.
+restore, or job-writer guard per volume. Expired log payloads are physically
+removed by a bounded scheduled purge; the terminal result and log metadata stay
+intact.
 
 The migrations are `b7d4e1c9a2f5` (tables/indexes) and `e2c7a9f4d6b1`
 (reservation columns and `job_writer` exclusion). The current Alembic head is
@@ -193,9 +196,21 @@ state in `system_settings` (`batch_jobs_recovery_scan_state`). Worker startup
 refuses journal work when `batch_jobs` lacks `executor_id`, `heartbeat_at`,
 `state`, or `fencing_token`.
 
-Celery Beat schedules `dispatch_batch_jobs`, `monitor_batch_jobs`, and
-`reconcile_batch_jobs` using the `BATCH_JOBS_*_INTERVAL_SECONDS` settings.
-Metrics expose queued, active, recovery-required, and cleanup-pending job gauges.
+Celery Beat schedules `dispatch_batch_jobs`, `monitor_batch_jobs`,
+`reconcile_batch_jobs`, and the bounded `purge_batch_job_logs` using the
+`BATCH_JOBS_*_INTERVAL_SECONDS` settings. Metrics expose queued, active,
+recovery-required, and cleanup-pending job gauges.
+
+A `recovery_required` row can be settled only through the proof-only admin
+reconcile route. The route reruns a read-only classifier and then invokes the
+same fenced finalizer with `executor_terminated=True`. The classifier accepts an
+exited runtime with its recorded identity and exit evidence, or an absent
+runtime behind a recorded create/start checkpoint when the job heartbeat is
+stale. Running, unrecorded, mismatched, or otherwise ambiguous evidence returns
+409 `proof_insufficient` and changes nothing. A non-`recovery_required` active
+row returns 409 `job_not_reconcilable`; an already-terminal row is an idempotent
+200. The operator reason and bounded outcome/proof metadata are audited; audit
+availability is required before an applied transition.
 
 ## Logs and retention
 
@@ -207,25 +222,41 @@ The owner logs endpoint returns at most the configured tail and reports
 
 The default retention is `BATCH_JOBS_LOG_RETENTION_SECONDS` (7 days). Expiry is
 enforced at read time: after `log_expires_at`, the API returns `expired` with no
-text. This release does not schedule a separate physical log-purge task, so
-expired payload rows remain until an operator-maintained cleanup.
+text. The scheduled `purge_batch_job_logs` task then deletes expired payload
+rows in bounded batches (`BATCH_JOBS_LOG_PURGE_BATCH_SIZE`) every
+`BATCH_JOBS_LOG_PURGE_INTERVAL_SECONDS`, sets `log_state="expired"`, and leaves
+the terminal result, timestamps, billing, cleanup state, and reservation fields
+untouched. Repeated runs are idempotent.
+
+After a new terminal result commits, the owner receives one in-app notification
+with the job reference, bounded name, terminal state, and a `/jobs/<id>` link.
+Deduplication is per job and terminal event. Delivery is best effort: a
+notification failure never changes the result, reopens the job, or releases a
+reservation or volume guard.
 
 ## Admin visibility
 
-`/admin/jobs` and `GET /api/admin/jobs` are read-only. Rows expose sanitized
-state/reason codes, bounded owner/environment/plan/volume display names,
+`/admin/jobs` and `GET /api/admin/jobs` expose sanitized cross-owner state.
+Rows include reason codes, bounded owner/environment/plan/volume display names,
 timestamps, reservation and active volume-guard flags, heartbeat age, and
 log/cleanup state. Command arguments, logs, environment values, image
 references, runtime identity, volume paths, fencing tokens, and executors are
-never returned. `can_reconcile` is always false. There is no admin cancel,
-retry, reconcile, or manual reservation-release endpoint in this release.
+never returned. `can_reconcile` is true only for a `recovery_required` row when
+the caller also has `operations:manage_all`.
+
+The manage-gated row action opens a reason dialog and posts to
+`POST /api/admin/jobs/{id}/reconcile`. It renders the server result only after a
+confirmed response and never optimistically changes the row. Proof-insufficient
+or non-reconcilable responses leave the row and its protection unchanged. There
+is no admin cancel, retry, force, or manual reservation-release endpoint.
 
 ## Access and security checks
 
 - Owner authorization is enforced server-side on every route; foreign IDs are
   indistinguishable from missing IDs.
 - Admin visibility requires both the operations read grant and admin access,
-  plus a JWT session.
+  plus a JWT session. Reconciliation additionally requires the operations manage
+  grant and a bounded audit reason; proof remains authoritative over the reason.
 - The batch container cannot reach the network, the Docker socket, or platform
   credentials; it runs non-root with no capabilities and a read-only rootfs.
 - Submission bounds argument count/bytes and runtime. The runtime bounds CPU,
@@ -243,29 +274,41 @@ retry, reconcile, or manual reservation-release endpoint in this release.
 
 Implemented and executed for the 2.4.0 batch-job change set (2026-11-28):
 
-- Backend full suite: 4,995 passed, 6 skipped, 0 failed.
-- Frontend: 234 unit tests passed, lint/format/build/type-check passed.
+- Backend full suite: 5,088 passed, 6 skipped, 0 failed.
+- Frontend: 246 unit tests passed; lint/format/type-check/build passed.
 - Targeted mocked browser suites passed: `jobs-ui` (11),
-  `guided-first-launch` (9), `admin-jobs-ui` (8), and the existing
+  `guided-first-launch` (9), `admin-jobs-ui` (13), and the existing
   queue/admin-setup regressions (10).
-- Real Docker driver smoke passed for root-only `/work` prep, UID 65532,
-  `/work` output, timeout exit 124, stop exit 137, and cleanup.
-- Shell lint and `docker compose config -q` passed.
+- Real API→PostgreSQL/Redis/Celery/Docker `@jobs-runtime` scenario passed on a
+  rebuilt disposable stack. Capacity queueing, exactly one hardened runtime
+  (UID 65532, read-only rootfs, `CapDrop=ALL`, no network, no ports, no restart),
+  `/work` output, bounded logs, nonzero exit, cancellation, owner isolation,
+  post-cleanup results, and zero-cost billing were verified.
+- Worker-death and Redis-broker-loss interruption drills passed: one job row,
+  one create/start event, one terminal result, one released guard, zero negative
+  credit transactions, and cleanup complete.
+- Last-slot CPU/memory/disk and volume writer/mount/backup/restore/share/delete
+  races passed, including retained `recovery_required` protection.
+- Storage capability and fail-closed submission/admission coverage passed. The
+  current test host has no kernel-enforced project quota, so an actual over-cap
+  write remains a target-storage check.
+- Shell lint, `docker compose config -q`, and `./nukelabctl selftest` passed.
 
 Carried gaps:
 
-- No full API→PostgreSQL/Redis/Celery/Docker job has run end to end yet, and the
-  required disposable real-stack browser scenario plus worker-death/broker-loss
-  interruption drill are not yet wired into CI.
-- Writable `/work` disk enforcement and the last-slot capacity/volume race have
-  not been rehearsed on the pilot storage; admission uses the existing
-  XFS/volume quota configuration.
+- The explicit `test-browser-jobs` CI job and nightly interruption-drill workflow
+  have not yet run on a GitHub runner.
+- An over-cap write on XFS project-quota storage still needs target-storage
+  evidence. The capability gate can fail the pilot closed when enforcement is
+  required.
+- The interruption drill currently kills the worker/broker while the job is
+  running; reserve-before-create, created-before-start, and pre-admission broker
+  loss variants are not separately exercised.
 - No staging pinned upgrade/rollback/off-host restore rehearsal, and no registry
   `preload_only` staging proof.
 - Podman batch enablement is not verified.
-- Paid credit settlement, scoped workload secrets, job completion
-  notifications, and an admin proof-backed reconcile/manual-release path are not
-  implemented.
+- Paid credit settlement and scoped workload secrets are not implemented; the
+  pilot stays zero-cost and secrets-disabled.
 
 ## Related documents
 

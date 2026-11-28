@@ -88,6 +88,8 @@ function capabilities(overrides: Partial<JobCapabilities> = {}): JobCapabilities
     can_submit: true,
     billing_mode: 'zero_cost',
     secrets_enabled: false,
+    storage_limits_enforced: true,
+    storage_enforcement_required: false,
     reason_code: null,
     limits: {
       max_active_jobs: 1,
