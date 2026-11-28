@@ -14,11 +14,15 @@ import uuid
 from datetime import timedelta
 
 import pytest
+from sqlalchemy import select
 
+from app.api import admin_jobs
 from app.api.auth import get_password_hash
+from app.config import settings
 from app.core.permissions import Permission
 from app.core.roles import ROLE_PERMISSIONS, _rebuild_expansion_cache
 from app.core.time_utils import utc_now
+from app.models.activity_log import ActivityLog
 from app.models.api_token import ApiToken
 from app.models.batch_job import BatchJob, BatchJobLog
 from app.models.environment_revision import EnvironmentRevision
@@ -26,6 +30,8 @@ from app.models.environment_template import EnvironmentTemplate
 from app.models.server_plan import ServerPlan
 from app.models.user import User
 from app.models.volume import Volume
+from app.models.volume_operation import VolumeOperation
+from tests.services.test_batch_job_runtime import BatchJobDriver
 
 pytestmark = pytest.mark.asyncio
 
@@ -47,9 +53,33 @@ FORBIDDEN_VALUES = (
     "registry.example.test",
 )
 
+AUDIT_KEYS = {
+    "reason",
+    "outcome",
+    "applied",
+    "previous_state",
+    "new_state",
+    "terminal_state",
+    "proof_source",
+    "runtime_state",
+    "liveness",
+    "reason_code",
+}
+
 
 def auth(token):
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def fake_runtime(monkeypatch):
+    driver = BatchJobDriver()
+
+    async def _get_driver():
+        return driver
+
+    monkeypatch.setattr(admin_jobs, "get_driver", _get_driver)
+    return driver
 
 
 async def _private_job(db):
@@ -168,8 +198,14 @@ async def _private_job(db):
 async def _denied(client, headers):
     listing = await client.get("/api/admin/jobs", headers=headers)
     detail = await client.get(f"/api/admin/jobs/{uuid.uuid4()}", headers=headers)
+    reconcile = await client.post(
+        f"/api/admin/jobs/{uuid.uuid4()}/reconcile",
+        headers=headers,
+        json={"reason": "negative authorization check"},
+    )
     assert listing.status_code == 403
     assert detail.status_code == 403
+    assert reconcile.status_code == 403
 
 
 @pytest.mark.parametrize("role_index", [0, 1, 2])
@@ -183,6 +219,12 @@ async def test_default_non_admin_roles_are_denied(
 async def test_missing_jwt_is_rejected(client):
     assert (await client.get("/api/admin/jobs")).status_code == 401
     assert (await client.get(f"/api/admin/jobs/{uuid.uuid4()}")).status_code == 401
+    assert (
+        await client.post(
+            f"/api/admin/jobs/{uuid.uuid4()}/reconcile",
+            json={"reason": "missing token"},
+        )
+    ).status_code == 401
 
 
 async def test_admin_and_super_admin_can_read(client, admin_token, superadmin_token):
@@ -232,8 +274,12 @@ async def test_read_only_operations_role_can_read_but_cannot_mutate(
     target = uuid.uuid4()
     assert (await client.post("/api/admin/jobs", headers=headers, json={})).status_code == 405
     assert (
-        await client.post(f"/api/admin/jobs/{target}/reconcile", headers=headers, json={})
-    ).status_code == 404
+        await client.post(
+            f"/api/admin/jobs/{target}/reconcile",
+            headers=headers,
+            json={"reason": "read-only role must not reconcile"},
+        )
+    ).status_code == 403
     assert (await client.delete(f"/api/admin/jobs/{target}", headers=headers)).status_code == 405
 
 
@@ -256,6 +302,13 @@ async def test_admin_api_token_cannot_use_job_view(client, admin_user, db_sessio
     assert "JWT" in listing.json()["detail"]
     detail = await client.get(f"/api/admin/jobs/{uuid.uuid4()}", headers=auth(raw_token))
     assert detail.status_code == 403
+    reconcile = await client.post(
+        f"/api/admin/jobs/{uuid.uuid4()}/reconcile",
+        headers=auth(raw_token),
+        json={"reason": "api token must not reconcile"},
+    )
+    assert reconcile.status_code == 403
+    assert "JWT" in reconcile.json()["detail"]
 
 
 async def test_cross_owner_rows_never_disclose_payloads_or_runtime_identity(
@@ -296,3 +349,76 @@ async def test_cross_owner_rows_never_disclose_payloads_or_runtime_identity(
         assert value not in detail_text
     for key in ("argv", "logs", "log_text", "environment_values", "name"):
         assert f'"{key}"' not in text
+
+
+async def test_reconcile_response_and_audit_never_disclose_payloads(
+    client, admin_token, admin_user, db_session, fake_runtime
+):
+    job, owner, volume, revision, _plan = await _private_job(db_session)
+    now = utc_now()
+    job.state = "recovery_required"
+    job.reason_code = "runtime_unverifiable"
+    job.reservation_active = True
+    job.heartbeat_at = now - timedelta(seconds=settings.batch_jobs_heartbeat_stale_seconds + 5)
+    job.create_requested_at = now - timedelta(minutes=5)
+    job.volume_operation_id = job.id
+    guard = VolumeOperation(
+        operation_id=job.id,
+        volume_id=volume.id,
+        owner_id=owner.id,
+        kind="job_writer",
+        state="reserved",
+        fencing_token=uuid.uuid4(),
+    )
+    job.volume_fencing_token = guard.fencing_token
+    db_session.add(guard)
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/admin/jobs/{job.id}/reconcile",
+        headers=auth(admin_token),
+        json={"reason": "operator verified the absent recorded runtime"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["applied"] is True
+    assert data["outcome"] == "applied"
+    assert data["terminal_state"] == "failed"
+    assert data["proof_source"] == "runtime_inspection"
+    assert data["reason_code"] == "runtime_absent"
+    assert data["job"]["state"] == "failed"
+    assert data["job"]["reservation_active"] is False
+    assert data["job"]["guard_active"] is False
+
+    forbidden = [
+        *FORBIDDEN_VALUES,
+        str(volume.id),
+        str(revision.id),
+        str(revision.fingerprint),
+        str(job.fencing_token),
+        str(job.volume_fencing_token),
+        str(job.executor_id),
+    ]
+    text = json.dumps(data)
+    for value in forbidden:
+        assert value not in text
+    for key in ("argv", "logs", "log_text", "environment_values", "name"):
+        assert f'"{key}"' not in text
+
+    logs = (
+        await db_session.scalars(
+            select(ActivityLog)
+            .where(ActivityLog.target_id == job.id)
+            .order_by(ActivityLog.created_at, ActivityLog.id)
+        )
+    ).all()
+    assert len(logs) == 1
+    entry = logs[0]
+    assert entry.action == "jobs.reconcile_applied"
+    assert entry.target_type == "batch_job"
+    assert entry.target_id == job.id
+    assert entry.actor_id == admin_user.id
+    assert set(entry.details) <= AUDIT_KEYS
+    audit_text = json.dumps(entry.details)
+    for value in forbidden:
+        assert value not in audit_text

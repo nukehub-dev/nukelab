@@ -1,17 +1,22 @@
 # SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 # SPDX-License-Identifier: BSD-2-Clause
 
-"""Read-only admin batch-job listing, filtering, detail, and sanitization."""
+"""Admin batch-job listing, filtering, detail, and proof-only reconciliation."""
 
 import json
 import uuid
 from datetime import timedelta
 
 import pytest
+from sqlalchemy import select
 
+from app.api import admin_jobs
 from app.api.auth import get_password_hash
+from app.core.permissions import Permission
+from app.core.roles import ROLE_PERMISSIONS, _rebuild_expansion_cache
 from app.core.time_utils import utc_now
 from app.main import app
+from app.models.activity_log import ActivityLog
 from app.models.batch_job import BatchJob
 from app.models.environment_revision import EnvironmentRevision
 from app.models.environment_template import EnvironmentTemplate
@@ -19,6 +24,8 @@ from app.models.server_plan import ServerPlan
 from app.models.user import User
 from app.models.volume import Volume
 from app.models.volume_operation import VolumeOperation
+from app.services.activity_service import ActivityService
+from tests.services.test_batch_job_runtime import BatchJobDriver
 
 pytestmark = pytest.mark.asyncio
 
@@ -27,6 +34,27 @@ IMAGE_REFERENCE = "registry.example.test/pilot@sha256:" + "b" * 64
 
 def auth(token):
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def fake_runtime(monkeypatch):
+    driver = BatchJobDriver()
+
+    async def _get_driver():
+        return driver
+
+    monkeypatch.setattr(admin_jobs, "get_driver", _get_driver)
+    return driver
+
+
+async def _activity(db, job_id):
+    return (
+        await db.scalars(
+            select(ActivityLog)
+            .where(ActivityLog.target_id == job_id)
+            .order_by(ActivityLog.created_at, ActivityLog.id)
+        )
+    ).all()
 
 
 async def _targets(db):
@@ -184,6 +212,46 @@ async def _guarded(db, job, volume, owner, *, state="reserved"):
     db.add(guard)
     await db.flush()
     return guard
+
+
+async def _recovery_guarded(
+    db,
+    owner,
+    revision,
+    plan,
+    *,
+    heartbeat_at,
+    container_id="container-private-id",
+    create_requested_at=None,
+):
+    volume = await _volume(db, owner)
+    job = _job(
+        owner,
+        revision,
+        plan,
+        volume,
+        state="recovery_required",
+        reason_code="runtime_unverifiable",
+        reservation_active=True,
+        heartbeat_at=heartbeat_at,
+        container_id=container_id,
+        create_requested_at=create_requested_at,
+    )
+    job.volume_operation_id = job.id
+    db.add(job)
+    await db.flush()
+    guard = await _guarded(db, job, volume, owner)
+    job.volume_fencing_token = guard.fencing_token
+    await db.commit()
+    return job, volume, guard
+
+
+async def _load_job(db, job_id):
+    return await db.get(BatchJob, job_id, populate_existing=True)
+
+
+async def _load_guard(db, job_id):
+    return await db.scalar(select(VolumeOperation).where(VolumeOperation.operation_id == job_id))
 
 
 async def test_admin_jobs_filters_order_and_bounded_pagination(
@@ -459,7 +527,7 @@ async def test_admin_jobs_exposes_reservation_guard_heartbeat_and_cleanup(
     assert item["guard_active"] is True
     assert item["cleanup_state"] == "pending"
     assert item["cleanup_attempts"] == 2
-    assert item["can_reconcile"] is False
+    assert item["can_reconcile"] is True
     assert item["heartbeat_age_seconds"] >= 94
 
     guard.state = "succeeded"
@@ -494,7 +562,66 @@ async def test_admin_jobs_detail_and_missing_rows(client, admin_token, db_sessio
     assert missing.json()["detail"] == {"code": "job_not_found"}
 
 
-async def test_admin_jobs_exposes_no_mutation_route(client, admin_token):
+async def test_admin_jobs_reconcile_requires_manage_permission(
+    client, admin_token, support_token, user_token, db_session, test_user
+):
+    _, revision, plan = await _targets(db_session)
+    job, _, _ = await _recovery_guarded(
+        db_session,
+        test_user,
+        revision,
+        plan,
+        heartbeat_at=utc_now(),
+    )
+    body = {"reason": "operator permission probe"}
+
+    regular = await client.post(
+        f"/api/admin/jobs/{job.id}/reconcile", headers=auth(user_token), json=body
+    )
+    assert regular.status_code == 403
+
+    ROLE_PERMISSIONS["support"] = [
+        Permission.ADMIN_ACCESS,
+        Permission.OPERATIONS_READ_ALL,
+    ]
+    _rebuild_expansion_cache()
+    read_only = auth(support_token)
+    detail = await client.get(f"/api/admin/jobs/{job.id}", headers=read_only)
+    assert detail.status_code == 200
+    assert detail.json()["can_reconcile"] is False
+    denied = await client.post(f"/api/admin/jobs/{job.id}/reconcile", headers=read_only, json=body)
+    assert denied.status_code == 403
+    assert await _activity(db_session, job.id) == []
+
+    admin_detail = await client.get(f"/api/admin/jobs/{job.id}", headers=auth(admin_token))
+    assert admin_detail.status_code == 200
+    assert admin_detail.json()["can_reconcile"] is True
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"reason": ""},
+        {"reason": "short"},
+        {"reason": "   short   "},
+        {"reason": "x" * 501},
+        {"reason": "valid reason", "force": True},
+        {"reason": "valid reason", "unknown": "field"},
+        {"reason": "valid\nreason"},
+        {"reason": "\x7f" * 8},
+    ],
+)
+async def test_admin_jobs_reconcile_rejects_invalid_bodies(client, admin_token, body):
+    response = await client.post(
+        f"/api/admin/jobs/{uuid.uuid4()}/reconcile",
+        headers=auth(admin_token),
+        json=body,
+    )
+    assert response.status_code == 422
+
+
+async def test_admin_jobs_exposes_only_proof_reconcile_mutation(client, admin_token):
     headers = auth(admin_token)
     target = uuid.uuid4()
     assert (await client.post("/api/admin/jobs", headers=headers, json={})).status_code == 405
@@ -503,11 +630,275 @@ async def test_admin_jobs_exposes_no_mutation_route(client, admin_token):
     ).status_code == 405
     assert (await client.delete(f"/api/admin/jobs/{target}", headers=headers)).status_code == 405
     assert (
-        await client.post(f"/api/admin/jobs/{target}/reconcile", headers=headers, json={})
+        await client.post(f"/api/admin/jobs/{target}/cancel", headers=headers, json={})
     ).status_code == 404
+    assert (
+        await client.post(f"/api/admin/jobs/{target}/reconcile", headers=headers, json={})
+    ).status_code == 422
 
-    job_routes = [route for route in app.routes if route.path.startswith("/admin/jobs")]
-    assert {route.path for route in job_routes} == {"/admin/jobs", "/admin/jobs/{job_id}"}
-    methods = {method for route in job_routes for method in route.methods}
-    assert methods <= {"GET", "HEAD"}
-    assert methods & {"POST", "PUT", "PATCH", "DELETE"} == set()
+    job_routes = {route.path: route for route in app.routes if route.path.startswith("/admin/jobs")}
+    assert set(job_routes) == {
+        "/admin/jobs",
+        "/admin/jobs/{job_id}",
+        "/admin/jobs/{job_id}/reconcile",
+    }
+    assert job_routes["/admin/jobs/{job_id}/reconcile"].methods == {"POST"}
+    assert job_routes["/admin/jobs/{job_id}"].methods <= {"GET", "HEAD"}
+
+
+async def test_proof_backed_reconcile_releases_reservation_and_guard_once(
+    client, admin_token, admin_user, db_session, test_user, fake_runtime
+):
+    _, revision, plan = await _targets(db_session)
+    now = utc_now()
+    job, _, guard = await _recovery_guarded(
+        db_session,
+        test_user,
+        revision,
+        plan,
+        heartbeat_at=now - timedelta(minutes=10),
+        container_id="container-private-id",
+        create_requested_at=now - timedelta(minutes=10),
+    )
+    fake_runtime.add_job_container(
+        job,
+        container_id="container-private-id",
+        status="exited",
+        exit_code=0,
+        started_at=now - timedelta(minutes=2),
+        finished_at=now - timedelta(minutes=1),
+    )
+    headers = auth(admin_token)
+
+    response = await client.post(
+        f"/api/admin/jobs/{job.id}/reconcile",
+        headers=headers,
+        json={"reason": "operator verified the recorded container exit"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["applied"] is True
+    assert data["already_terminal"] is False
+    assert data["outcome"] == "applied"
+    assert data["terminal_state"] == "succeeded"
+    assert data["proof_source"] == "runtime_inspection"
+    assert data["reason_code"] == "exit_zero"
+    assert data["job"]["id"] == str(job.id)
+    assert data["job"]["state"] == "succeeded"
+    assert data["job"]["reservation_active"] is False
+    assert data["job"]["guard_active"] is False
+    assert data["job"]["can_reconcile"] is False
+
+    row = await _load_job(db_session, job.id)
+    assert row.state == "succeeded"
+    assert row.reservation_active is False
+    assert row.exit_code == 0
+    assert row.proof_class == "runtime"
+    assert (await _load_guard(db_session, job.id)).state == "succeeded"
+    assert len(fake_runtime.deleted) == 1
+
+    logs = await _activity(db_session, job.id)
+    assert [log.action for log in logs] == ["jobs.reconcile_applied"]
+    assert logs[0].actor_id == admin_user.id
+    details = logs[0].details
+    assert details["reason"] == "operator verified the recorded container exit"
+    assert details["outcome"] == "applied"
+    assert details["applied"] is True
+    assert details["previous_state"] == "recovery_required"
+    assert details["new_state"] == "succeeded"
+    assert details["terminal_state"] == "succeeded"
+    assert details["proof_source"] == "runtime_inspection"
+    assert details["runtime_state"] == "present"
+    assert details["liveness"] == "stopped"
+    assert details["reason_code"] == "exit_zero"
+
+    repeated = await client.post(
+        f"/api/admin/jobs/{job.id}/reconcile",
+        headers=headers,
+        json={"reason": "confirm the terminal result is not replayed"},
+    )
+    assert repeated.status_code == 200
+    repeated_data = repeated.json()
+    assert repeated_data["applied"] is False
+    assert repeated_data["already_terminal"] is True
+    assert repeated_data["outcome"] == "already_terminal"
+    assert repeated_data["terminal_state"] is None
+    assert repeated_data["proof_source"] is None
+    assert repeated_data["reason_code"] is None
+    assert repeated_data["job"]["state"] == "succeeded"
+
+    assert (await _load_job(db_session, job.id)).state == "succeeded"
+    assert (await _load_guard(db_session, job.id)).state == "succeeded"
+    assert len(fake_runtime.deleted) == 1
+    logs = await _activity(db_session, job.id)
+    assert [log.action for log in logs] == ["jobs.reconcile_applied", "jobs.reconcile"]
+
+
+async def test_ambiguous_proof_conflicts_without_releasing_reservation_or_guard(
+    client, admin_token, db_session, test_user, fake_runtime
+):
+    _, revision, plan = await _targets(db_session)
+    now = utc_now()
+    job, _, guard = await _recovery_guarded(
+        db_session,
+        test_user,
+        revision,
+        plan,
+        heartbeat_at=now,
+        container_id="container-private-id",
+        create_requested_at=now - timedelta(minutes=10),
+    )
+
+    response = await client.post(
+        f"/api/admin/jobs/{job.id}/reconcile",
+        headers=auth(admin_token),
+        json={"reason": "operator observed an absent runtime"},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == {"code": "proof_insufficient"}
+
+    row = await _load_job(db_session, job.id)
+    assert row.state == "recovery_required"
+    assert row.reservation_active is True
+    assert row.reason_code == "runtime_unverifiable"
+    assert (await _load_guard(db_session, job.id)).state == "reserved"
+    assert fake_runtime.deleted == []
+
+    logs = await _activity(db_session, job.id)
+    assert [log.action for log in logs] == ["jobs.reconcile"]
+    details = logs[0].details
+    assert details["outcome"] == "proof_insufficient"
+    assert details["applied"] is False
+    assert details["previous_state"] == "recovery_required"
+    assert details["new_state"] == "recovery_required"
+    assert details["terminal_state"] is None
+    assert details["proof_source"] == "none"
+    assert details["reason_code"] == "executor_live"
+    assert details["runtime_state"] == "absent"
+    assert details["liveness"] == "alive"
+
+
+async def test_reconcile_rejects_non_recovery_required_active_rows(
+    client, admin_token, db_session, test_user
+):
+    _, revision, plan = await _targets(db_session)
+    job = _job(
+        test_user,
+        revision,
+        plan,
+        await _volume(db_session, test_user),
+        state="running",
+        reason_code=None,
+        reservation_active=True,
+        heartbeat_at=utc_now(),
+    )
+    db_session.add(job)
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/admin/jobs/{job.id}/reconcile",
+        headers=auth(admin_token),
+        json={"reason": "attempt to reconcile a running job"},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == {"code": "job_not_reconcilable"}
+    assert (await _load_job(db_session, job.id)).state == "running"
+    logs = await _activity(db_session, job.id)
+    assert [log.action for log in logs] == ["jobs.reconcile"]
+    assert logs[0].details["outcome"] == "job_not_reconcilable"
+
+
+async def test_reconcile_already_terminal_is_idempotent(client, admin_token, db_session, test_user):
+    _, revision, plan = await _targets(db_session)
+    job = _job(
+        test_user,
+        revision,
+        plan,
+        await _volume(db_session, test_user),
+        state="failed",
+        reason_code="nonzero_exit",
+        finished_at=utc_now(),
+    )
+    db_session.add(job)
+    await db_session.commit()
+    headers = auth(admin_token)
+
+    for _ in range(2):
+        response = await client.post(
+            f"/api/admin/jobs/{job.id}/reconcile",
+            headers=headers,
+            json={"reason": "confirm the terminal row stays closed"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["applied"] is False
+        assert data["already_terminal"] is True
+        assert data["outcome"] == "already_terminal"
+        assert data["terminal_state"] is None
+        assert data["proof_source"] is None
+        assert data["reason_code"] is None
+        assert data["job"]["state"] == "failed"
+        assert data["job"]["can_reconcile"] is False
+
+    assert (await _load_job(db_session, job.id)).state == "failed"
+    logs = await _activity(db_session, job.id)
+    assert [log.action for log in logs] == ["jobs.reconcile", "jobs.reconcile"]
+    assert all(log.details["outcome"] == "already_terminal" for log in logs)
+
+
+async def test_reconcile_unknown_job_returns_not_found_and_audits(client, admin_token, db_session):
+    target = uuid.uuid4()
+    response = await client.post(
+        f"/api/admin/jobs/{target}/reconcile",
+        headers=auth(admin_token),
+        json={"reason": "operator probe for an unknown job"},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == {"code": "job_not_found"}
+    logs = await _activity(db_session, target)
+    assert [log.action for log in logs] == ["jobs.reconcile"]
+    assert logs[0].details["outcome"] == "job_not_found"
+    assert logs[0].details["applied"] is False
+
+
+async def test_reconcile_audit_failure_returns_500_without_mutation(
+    client, admin_token, db_session, test_user, fake_runtime, monkeypatch
+):
+    _, revision, plan = await _targets(db_session)
+    now = utc_now()
+    job, _, guard = await _recovery_guarded(
+        db_session,
+        test_user,
+        revision,
+        plan,
+        heartbeat_at=now - timedelta(minutes=10),
+        container_id="container-private-id",
+        create_requested_at=now - timedelta(minutes=10),
+    )
+    fake_runtime.add_job_container(
+        job,
+        container_id="container-private-id",
+        status="exited",
+        exit_code=1,
+        started_at=now - timedelta(minutes=2),
+        finished_at=now - timedelta(minutes=1),
+    )
+
+    async def _unavailable(*args, **kwargs):
+        raise RuntimeError("activity store unavailable")
+
+    monkeypatch.setattr(ActivityService, "log", _unavailable)
+
+    response = await client.post(
+        f"/api/admin/jobs/{job.id}/reconcile",
+        headers=auth(admin_token),
+        json={"reason": "operator tries to reconcile during an audit outage"},
+    )
+    assert response.status_code == 500
+    assert response.json()["detail"] == {"code": "audit_unavailable"}
+
+    row = await _load_job(db_session, job.id)
+    assert row.state == "recovery_required"
+    assert row.reservation_active is True
+    assert (await _load_guard(db_session, job.id)).state == "reserved"
+    assert fake_runtime.deleted == []

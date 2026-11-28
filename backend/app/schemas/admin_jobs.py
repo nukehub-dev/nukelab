@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 # SPDX-License-Identifier: BSD-2-Clause
 
-"""Sanitized read-only admin batch-job views.
+"""Sanitized admin batch-job views and proof-only reconciliation requests.
 
 Response models carry only bounded job metadata. Command arguments, log text,
 environment values, secret references, image references, volume paths, runtime
@@ -10,12 +10,16 @@ here.
 """
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 AdminJobListState = Literal["active", "history", "all"]
+AdminJobReconcileOutcome = Literal["applied", "already_terminal", "no_change"]
+
+REASON_MIN_LENGTH = 8
+REASON_MAX_LENGTH = 500
 
 
 class AdminJobEntry(BaseModel):
@@ -40,8 +44,7 @@ class AdminJobEntry(BaseModel):
     log_state: str
     cleanup_state: str
     cleanup_attempts: int = 0
-    # No runtime finalizer exists for jobs in this release, so there is no
-    # manual reconcile or reservation-release path.
+    # True only for an active recovery_required row when the caller may reconcile.
     can_reconcile: bool = False
 
 
@@ -72,3 +75,37 @@ class AdminJobPage(BaseModel):
     items: list[AdminJobEntry]
     pagination: AdminJobPagination
     summary: AdminJobSummary
+
+
+class AdminJobReconcileRequest(BaseModel):
+    """Reconcile input: a bounded operator reason only.
+
+    ``extra="forbid"`` rejects force/override fields and any other unknown
+    input with 422 before the handler runs.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: Annotated[str, Field(min_length=REASON_MIN_LENGTH, max_length=REASON_MAX_LENGTH)]
+
+    @field_validator("reason")
+    @classmethod
+    def _bounded_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < REASON_MIN_LENGTH:
+            raise ValueError(f"reason must be at least {REASON_MIN_LENGTH} characters")
+        if any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in value):
+            raise ValueError("reason must not contain control characters")
+        return value
+
+
+class AdminJobReconcileResult(BaseModel):
+    """Proof-only reconcile outcome with the current sanitized job row."""
+
+    job: AdminJobEntry
+    applied: bool
+    already_terminal: bool
+    outcome: AdminJobReconcileOutcome
+    terminal_state: str | None = None
+    proof_source: str | None = None
+    reason_code: str | None = None
