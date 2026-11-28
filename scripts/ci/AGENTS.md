@@ -5,6 +5,9 @@
 Reproducible helpers used by the GitHub Actions workflows. `e2e-stack.sh`
 builds, starts, waits on, and stops the disposable production stack that runs
 the browser suite; the same commands work on a local checkout.
+`seed-jobs-fixture.py` seeds the zero-cost batch-job plans and approved
+local-identity revision used by the job browser lane, and `jobs-drill.sh` runs
+the opt-in worker/broker interruption drill. The same commands work locally.
 
 ## Ownership
 
@@ -39,6 +42,24 @@ remain owned by `.github/workflows/` and their respective domains.
 - Readiness and cleanup use bounded polls and idempotent stops. Only
   platform-managed containers and the disposable compose project are touched;
   never prune unrelated host resources.
+- `seed-jobs-fixture.py` runs inside the backend container, requires
+  `NUKELAB_JOBS_SEED_ALLOW=1`, an enabled submission gate, and the local
+  `nukelab-e2e-runtime:a` image. It idempotently creates/reuses the
+  `jobs-e2e-cpu` and `jobs-e2e-filler` plans plus the `jobs-e2e-runtime`
+  template and an approved local-identity revision. It prints one JSON object
+  with fixture ids and never prints secrets or environment values.
+- `jobs-drill.sh` assumes a dedicated running stack unless `--start` or
+  `--build` is passed. It submits one real zero-cost job, interrupts
+  `celery-worker` (default) or `redis`, restarts it, and asserts one job row,
+  one create/start event, one terminal result, one completed volume guard and
+  no negative credit transactions from the database, API and Docker events.
+  `--dry-run` performs read-only preflight, `--stop` stops the stack, and the
+  default run leaves an already-running stack alone except for its own volume
+  and containers.
+- The batch-job browser lane runs with `E2E_JOBS_RUNTIME=1` and, in CI,
+  `E2E_JOBS_CAPACITY=1`; capacity occupation requires a dedicated stack whose
+  `RESOURCE_POOL_CPU` matches the seeded filler plan. Keep it separate from the
+  `@workspace` lane and exclude `@jobs-runtime` from the general browser job.
 
 ## Work Guidance
 
@@ -59,10 +80,16 @@ remain owned by `.github/workflows/` and their respective domains.
 ## Verification
 
 ```bash
-bash -n scripts/ci/e2e-stack.sh
-shellcheck -x scripts/ci/e2e-stack.sh
-shfmt -d scripts/ci/e2e-stack.sh
+bash -n scripts/ci/e2e-stack.sh scripts/ci/jobs-drill.sh
+shellcheck -x scripts/ci/e2e-stack.sh scripts/ci/jobs-drill.sh
+shfmt -d scripts/ci/e2e-stack.sh scripts/ci/jobs-drill.sh
+python3 -m py_compile scripts/ci/seed-jobs-fixture.py
 ```
+
+The drill is opt-in: `.github/workflows/jobs-drill.yml` runs nightly and on
+manual dispatch, never on the default pull-request path. Reproduce it locally
+on a disposable host with
+`./scripts/ci/jobs-drill.sh --build --stop` after preparing `.env`.
 
 ## Child NAD Index
 
