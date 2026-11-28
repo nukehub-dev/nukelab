@@ -341,7 +341,7 @@ test('disabled feature explains availability and does not query job records', as
   await page.goto('/jobs')
   await expect(page.getByRole('heading', { name: 'Jobs', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Batch jobs are not available' })).toBeVisible()
-  await expect(page.getByText(/Job submission is currently disabled/)).toBeVisible()
+  await expect(page.getByText(/Batch job submission is disabled on this deployment/)).toBeVisible()
   await expect(page.getByTestId('new-job')).toHaveCount(0)
   expect(state.listReads).toBe(0)
 })
@@ -362,7 +362,7 @@ test('submission-disabled rollout keeps authorized history readable', async ({ p
     timeout: 15_000,
   })
   await expect(page.getByTestId('new-job')).toBeDisabled()
-  await expect(page.getByText(/Job submission is currently disabled/)).toBeVisible()
+  await expect(page.getByText(/Batch job submission is disabled on this deployment/)).toBeVisible()
   expect(state.listReads).toBeGreaterThan(0)
 })
 

@@ -81,7 +81,7 @@ const JOB_REASON_COPY: Record<string, string> = {
   cancellation_requested: 'A stop was requested for this job.',
   recovery_required:
     'The outcome needs operator verification. No retry is available until it is reconciled.',
-  feature_disabled: 'Job submission is currently disabled for this account.',
+  feature_disabled: 'Batch job submission is disabled on this deployment.',
 }
 
 const JOB_FORM_FIELDS: readonly JobFormField[] = [
@@ -94,7 +94,7 @@ const JOB_FORM_FIELDS: readonly JobFormField[] = [
 ]
 
 const JOB_ERROR_COPY: Record<string, string> = {
-  feature_disabled: 'Job submission is currently disabled for this account.',
+  feature_disabled: 'Batch job submission is disabled on this deployment.',
   permission_denied: 'You no longer have permission to do that.',
   job_not_found: 'This job is unavailable or no longer exists.',
   idempotency_conflict:
