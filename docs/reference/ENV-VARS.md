@@ -167,6 +167,46 @@ local-only.
 Waiting queue requests do not reserve compute from the resource pools. The
 values must reflect the actual host capacity available to NukeLab.
 
+### Batch jobs
+
+Single-run batch jobs are disabled for submission by default. Keep these values
+consistent on `backend`, `celery-worker`, and `celery-beat`; worker and Beat
+values control execution, dispatch cadence, monitoring, recovery and cleanup.
+The owner/admin history surfaces remain readable while submission is disabled.
+
+| Variable | Default | Description |
+|---|---|---|
+| `BATCH_JOBS_SUBMISSION_ENABLED` | `false` | Allow new owner submissions. `false` blocks submission only; existing jobs, history, logs and cancellation continue |
+| `BATCH_JOBS_ALLOW_PAID_PLANS` | `false` | Enables paid plans for batch jobs. Requires `CREDITS_ENABLED=true`. When false, nonzero-cost plans are rejected with `paid_plan_unsupported` and capabilities report `zero_cost`. When true, a paid submission creates one credit hold for the maximum runtime; actual usage settles at the frozen rate and the unused authorization is refunded |
+| `BATCH_JOBS_ALLOWED_USER_IDS` | empty | Optional comma-separated owner UUID pilot cohort (one UUID is a valid one-entry list). Empty means the `jobs:write_own` grant defines eligibility; a nonempty list narrows it |
+| `BATCH_JOBS_MAX_ACTIVE_PER_OWNER` | `1` | Maximum active (`starting`, `running`, `cancelling`, `recovery_required`) jobs per owner |
+| `BATCH_JOBS_MAX_QUEUED_PER_OWNER` | `3` | Maximum unexpired queued jobs per owner |
+| `BATCH_JOBS_DEFAULT_RUNTIME_SECONDS` | `1800` | Runtime limit when a submission omits `max_runtime_seconds` |
+| `BATCH_JOBS_MAX_RUNTIME_SECONDS` | `7200` | Maximum accepted runtime limit |
+| `BATCH_JOBS_QUEUE_TTL_SECONDS` | `86400` | Maximum time a job may wait in `queued` before expiry |
+| `BATCH_JOBS_MAX_ARGV_ITEMS` | `64` | Maximum argument count |
+| `BATCH_JOBS_MAX_INPUT_BYTES` | `16384` | Maximum combined UTF-8 argument bytes |
+| `BATCH_JOBS_LOG_TAIL_BYTES` | `262144` | Maximum retained log tail (256 KiB) |
+| `BATCH_JOBS_LOG_RETENTION_SECONDS` | `604800` | Read-time log retention (7 days) |
+| `BATCH_JOBS_LOG_PURGE_INTERVAL_SECONDS` | `3600` | Celery Beat cadence for the bounded physical log purge |
+| `BATCH_JOBS_LOG_PURGE_BATCH_SIZE` | `100` | Maximum expired log payload rows physically removed per purge pass |
+| `BATCH_JOBS_REQUIRE_STORAGE_ENFORCEMENT` | `false` | When true, capabilities and submission fail closed with `storage_limits_unenforced` unless the volume storage path has kernel-enforced XFS project quotas; admission keeps queued jobs waiting |
+| `BATCH_JOBS_MAX_ACTIVE_FLEET` | `5` | Maximum active job reservations platform-wide; `0` means unlimited |
+| `BATCH_JOBS_HEARTBEAT_STALE_SECONDS` | `90` | Heartbeat age that triggers inspection, never takeover |
+| `BATCH_JOBS_STOP_TIMEOUT_SECONDS` | `30` | Stop/cleanup timeout and `/work` preparation helper bound |
+| `BATCH_JOBS_MONITOR_BATCH_SIZE` | `20` | Maximum active jobs inspected per monitor pass |
+| `BATCH_JOBS_DISPATCH_BATCH_SIZE` | `10` | Maximum queued jobs evaluated per dispatch pass |
+| `BATCH_JOBS_DISPATCH_INTERVAL_SECONDS` | `5` | Celery Beat dispatch cadence |
+| `BATCH_JOBS_MONITOR_INTERVAL_SECONDS` | `10` | Celery Beat monitor cadence |
+| `BATCH_JOBS_RECOVERY_INTERVAL_SECONDS` | `30` | Celery Beat stale/recovery and cleanup retry cadence |
+| `BATCH_JOBS_RECOVERY_BATCH_SIZE` | `50` | Maximum stale jobs inspected per recovery pass |
+| `BATCH_JOBS_PIDS_LIMIT` | `256` | Per-job process limit |
+| `BATCH_JOBS_TMPFS_BYTES` | `67108864` | Per-job `/tmp` tmpfs size (64 MiB); `/home` uses a fixed 16 MiB |
+
+The cohort key is `BATCH_JOBS_ALLOWED_USER_IDS` (plural) even for a single owner.
+See [BATCH-JOBS.md](../architecture/BATCH-JOBS.md) for admission, runtime and
+recovery behavior. Submission stays zero-cost until a settlement contract exists.
+
 Recovery reminders are not configurable through environment variables. While an
 `uncertain` launch or `recovery_required` volume row remains unresolved, Celery
 Beat runs one bounded reminder sweep daily at 08:00 UTC and deduplicates to at

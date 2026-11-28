@@ -18,6 +18,7 @@ from app.core.logging import get_logger
 from app.core.time_utils import utc_today_start
 from app.models.credit_transaction import CreditTransaction
 from app.models.user import User
+from app.services.credit_hold_service import CreditHoldService
 from app.services.notification_service import NotificationService
 
 logger = get_logger(__name__)
@@ -41,6 +42,10 @@ class CreditService:
         )
         balance = result.scalar_one_or_none()
         return balance if balance is not None else 0
+
+    async def get_spendable_balance(self, user_id: str) -> int:
+        """Balance available after active batch-job holds are reserved."""
+        return await CreditHoldService.spendable_balance(self.db, user_id)
 
     async def get_transaction_history(
         self,
@@ -147,6 +152,19 @@ class CreditService:
 
         new_balance = current_balance + effective_amount
 
+        if effective_amount < 0:
+            # Held credits are reserved for outstanding batch jobs. A debit may
+            # only consume the spendable remainder, even though the balance
+            # itself has not been reduced by the hold.
+            held = await CreditHoldService.held_total(self.db, user.id)
+            if current_balance - held + effective_amount < 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        f"Insufficient credits. Current: {current_balance}, "
+                        f"Held: {held}, Required: {abs(amount)}"
+                    ),
+                )
         if new_balance < 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -310,9 +328,9 @@ class CreditService:
         additional_cost = exact_cost - already_billed
 
         if additional_cost > 0:
-            # Check balance first; if insufficient, record what we can and move on
-            # (server stopping must never be blocked by credit issues)
-            balance = await self.get_balance(str(server.user_id))
+            # Check spendable balance first; if insufficient, record what we can
+            # and move on (server stopping must never be blocked by credit issues)
+            balance = await self.get_spendable_balance(str(server.user_id))
             if balance >= additional_cost:
                 await self.consume_credits(
                     user_id=str(server.user_id),
@@ -388,8 +406,8 @@ class CreditService:
         )
 
     async def check_sufficient_credits(self, user_id: str, required: int) -> bool:
-        """Check if user has sufficient credits"""
-        balance = await self.get_balance(user_id)
+        """Check if user has sufficient spendable credits"""
+        balance = await self.get_spendable_balance(user_id)
         return balance >= required
 
     async def get_low_credit_users(
@@ -439,6 +457,7 @@ class CreditService:
     async def get_credit_summary(self, user_id: str) -> dict[str, Any]:
         """Get credit summary for a user"""
         balance = await self.get_balance(user_id)
+        held = await CreditHoldService.held_total(self.db, user_id)
 
         # Get today's consumption
         today_start = utc_today_start()
@@ -472,6 +491,8 @@ class CreditService:
         return {
             "user_id": user_id,
             "current_balance": balance,
+            "held": held,
+            "spendable": balance - held,
             "today_consumed": abs(today_consumed),
             "total_earned": total_earned,
             "total_consumed": total_consumed,

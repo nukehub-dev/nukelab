@@ -377,7 +377,7 @@ jobs:
           TEST_ADMIN_PASSWORD: admin123
           E2E_VOLUME_BACKUP_HOST_PATH: ${{ runner.temp }}/nukelab-volume-backups
           PLAYWRIGHT_HTML_OPEN: never
-        run: npx playwright test --reporter=list,html --grep-invert "@workspace|@vite-only"
+        run: npx playwright test --reporter=list,html --grep-invert "@workspace|@vite-only|@jobs-runtime"
 
       - name: Collect stack logs
         if: failure()
@@ -587,6 +587,190 @@ jobs:
           sudo rm -rf "$RUNNER_TEMP/nukelab-volume-backups"
           exit 0
 
+  test-browser-jobs:
+    name: Test Browser Jobs
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.any == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 90
+    env:
+      CONTAINER_ENGINE: docker
+      APP_ENV: development
+      APP_URL: http://127.0.0.1:8080
+      DEV_MODE: "true"
+      VOLUME_BACKUP_STORAGE_PATH: /var/lib/nukelab/volume-backups
+      VOLUME_BACKUP_HELPER_IMAGE: nukelab-volume-helper:ci
+      RESOURCE_POOL_CPU: "4"
+      RESOURCE_POOL_MEMORY_MIB: "6144"
+      RESOURCE_POOL_DISK_MIB: "40960"
+      QUEUE_TICK_SECONDS: "2"
+      CONTAINER_HARDENING_ENABLED: "true"
+      GPU_ENABLED: "false"
+      RATE_LIMIT_ENABLED: "false"
+      PROMETHEUS_ENABLED: "false"
+      GRAFANA_ENABLED: "false"
+      ALERTMANAGER_ENABLED: "false"
+      TRACING_ENABLED: "false"
+      SMTP_HOST: 127.0.0.1
+      SMTP_PORT: "1"
+      # Zero-cost batch jobs are enabled only for the disposable job-enabled
+      # stack. Production defaults remain disabled.
+      BATCH_JOBS_SUBMISSION_ENABLED: "true"
+      BATCH_JOBS_ALLOW_PAID_PLANS: "true"
+      BATCH_JOBS_ALLOWED_USER_IDS: ""
+      BATCH_JOBS_DISPATCH_INTERVAL_SECONDS: "2"
+      BATCH_JOBS_MONITOR_INTERVAL_SECONDS: "2"
+      BATCH_JOBS_RECOVERY_INTERVAL_SECONDS: "5"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ./frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: ./frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          backup_dir="$RUNNER_TEMP/nukelab-volume-backups"
+          mkdir -p "$backup_dir"
+          sudo chown -R 65532:65532 "$backup_dir"
+          sudo chmod 0700 "$backup_dir"
+          volume_root="$(docker info --format '{{.DockerRootDir}}/volumes')"
+          sudo mkdir -p "$volume_root"
+          sudo chmod 0755 "$(dirname "$volume_root")" "$volume_root"
+          {
+            echo "VOLUME_BACKUP_HOST_PATH=$backup_dir"
+            echo "VOLUME_STORAGE_PATH=$volume_root"
+          } >> "$GITHUB_ENV"
+
+      - name: Build e2e stack images
+        run: ./scripts/ci/e2e-stack.sh build
+
+      - name: Start disposable job-enabled stack
+        run: ./scripts/ci/e2e-stack.sh start
+
+      - name: Wait for stack readiness
+        run: ./scripts/ci/e2e-stack.sh wait
+
+      - name: Seed batch job fixture
+        env:
+          NUKELAB_JOBS_SEED_ALLOW: "1"
+          TEST_ADMIN_USERNAME: admin
+          E2E_RUNTIME_IMAGE: nukelab-e2e-runtime:a
+        run: |
+          set -o pipefail
+          docker exec -i \
+            -e NUKELAB_JOBS_SEED_ALLOW \
+            -e TEST_ADMIN_USERNAME \
+            -e E2E_RUNTIME_IMAGE \
+            nukelab-backend python - < scripts/ci/seed-jobs-fixture.py \
+            | tee "$RUNNER_TEMP/nukelab-jobs-seed.json"
+
+      - name: Verify job runtime suite is collected
+        working-directory: ./frontend
+        env:
+          E2E_EXTERNAL_SERVER: "1"
+          BASE_URL: http://127.0.0.1:8080
+          E2E_JOBS_RUNTIME: "1"
+          E2E_RUNTIME_IMAGE: nukelab-e2e-runtime:a
+        run: |
+          npx playwright test --list --grep "@jobs-runtime" | tee /tmp/nukelab-jobs-list.txt
+          grep -q "@jobs-runtime" /tmp/nukelab-jobs-list.txt
+          grep -q "runs a zero-cost CPU job" /tmp/nukelab-jobs-list.txt
+
+      - name: Run batch job runtime scenario
+        working-directory: ./frontend
+        env:
+          E2E_EXTERNAL_SERVER: "1"
+          BASE_URL: http://127.0.0.1:8080
+          E2E_RUNTIME_IMAGE: nukelab-e2e-runtime:a
+          E2E_JOBS_RUNTIME: "1"
+          E2E_JOBS_CAPACITY: "1"
+          TEST_ADMIN_USERNAME: admin
+          TEST_ADMIN_PASSWORD: admin123
+          PLAYWRIGHT_HTML_OPEN: never
+        run: npx playwright test --reporter=list,html --grep "@jobs-runtime"
+
+      - name: Collect stack logs
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/nukelab-ci-logs"
+          docker ps -a --filter "name=^nukelab-" \
+            --format '{{.Names}}\t{{.Status}}' \
+            > "$RUNNER_TEMP/nukelab-ci-logs/containers.txt" || true
+          docker ps -a --filter "label=nukelab.workload=job" \
+            --format '{{.Names}}\t{{.Status}}\t{{.Image}}' \
+            > "$RUNNER_TEMP/nukelab-ci-logs/job-containers.txt" || true
+          for name in nukelab-traefik nukelab-postgres nukelab-redis \
+            nukelab-backend nukelab-celery-worker nukelab-celery-beat nukelab-frontend; do
+            if docker inspect "$name" > /dev/null 2>&1; then
+              docker logs --tail 400 "$name" > "$RUNNER_TEMP/nukelab-ci-logs/${name}.log" 2>&1 || true
+            fi
+          done
+
+      - name: Upload Playwright report and logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-jobs
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+            ${{ runner.temp }}/nukelab-ci-logs/
+            ${{ runner.temp }}/nukelab-jobs-seed.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Stop disposable stack
+        if: always()
+        run: ./scripts/ci/e2e-stack.sh stop
+
+      - name: Remove run-created resources
+        if: always()
+        run: |
+          set +e
+          ids=$(
+            {
+              docker ps -aq --filter "label=com.docker.compose.project=nukelab"
+              docker ps -aq --filter "label=nukelab.managed=true"
+            } | sort -u
+          )
+          if [ -n "$ids" ]; then
+            docker rm -f $ids > /dev/null 2>&1
+          fi
+          volumes=$(
+            {
+              docker volume ls -q --filter "label=com.docker.compose.project=nukelab"
+              docker volume ls -q --filter "label=nukelab.managed=true"
+            } | sort -u
+          )
+          if [ -n "$volumes" ]; then
+            docker volume rm -f $volumes > /dev/null 2>&1
+          fi
+          docker network rm nukelab-network > /dev/null 2>&1
+          docker image rm -f nukelab-e2e-runtime:a nukelab-e2e-runtime:b nukelab-volume-helper:ci > /dev/null 2>&1
+          sudo rm -rf "$RUNNER_TEMP/nukelab-volume-backups"
+          exit 0
+
   build-images:
     name: Build & push images
     runs-on: ubuntu-latest
@@ -596,7 +780,7 @@ jobs:
       actions: read
       id-token: write
       attestations: write
-    needs: [changes, lint-backend, lint-frontend, test-frontend-unit, test-frontend-mocked-browser, test-volume-helper, test-backend, test-browser, test-browser-workspace]
+    needs: [changes, lint-backend, lint-frontend, test-frontend-unit, test-frontend-mocked-browser, test-volume-helper, test-backend, test-browser, test-browser-workspace, test-browser-jobs]
     if: |
       !cancelled() &&
       !contains(needs.*.result, 'cancelled') &&
@@ -609,7 +793,8 @@ jobs:
       needs.test-volume-helper.result != 'failure' &&
       needs.test-backend.result != 'failure' &&
       needs.test-browser.result == 'success' &&
-      needs.test-browser-workspace.result == 'success'
+      needs.test-browser-workspace.result == 'success' &&
+      needs.test-browser-jobs.result == 'success'
     strategy:
       fail-fast: false
       matrix:
@@ -850,6 +1035,7 @@ jobs:
       - test-backend
       - test-browser
       - test-browser-workspace
+      - test-browser-jobs
       - build-images
       - build-environments
     permissions:

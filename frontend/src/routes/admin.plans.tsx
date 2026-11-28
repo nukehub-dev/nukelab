@@ -36,6 +36,7 @@ import { useDataTable } from '../hooks/use-data-table'
 import { useThemeStore } from '../stores/theme-store'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
 import { usePageGuard } from '../hooks/use-page-guard'
+import { planAvailability } from '../lib/plan-availability'
 import { formatDate, formatPlanResource } from '../lib/utils'
 import type { Plan } from '../types/api'
 import type {
@@ -151,6 +152,8 @@ function PlansPage() {
     cooldown_seconds: 0,
     is_public: false,
     visible_to_roles: ['user'] as string[],
+    allow_servers: true,
+    allow_batch_jobs: false,
     priority: 0,
   })
 
@@ -177,6 +180,8 @@ function PlansPage() {
       cooldown_seconds: 0,
       is_public: false,
       visible_to_roles: ['user'],
+      allow_servers: true,
+      allow_batch_jobs: false,
       priority: 0,
     })
     setDialogOpen(true)
@@ -198,6 +203,8 @@ function PlansPage() {
       cooldown_seconds: plan.cooldown_seconds,
       is_public: plan.is_public,
       visible_to_roles: plan.visible_to_roles || ['user'],
+      allow_servers: plan.allow_servers ?? true,
+      allow_batch_jobs: (plan.allow_batch_jobs ?? true) && plan.gpu_limit === 0,
       priority: plan.priority,
     })
     setDialogOpen(true)
@@ -226,6 +233,8 @@ function PlansPage() {
           cooldown_seconds: formData.cooldown_seconds,
           is_public: formData.is_public,
           visible_to_roles: formData.visible_to_roles,
+          allow_servers: formData.allow_servers,
+          allow_batch_jobs: formData.allow_batch_jobs,
           priority: formData.priority,
         },
       })
@@ -244,6 +253,8 @@ function PlansPage() {
         cooldown_seconds: formData.cooldown_seconds,
         is_public: formData.is_public,
         visible_to_roles: formData.visible_to_roles,
+        allow_servers: formData.allow_servers,
+        allow_batch_jobs: formData.allow_batch_jobs,
         priority: formData.priority,
       })
     }
@@ -367,6 +378,33 @@ function PlansPage() {
       cell: ({ row }) => (
         <span className="font-mono text-sm">{row.getValue('cost_per_hour')} nukes</span>
       ),
+    },
+    {
+      id: 'usage',
+      header: 'Usage',
+      enableSorting: false,
+      cell: ({ row }) => {
+        const availability = planAvailability(row.original)
+        return (
+          <div className="flex flex-wrap gap-1">
+            {availability.servers && (
+              <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
+                Servers
+              </span>
+            )}
+            {availability.jobs && (
+              <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-400">
+                Jobs
+              </span>
+            )}
+            {!availability.servers && !availability.jobs && (
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                Unavailable
+              </span>
+            )}
+          </div>
+        )
+      },
     },
     ...(canManagePlans
       ? [
@@ -770,9 +808,14 @@ function PlansPage() {
                     type="number"
                     min={0}
                     value={formData.gpu_limit}
-                    onChange={(e) =>
-                      setFormData({ ...formData, gpu_limit: parseInt(e.target.value) || 0 })
-                    }
+                    onChange={(e) => {
+                      const gpu = parseInt(e.target.value) || 0
+                      setFormData({
+                        ...formData,
+                        gpu_limit: gpu,
+                        allow_batch_jobs: gpu > 0 ? false : formData.allow_batch_jobs,
+                      })
+                    }}
                   />
                 </div>
                 <div className="space-y-2">
@@ -827,6 +870,41 @@ function PlansPage() {
                     }
                   />
                 </div>
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-border/60 p-3">
+                <Label>Availability</Label>
+                <div className="flex flex-col gap-2">
+                  <label className="flex items-center gap-3 cursor-pointer group">
+                    <Checkbox
+                      checked={formData.allow_servers}
+                      onChange={(checked) => setFormData({ ...formData, allow_servers: checked })}
+                    />
+                    <span className="text-sm">Servers</span>
+                  </label>
+                  <label
+                    className={
+                      formData.gpu_limit > 0
+                        ? 'flex items-center gap-3 cursor-not-allowed opacity-60'
+                        : 'flex items-center gap-3 cursor-pointer group'
+                    }
+                  >
+                    <Checkbox
+                      checked={formData.allow_batch_jobs}
+                      disabled={formData.gpu_limit > 0}
+                      onChange={(checked) =>
+                        setFormData({ ...formData, allow_batch_jobs: checked })
+                      }
+                    />
+                    <span className="text-sm">Batch jobs</span>
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Enable Batch jobs to offer this plan in the job form. Batch jobs require a
+                  CPU-only plan; job-only plans are hidden from server deployment. Queued jobs using
+                  this plan fail admission if Batch jobs is disabled. The same hourly cost is used
+                  for both.
+                </p>
               </div>
 
               <label className="flex items-center gap-3 cursor-pointer group">

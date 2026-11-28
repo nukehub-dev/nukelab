@@ -17,7 +17,10 @@ from tests.db.test_launch_workflow_migration import migration_database as migrat
 
 PREVIOUS_REVISION = "b1e7c4a9d2f6"
 PORTABLE_REVISION = "c5f8a2d91e47"
-HEAD_REVISION = "a4c9e2f7b1d3"
+SCAN_REVISION = "a4c9e2f7b1d3"
+BATCH_REVISION = "b7d4e1c9a2f5"
+ADMISSION_REVISION = "e2c7a9f4d6b1"
+HEAD_REVISION = "a3b8c1d4e5f6"
 PORTABLE_COLUMN = "portable_fingerprint"
 PORTABLE_INDEX = "ix_environment_revisions_portable_fingerprint"
 ACTIVE_FINGERPRINT_INDEX = "uq_environment_revisions_active_fingerprint"
@@ -121,7 +124,11 @@ def test_fresh_upgrade_downgrade_and_reupgrade(migration_database):
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [HEAD_REVISION]
     assert script.get_revision(PORTABLE_REVISION).down_revision == PREVIOUS_REVISION
-    assert script.get_revision(HEAD_REVISION).down_revision == PORTABLE_REVISION
+    assert script.get_revision(SCAN_REVISION).down_revision == PORTABLE_REVISION
+    assert script.get_revision(BATCH_REVISION).down_revision == SCAN_REVISION
+    assert script.get_revision(ADMISSION_REVISION).down_revision == BATCH_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == "f1a2b3c4d5e6"
+    assert script.get_revision("f1a2b3c4d5e6").down_revision == ADMISSION_REVISION
 
     command.upgrade(config, "head")
     command.upgrade(config, "head")

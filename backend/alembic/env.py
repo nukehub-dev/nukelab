@@ -28,6 +28,7 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 from app.models.environment_revision import EnvironmentRevision
+from app.models.batch_job import BatchJob, BatchJobLog
 from app.models.server_launch_record import ServerLaunchRecord
 from app.models.server_launch_intent import ServerLaunchIntent
 from app.models.server_launch_operation import ServerLaunchOperation

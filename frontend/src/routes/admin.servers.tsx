@@ -33,6 +33,7 @@ import { useServerActionsWithReason } from '../hooks/use-server-actions-with-rea
 import { useReasonDialog } from '../hooks/use-reason-dialog'
 import { useEnvironments } from '../hooks/use-environments'
 import { usePlans } from '../hooks/use-plans'
+import { isServerPlan } from '../lib/plan-availability'
 import { useVolumes } from '../hooks/use-volumes'
 import { useDataTable } from '../hooks/use-data-table'
 import { useThemeStore } from '../stores/theme-store'
@@ -121,7 +122,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
   const [dialogOpen, setDialogOpen] = useState(false)
 
   const environments = envData?.data || []
-  const plans = plansData?.data || []
+  const plans = (plansData?.data || []).filter(isServerPlan)
   const volumes = volumesData || []
 
   // Build dynamic owner filter from server data

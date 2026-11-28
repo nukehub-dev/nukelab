@@ -8,6 +8,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useCurrentUser } from '../hooks/use-current-user'
 import { usePlans } from '../hooks/use-plans'
+import { isServerPlan } from '../lib/plan-availability'
 import { useEnvironments } from '../hooks/use-environments'
 import { api } from '../lib/api'
 import { useToast } from '../stores/toast-store'
@@ -59,7 +60,7 @@ function ServerBehaviorSettingsPage() {
 
   const { data: plansData } = usePlans({ is_active: true, limit: 100 })
   const { data: envData } = useEnvironments({ is_active: true, limit: 100 })
-  const plans = plansData?.data || []
+  const plans = (plansData?.data || []).filter(isServerPlan)
   const environments = envData?.data || []
 
   // Load saved preferences

@@ -14,6 +14,146 @@ section.
 
 ## [Unreleased]
 
+### Added
+
+- Owner single-run batch jobs (pilot): submit one noninteractive command against
+  an eligible CPU plan and an owned private volume, with queued, running,
+  cancellation, recovery, result, and bounded-log views at `/jobs` and
+  `/jobs/{id}`. Zero-cost plans are always available; paid plans are gated.
+  Submissions are opt-in and JWT-only.
+- A durable batch-job journal (`batch_jobs`, `batch_job_logs`) with idempotent
+  submission, fenced admission, shared CPU/memory/disk accounting, owner/fleet
+  caps, and an exclusive `job_writer` volume guard. Job history, retained logs,
+  and cancellation remain available while submission is disabled.
+- Plan-level server/job availability: admins can mark a CPU plan for batch jobs,
+  keep it server-only, or make it job-only in Admin → Plans. Server launch
+  rejects job-only plans, and the Jobs form only offers plans explicitly marked
+  for jobs. The shared hourly cost still determines free versus paid jobs.
+- A faster batch-job form: searchable environment, plan, and private-volume
+  pickers; a link to `/volumes` with list refresh for creating a work volume;
+  second/minute/hour runtime units with a one-minute minimum; and all active
+  CPU plans listed with paid plans disabled and explained while paid jobs are
+  off. Long select labels now wrap instead of creating horizontal scroll.
+- A hardened headless execution profile: approved immutable image identity,
+  owned `/work` preparation before the non-root job, literal argv with no shell
+  parsing, no network, read-only rootfs, dropped capabilities, UID 65532, bounded
+  runtime and logs, and create/start checkpoints with bounded monitor, cleanup
+  retry, and recovery inspection.
+- Guided first launch on the dashboard and deploy dialog: eligible current
+  catalog defaults are preselected, stale saved plan/environment defaults are
+  surfaced instead of submitted, and catalog failures no longer look like a
+  missing catalog.
+- Sanitized cross-owner batch-job visibility at `/admin/jobs` with state,
+  reason, owner/environment/plan/volume labels, reservation and volume-guard
+  flags, heartbeat age, and log/cleanup state. Jobs-specific `jobs:read_all`,
+  `jobs:write_all`, and `jobs:access_others` grants mirror the server
+  cross-owner model; legacy Operations grants remain a compatibility fallback.
+  Operators with manage authority get a reason-audited safe cancel for
+  queued/starting/running rows and a proof-only reconcile action for
+  `recovery_required` rows. Cancel releases a queued job's full hold but never
+  force-releases a started job's reservation, volume guard, or hold; ambiguous
+  reconcile evidence returns 409 and releases nothing.
+- Bounded physical purge of expired batch-job log payloads and one deduplicated
+  owner completion notification per terminal result. Purge preserves the
+  terminal result and metadata; notification failure never changes the result or
+  releases protection.
+- A read-only storage-enforcement capability probe. Capabilities report whether
+  the configured volume storage path has kernel-enforced XFS project quotas, and
+  `BATCH_JOBS_REQUIRE_STORAGE_ENFORCEMENT=true` fails submission/admission closed
+  instead of advertising an unenforced writable limit.
+- An explicit `@jobs-runtime` real-stack browser gate, a disposable fixture
+  seeder, and an opt-in worker/broker interruption drill workflow.
+- Paid batch jobs (gated): with `BATCH_JOBS_ALLOW_PAID_PLANS=true`, an eligible
+  nonzero-cost plan freezes its hourly rate, creates one spendable-credit hold
+  for the maximum runtime, and settles actual runtime at terminal proof. Unused
+  authorization is refunded; a 1-NUKE minimum applies only after the job starts.
+  Queued cancel/expiry and pre-start failures release the full hold.
+- `credit_holds` with one authorization per paid job, `batch_job_usage` ledger
+  entries, and owner-facing hold/charged/refunded state. Batch job usage is
+  labeled in owner and admin credit history.
+- `./nukelabctl doctor --post-upgrade` verifies a running deployment read-only:
+  service containers, public API health and release version, image identity,
+  Alembic head compatibility, Celery worker/Beat presence, unresolved recovery
+  rows, and optional batch-job tables.
+- Batch-job recovery metrics for queued, active, recovery-required, and
+  cleanup-pending rows.
+
+### Changed
+
+- Batch dispatch, execution, monitoring, recovery, and expired-log purge run
+  from `celery-worker`/Beat with configurable bounded intervals. Active batch
+  reservations participate in the existing resource-pool and quota accounting.
+- Volume mutation, backup/restore, mount intent, and deletion now share the
+  `job_writer` exclusive guard, so a job's `/work` volume cannot change while
+  the runtime outcome is unresolved.
+- The admin Jobs table keeps long owner/environment labels inside their columns
+  instead of overlapping protection evidence, with a browser layout regression.
+- Interactive launch, restart/resume, periodic server billing, and reconciliation
+  now use spendable balance (total balance minus active batch-job holds), so
+  interactive usage cannot consume credits reserved by a queued or running paid
+  job.
+
+### Security
+
+- Owner job routes require JWT and `jobs:read_own`/`jobs:write_own`; foreign job
+  IDs return 404. Admin job rows require a JWT session plus `ADMIN_ACCESS` and a
+  cross-owner job read grant (`jobs:read_all` or `jobs:access_others`; legacy
+  `operations:read_all` remains a fallback), and never expose argv, logs,
+  environment values, image references, volume paths, runtime identity, or
+  fencing tokens. Safe cancel and proof-only reconcile require `jobs:write_all`
+  (or legacy `operations:manage_all`), a bounded reason, and a successful audit
+  write; cancel never force-releases a started job's protection and reconcile
+  has no force or manual-release path.
+- Batch containers run without network access, ports, capabilities, rootfs
+  writes, restart policy, or platform credentials. Argument count/bytes, runtime,
+  pids, memory, tmpfs, and log output are bounded; terminal release requires
+  termination proof.
+- Paid submission creates one hold under the admission and user locks, rejects
+  insufficient spendable balance with 402 and no rows, and is idempotent. Foreign
+  owners cannot read or release another owner's hold. Terminal settlement writes
+  at most one `batch_job_usage` transaction; `recovery_required` retains the hold
+  until proof-backed reconciliation. Settlement never changes or rolls back a
+  terminal result.
+
+### Deferred
+
+- Batch submission remains disabled by default for the pilot, and paid plans
+  remain off until `BATCH_JOBS_ALLOW_PAID_PLANS=true` is explicitly set. Paid
+  access follows plan visibility; restrict the paid plan to the intended role or
+  cohort.
+- The new explicit real-stack CI browser job and the nightly interruption-drill
+  workflow have not yet run on a GitHub runner. No staging pinned upgrade,
+  rollback, off-host restore, or registry `preload_only` rehearsal has completed.
+- The real-stack zero-cost and paid jobs, worker/broker interruption drills, and
+  last-slot/volume race suites passed locally on a disposable Docker stack. An
+  actual over-cap write on XFS project-quota storage still needs target-storage
+  evidence; the current host reports unenforced storage.
+- Scoped workload secrets remain deferred, so batch jobs stay secrets-disabled.
+  Paid access is a gated pilot, not a general release default.
+
+### Verification
+
+- Backend full suite passed: 5,146 passed, 6 skipped, 0 failed. Targeted
+  plan-availability guard tests passed separately after the final policy change.
+- Frontend unit tests (258), lint, format check, type check, and production build
+  passed.
+- Targeted mocked browser suites passed: jobs UI 18, guided first launch 11,
+  admin jobs UI 16, and the existing queue/admin-setup regressions 10.
+- A real API→PostgreSQL/Redis/Celery/Docker `@jobs-runtime` scenario passed on a
+  rebuilt disposable stack: capacity queueing, one hardened runtime (UID 65532,
+  read-only rootfs, `CapDrop=ALL`, no network, no ports, no restart), output and
+  bounded logs, nonzero exit, cancellation, owner isolation, and cleanup.
+- Worker-death and Redis-broker-loss interruption drills passed with one job row,
+  one create, one start, one terminal result, one released guard, zero negative
+  credit transactions, and cleanup complete.
+- A real paid job passed on the same stack: a 2-NUKE hold was visible while
+  queued/running, actual runtime settled at 1 NUKE, the unused 1 NUKE was
+  refunded, and exactly one `batch_job_usage` ledger entry was written.
+- Storage capability and last-slot/volume race suites passed; the host storage
+  root is not kernel-enforced, so the over-cap write remains a target-storage
+  gate. Shell lint, `docker compose config -q`, and `./nukelabctl selftest`
+  passed.
+
 ## [2.3.0] - 2026-11-22
 
 ### Added

@@ -156,10 +156,21 @@ Production requires `init-user-auth-keys` before the backend starts.
 ### Diagnostics
 
 ```bash
-./nukelabctl doctor          # Check host readiness
+./nukelabctl doctor          # Check host readiness (tolerates a stopped stack)
+./nukelabctl doctor --post-upgrade
+./nukelabctl doctor --post-upgrade --expected-version 2.4.0
 ./nukelabctl version         # Show platform and engine versions
 ./nukelabctl install-completion
 ```
+
+`doctor --post-upgrade` verifies a running deployment without changing it:
+required service containers, public API health and release version, running
+service image identity, database Alembic head compatibility, Celery worker
+heartbeat and Beat presence, unresolved recovery rows, and optional batch-job
+tables. It reports expected and observed values and exits `1` when a required
+check fails; warnings do not fail the run. `--expected-version` overrides the
+version resolved from `NUKELAB_VERSION`, `VERSION`, or `git describe`. Run
+`./nukelabctl doctor --help` for the complete check list.
 
 ### Load testing
 

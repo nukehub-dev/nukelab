@@ -458,7 +458,13 @@ inspection and Redis are not termination proof.
    read-only inspector and shows bounded liveness, runtime and proof diagnostics.
 2. Run `./nukelabctl doctor`. Its recovery preflight is read-only and reports
    journal schema, heartbeat configuration, registry verification and credential
-   state without pulling images or mutating the stack.
+   state without pulling images or mutating the stack. This default host
+   preflight tolerates a stopped stack. When the upgraded deployment should be
+   running, use `./nukelabctl doctor --post-upgrade` instead: it strictly verifies
+   the started deployment read-only, comparing expected vs observed release
+   version, service image identity and Alembic schema, and checking Celery
+   worker/Beat presence and unresolved recovery rows. See the
+   [upgrade runbook](PRODUCTION-DEPLOYMENT.md#upgrade-runbook).
 3. Inspect the UUID-based runtime name, managed owner/server labels, actual image
    identity and platform, mount attachments and GPU assignments. A database row
    with no container ID does not prove that no container exists. For volume work,
@@ -533,6 +539,78 @@ The `nukelab-recovery` alert group covers the operational failures:
 Heartbeat and stalled-operation alerts are inspection triggers, not automatic
 cleanup. Follow the investigation flow above and do not release protection from
 the alert alone.
+
+### 11.5 Batch job rollout and drain
+
+Batch jobs are disabled for new submissions by default. Enable a pilot only
+after the normal pinned upgrade and schema migration complete:
+
+1. Confirm the database is at the current Alembic head and contains
+   `batch_jobs` and `batch_job_logs`, and that `celery-worker` plus
+   `celery-beat` run the same image and schema as the backend.
+2. Set the pilot cohort and enable submission together:
+
+   ```env
+   BATCH_JOBS_SUBMISSION_ENABLED=true
+   BATCH_JOBS_ALLOWED_USER_IDS=<owner-uuid>[,<owner-uuid>]
+   ```
+
+   An empty cohort falls back to the `jobs:write_own` grant. Grant
+   `jobs:read_own` to anyone who should keep history access. Cross-owner
+   operators need `ADMIN_ACCESS` plus `jobs:read_all`; add `jobs:write_all`
+   for safe cancel and proof-backed reconcile. In Admin → Plans, enable
+   **Batch jobs** on each CPU plan that should accept jobs and uncheck
+   **Servers** for job-only plans. A zero hourly cost creates a free job plan;
+   a nonzero cost requires the paid gate below. Keep the `BATCH_JOBS_*` runtime,
+   interval and limit values consistent across `backend`, `celery-worker` and
+   `celery-beat`; Beat schedules using the interval settings.
+   Paid plans additionally require `BATCH_JOBS_ALLOW_PAID_PLANS=true` and
+   `CREDITS_ENABLED=true`. Access follows the plan’s visibility/role rules;
+   restrict the paid plan to the intended pilot cohort. A paid submission holds
+   `ceil(rate × max_runtime / 3600)` credits (minimum 1), charges actual runtime
+   rounded up to whole NUKE (minimum 1 if started), and refunds the unused
+   authorization. Check `/jobs` billing state and the `batch_job_usage` ledger
+   entry after the first run.
+3. Verify the deployment with the read-only post-upgrade verifier described in
+   the [upgrade runbook](PRODUCTION-DEPLOYMENT.md#upgrade-runbook), and confirm
+   the worker can reach the configured container engine. On a deployment that
+   does not enable jobs, missing optional batch tables are reported as not
+   installed, not as failure.
+4. Run one pilot job from the owner Jobs page. Confirm it uses an approved
+   zero-cost CPU plan and an owned private volume, runs as UID 65532 with no
+   network, writes output under `/work`, and records a terminal result and
+   bounded log.
+
+To drain or disable the pilot, set `BATCH_JOBS_SUBMISSION_ENABLED=false` and
+restart the backend. This blocks new submissions only: queued and admitted jobs
+continue through dispatch, monitoring, cancellation and cleanup, and history
+remains readable. Keep `celery-worker` and `celery-beat` running until no job is
+`queued`, `starting`, `running`, or `cancelling`; otherwise deadlines, exit
+observation and log capture wait for the next worker tick. Queued jobs can be
+cancelled by their owners (or by an operator with `jobs:write_all` and a
+recorded reason) or left to expire.
+
+Do not delete `batch_jobs`, `batch_job_logs`, `job_writer` volume-operation rows,
+or job containers to "clean up". A `recovery_required` job retains its
+reservation and volume guard; inspect it in `/jobs` or `/admin/jobs` and follow
+the [uncertain-work procedure](#113-investigating-uncertain-work). An operator
+with `jobs:write_all` (or the legacy `operations:manage_all`) and `ADMIN_ACCESS`
+can open the job in `/admin/jobs` and choose **Reconcile**. The action requires a
+bounded reason and reruns the read-only classifier; it applies only an exited
+runtime with recorded identity and exit evidence, or an absent runtime behind a
+recorded checkpoint with a stale executor claim. A 409 `proof_insufficient`
+means nothing changed and the guard remains. A queued, starting, or running job
+can instead be cancelled with a recorded reason: queued work becomes terminal
+and releases its full hold, while started work keeps its reservation, volume
+guard, and hold until verified termination. `recovery_required` is
+reconcile-only. There is no force or manual release path; never clear
+`reservation_active` or the guard by hand.
+
+Expired job logs are hidden at read time and then removed by the bounded
+`purge_batch_job_logs` Beat task; the terminal result, timestamps, billing, and
+cleanup state stay intact. A terminal job sends one deduplicated owner
+notification. Notification delivery failure does not change the result, reopen
+the job, or release protection.
 
 ## 12. Registry verification and environment revisions
 

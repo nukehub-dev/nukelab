@@ -26,6 +26,7 @@ import {
   Activity,
   ListChecks,
   ListOrdered,
+  Terminal,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
@@ -63,6 +64,7 @@ interface AdminCategory {
   href: string
   requiredPermission?: string
   requiredPermissions?: string[]
+  requiredAnyPermissions?: string[]
   color: string
   external?: boolean
 }
@@ -115,6 +117,19 @@ const categories: AdminCategory[] = [
     href: '/admin/operations',
     requiredPermissions: [PERMISSIONS.OPERATIONS_READ_ALL, PERMISSIONS.ADMIN_ACCESS],
     color: 'bg-amber-500/10 text-amber-400',
+  },
+  {
+    label: 'Jobs',
+    description: 'Cross-owner batch job state, safe cancellation, and proof-backed recovery',
+    icon: Terminal,
+    href: '/admin/jobs',
+    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
+    requiredAnyPermissions: [
+      PERMISSIONS.JOBS_READ_ALL,
+      PERMISSIONS.JOBS_ACCESS_OTHERS,
+      PERMISSIONS.OPERATIONS_READ_ALL,
+    ],
+    color: 'bg-cyan-500/10 text-cyan-400',
   },
   {
     label: 'Analytics',
@@ -260,6 +275,8 @@ function AdminIndexPage() {
   const visibleCategories = categories.filter(
     (c) =>
       (c.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true) &&
+      (!c.requiredAnyPermissions ||
+        c.requiredAnyPermissions.some((permission) => hasPermission(permission))) &&
       (!c.requiredPermission || hasPermission(c.requiredPermission))
   )
 

@@ -8,6 +8,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import {
   LayoutDashboard,
   Server,
+  Terminal,
   Boxes,
   HardDrive,
   Settings,
@@ -55,6 +56,12 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
       { label: 'Servers', icon: Server, href: '/servers' },
+      {
+        label: 'Jobs',
+        icon: Terminal,
+        href: '/jobs',
+        requiredPermission: PERMISSIONS.JOBS_READ_OWN,
+      },
       { label: 'Usage', icon: Activity, href: '/usage' },
       { label: 'Activity', icon: Clock, href: '/activity' },
     ],

@@ -92,6 +92,8 @@ class TestSeedPlans:
         for slug in ("small", "medium", "large"):
             assert plans[slug].is_active is True
             assert "user" in (plans[slug].visible_to_roles or [])
+            assert plans[slug].allow_servers is True
+            assert plans[slug].allow_batch_jobs is True
         assert "user" not in (plans["xlarge"].visible_to_roles or [])
 
     @pytest.mark.asyncio

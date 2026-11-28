@@ -17,6 +17,7 @@ from app.core.tracing import init_tracing, is_tracing_enabled
 logger = get_logger(__name__)
 from app.api import (
     admin,
+    admin_jobs,
     admin_operations,
     admin_queue,
     analytics,
@@ -29,6 +30,7 @@ from app.api import (
     environments,
     health,
     ip_restriction,
+    jobs,
     metrics,
     notifications,
     plans,
@@ -301,10 +303,12 @@ app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(server_provenance.router, prefix="/servers", tags=["server-provenance"])
 app.include_router(servers.router, prefix="/servers", tags=["servers"])
 app.include_router(server_queue.router, prefix="/server-queue", tags=["server-queue"])
+app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 app.include_router(tokens.router, prefix="/tokens", tags=["tokens"])
 app.include_router(credits.router, prefix="/credits", tags=["credits"])
 app.include_router(credit_requests.router, prefix="/credit-requests", tags=["credit-requests"])
 app.include_router(admin.router, prefix="/admin", tags=["admin"])
+app.include_router(admin_jobs.router, prefix="/admin", tags=["admin-jobs"])
 app.include_router(admin_operations.router, prefix="/admin", tags=["admin-operations"])
 app.include_router(admin_queue.router, prefix="/admin", tags=["admin-queue"])
 app.include_router(preferences.router, prefix="/preferences", tags=["preferences"])

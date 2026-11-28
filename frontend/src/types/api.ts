@@ -125,6 +125,8 @@ export interface Plan {
   cooldown_seconds: number
   is_public: boolean
   visible_to_roles: string[]
+  allow_servers?: boolean
+  allow_batch_jobs?: boolean
   is_active: boolean
   priority: number
   created_at: string

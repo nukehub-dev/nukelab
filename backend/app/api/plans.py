@@ -95,6 +95,8 @@ async def create_plan(
         cooldown_seconds=data.get("cooldown_seconds", 0),
         is_public=data.get("is_public", False),
         visible_to_roles=data.get("visible_to_roles"),
+        allow_servers=data.get("allow_servers", True),
+        allow_batch_jobs=data.get("allow_batch_jobs", False),
         priority=data.get("priority", 0),
     )
     return {"success": True, "data": plan.to_dict(), "message": "Plan created"}

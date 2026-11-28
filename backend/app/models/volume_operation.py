@@ -21,7 +21,7 @@ class VolumeOperation(Base):
     owner_id = Column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
-    kind = Column(String(20), nullable=False)  # writer, mount, backup, restore
+    kind = Column(String(20), nullable=False)  # writer, mount, backup, restore, job_writer
     state = Column(String(30), nullable=False, default="reserved")
     fencing_token = Column(UUID(as_uuid=True), nullable=False, default=uuid.uuid4)
     helper_identity = Column(String(255), nullable=True)
@@ -37,7 +37,7 @@ class VolumeOperation(Base):
             "volume_id",
             unique=True,
             postgresql_where=text(
-                "kind IN ('backup', 'restore') "
+                "kind IN ('backup', 'restore', 'job_writer') "
                 "AND state IN ('reserved', 'running', 'recovery_required')"
             ),
         ),

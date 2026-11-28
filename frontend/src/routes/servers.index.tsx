@@ -39,6 +39,7 @@ import { useServers, useServerActions, useBulkServerActions } from '../hooks/use
 import { useReasonDialog } from '../hooks/use-reason-dialog'
 import { useEnvironments } from '../hooks/use-environments'
 import { usePlans } from '../hooks/use-plans'
+import { isServerPlan } from '../lib/plan-availability'
 import { useVolumes } from '../hooks/use-volumes'
 import { useDataTable } from '../hooks/use-data-table'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
@@ -260,7 +261,7 @@ function ServersPage() {
   }
 
   const environments = envData?.data || []
-  const plans = plansData?.data || []
+  const plans = (plansData?.data || []).filter(isServerPlan)
   const volumes = volumesData || []
   const catalogSettled = !environmentsLoading && !plansLoading
   // Admins see the full catalog; normal users only receive plans/environments

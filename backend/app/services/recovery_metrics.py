@@ -30,6 +30,7 @@ from app.config import settings
 from app.core.logging import get_logger
 from app.core.prometheus_metrics import REGISTRY
 from app.core.time_utils import utc_now
+from app.models.batch_job import BatchJob
 from app.models.environment_revision import EnvironmentRevision
 from app.models.environment_template import EnvironmentTemplate
 from app.models.server_launch_operation import ServerLaunchOperation
@@ -104,6 +105,26 @@ OPERATIONS_STALLED = _gauge(
     ("kind",),
 )
 
+BATCH_JOBS_QUEUED = _gauge(
+    "nukelab_batch_jobs_queued",
+    "Queued batch jobs waiting for admission",
+)
+
+BATCH_JOBS_ACTIVE = _gauge(
+    "nukelab_batch_jobs_active",
+    "Batch jobs in starting, running or cancelling state",
+)
+
+BATCH_JOBS_RECOVERY_REQUIRED = _gauge(
+    "nukelab_batch_jobs_recovery_required",
+    "Batch jobs whose runtime outcome requires operator inspection",
+)
+
+BATCH_JOBS_CLEANUP_PENDING = _gauge(
+    "nukelab_batch_jobs_cleanup_pending",
+    "Terminal batch jobs whose container removal is still pending",
+)
+
 RECOVERY_SCAN_LAST_SUCCESS_TIMESTAMP_SECONDS = _gauge(
     "nukelab_recovery_scan_last_success_timestamp_seconds",
     "Unix timestamp of the last recovery scan pass without errors",
@@ -163,10 +184,19 @@ class RegistryMetrics:
 
 
 @dataclass(frozen=True, slots=True)
+class BatchJobMetrics:
+    queued: int
+    active: int
+    recovery_required: int
+    cleanup_pending: int
+
+
+@dataclass(frozen=True, slots=True)
 class RecoveryMetricsSnapshot:
     workers: WorkerMetrics
     operations: tuple[OperationMetrics, ...]
     registry: RegistryMetrics
+    jobs: BatchJobMetrics | None = None
 
 
 _OPERATION_SPECS = (
@@ -206,10 +236,12 @@ async def collect_recovery_metrics(
         [await _collect_operations(session, spec, moment) for spec in _OPERATION_SPECS]
     )
     registry = await _collect_registry(session)
+    jobs = await _collect_jobs(session)
     return RecoveryMetricsSnapshot(
         workers=workers,
         operations=operations,
         registry=registry,
+        jobs=jobs,
     )
 
 
@@ -283,6 +315,46 @@ async def _collect_operations(
     )
 
 
+async def _collect_jobs(session: AsyncSession) -> BatchJobMetrics:
+    queued = (
+        await session.scalar(
+            select(func.count()).select_from(BatchJob).where(BatchJob.state == "queued")
+        )
+        or 0
+    )
+    active = (
+        await session.scalar(
+            select(func.count())
+            .select_from(BatchJob)
+            .where(BatchJob.state.in_(("starting", "running", "cancelling")))
+        )
+        or 0
+    )
+    recovery_required = (
+        await session.scalar(
+            select(func.count()).select_from(BatchJob).where(BatchJob.state == "recovery_required")
+        )
+        or 0
+    )
+    cleanup_pending = (
+        await session.scalar(
+            select(func.count())
+            .select_from(BatchJob)
+            .where(
+                BatchJob.state.in_(("succeeded", "failed", "cancelled", "timed_out", "expired")),
+                BatchJob.cleanup_state != "complete",
+            )
+        )
+        or 0
+    )
+    return BatchJobMetrics(
+        queued=int(queued),
+        active=int(active),
+        recovery_required=int(recovery_required),
+        cleanup_pending=int(cleanup_pending),
+    )
+
+
 async def _collect_registry(session: AsyncSession) -> RegistryMetrics:
     local_only = (
         await session.scalar(
@@ -346,6 +418,17 @@ def publish_recovery_metrics(snapshot: RecoveryMetricsSnapshot) -> None:
     REGISTRY_TEMPLATES_WITHOUT_VERIFIED_REVISION.set(
         snapshot.registry.templates_without_verified_revision
     )
+
+    jobs = snapshot.jobs or BatchJobMetrics(
+        queued=0,
+        active=0,
+        recovery_required=0,
+        cleanup_pending=0,
+    )
+    BATCH_JOBS_QUEUED.set(jobs.queued)
+    BATCH_JOBS_ACTIVE.set(jobs.active)
+    BATCH_JOBS_RECOVERY_REQUIRED.set(jobs.recovery_required)
+    BATCH_JOBS_CLEANUP_PENDING.set(jobs.cleanup_pending)
 
 
 def record_recovery_scan(

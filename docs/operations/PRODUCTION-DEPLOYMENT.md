@@ -12,16 +12,17 @@ This guide covers configuring NukeLab for production environments where users mu
 2. [Prepare the production environment](#prepare-the-production-environment)
 3. [Deploying from the GitHub Container Registry](#deploying-from-the-github-container-registry)
 4. [Upgrade runbook](#upgrade-runbook)
-5. [Rollback runbook](#rollback-runbook)
-6. [Private volume recovery](#private-volume-recovery)
-7. [Cgroup Controllers](#cgroup-controllers)
-8. [lxcfs (Cgroup-Aware /proc)](#lxcfs)
-9. [Storage Quotas](#storage-quotas)
-10. [Docker vs Podman](#docker-vs-podman)
-11. [Verification](#verification)
-12. [Troubleshooting](#troubleshooting)
-13. [Traefik Security Hardening](#traefik-security-hardening)
-14. [Quick Production Checklist](#quick-production-checklist)
+5. [Private volume recovery](#private-volume-recovery)
+6. [Batch job rollout](#batch-job-rollout)
+7. [Rollback runbook](#rollback-runbook)
+8. [Cgroup Controllers](#cgroup-controllers)
+9. [lxcfs (Cgroup-Aware /proc)](#lxcfs)
+10. [Storage Quotas](#storage-quotas)
+11. [Docker vs Podman](#docker-vs-podman)
+12. [Verification](#verification)
+13. [Troubleshooting](#troubleshooting)
+14. [Traefik Security Hardening](#traefik-security-hardening)
+15. [Quick Production Checklist](#quick-production-checklist)
 
 ---
 
@@ -203,8 +204,26 @@ When neither variable is pinned, deploys keep the source-build behavior.
    ./nukelabctl restart
    ```
 
-5. Verify `/api/health`, the admin setup checklist, and that no lifecycle
-   operation remains uncertain before resuming normal traffic.
+5. Run the read-only post-upgrade verifier. It checks the required service
+   containers, public API health and release version, running service image
+   identity, database Alembic head compatibility, Celery worker heartbeat and
+   Beat presence, unresolved recovery rows, and batch-job tables when installed.
+   It never migrates, writes, restarts, pulls, or prints credentials:
+
+   ```bash
+   ./nukelabctl doctor --post-upgrade
+   # Pin the expected release explicitly when it is not resolved from the env:
+   ./nukelabctl doctor --post-upgrade --expected-version 2.4.0
+   ```
+
+   The output reports the expected and observed release version and schema
+   revision. Exit status `0` means every required check passed; `1` means at
+   least one failed. Warnings require review but do not fail. Fix failures before
+   resuming normal traffic. In particular, unresolved `uncertain` /
+   `recovery_required` rows must be reconciled first. A deployment without batch
+   jobs reports its batch tables as not installed, not as a failure.
+
+6. Review the admin setup checklist before resuming normal traffic.
 
 ---
 
@@ -228,6 +247,51 @@ Recovery history remains readable when the configuration is missing, but
 backup and restore mutations are disabled. Storage budgets, retention and
 restore procedures are documented in
 [BACKUP-RESTORE.md](BACKUP-RESTORE.md#private-user-volume-recovery).
+
+---
+
+## Batch job rollout
+
+Batch jobs are optional and disabled for new submissions by default. The normal
+pinned upgrade applies the additive `batch_jobs`/`batch_job_logs` migrations;
+`doctor --post-upgrade` reports whether those tables are installed without
+failing a deployment that does not use them. See the
+[upgrade runbook](#upgrade-runbook).
+
+Enable a pilot only after the migration, backend, `celery-worker` and
+`celery-beat` run the same release:
+
+```env
+BATCH_JOBS_SUBMISSION_ENABLED=true
+BATCH_JOBS_ALLOWED_USER_IDS=<owner-uuid>[,<owner-uuid>]
+```
+
+Keep the `BATCH_JOBS_*` runtime, interval and limit values consistent across the
+backend, worker and Beat; Beat schedules using the interval settings. An empty
+cohort falls back to `jobs:write_own`. Paid plans require
+`BATCH_JOBS_ALLOW_PAID_PLANS=true` and `CREDITS_ENABLED=true`; restrict the paid
+plan through its visibility/role rules. Mark the plan **Batch jobs** in Admin →
+Plans and uncheck **Servers** if it should be job-only. A paid job holds its
+maximum runtime cost, settles actual runtime at terminal proof, and refunds the
+unused hold.
+For a writable production pilot, enable
+`BATCH_JOBS_REQUIRE_STORAGE_ENFORCEMENT=true` only after the volume storage path
+is XFS with `prjquota`/`pquota` and the backend has effective `CAP_SYS_ADMIN`.
+The capability probe is read-only; with enforcement required and unavailable,
+submission fails with `storage_limits_unenforced` instead of advertising an
+unenforced limit. Disabling submission later blocks only new submissions;
+existing jobs, history, logs and cancellation continue. Keep the worker and Beat
+running until no job is queued or active, and do not delete job rows,
+`job_writer` guards, or containers to drain the pilot. `recovery_required` jobs
+need operator inspection; proof-backed reconcile is available in `/admin/jobs`
+for operators with `jobs:write_all` (or legacy `operations:manage_all`), and
+ambiguous evidence releases nothing. Safe cancellation is also available there
+for queued/starting/running jobs and keeps a started job's protection until
+verified termination.
+
+The full rollout, verification and drain procedure is in
+[OPERATIONS.md](OPERATIONS.md#115-batch-job-rollout-and-drain), and the lifecycle is
+documented in [BATCH-JOBS.md](../architecture/BATCH-JOBS.md).
 
 ---
 
@@ -273,6 +337,18 @@ the failed upgrade.
    ```bash
    ./nukelabctl restart
    ```
+
+6. Re-run the read-only verifier against the rolled-back release:
+
+   ```bash
+   ./nukelabctl doctor --post-upgrade --expected-version <previous-version>
+   ```
+
+   The observed API version, service image tags and database schema revision
+   must match the previous release. A schema revision that is newer than or
+   unknown to the previous backend image is reported as a failure; restore the
+   marked snapshot from step 4 and retry. The verifier does not change the
+   stack, database, or jobs.
 
 The backend startup guard refuses to boot an old image on a newer schema: if
 you forget to restore the snapshot, the container logs an error naming the

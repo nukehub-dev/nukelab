@@ -499,3 +499,37 @@ Use CVSS 4.0 with the following mapping:
   reservations require explicit verified recovery, never elapsed-time takeover.
 - Verify active restores pin retention/deletion, broker redelivery is idempotent,
   and no API response exposes host paths, archive bytes or helper diagnostics.
+
+## Batch job controls
+
+Single-run batch jobs add an owner command surface, a headless runtime, and a
+sanitized operator view with proof-only reconcile. Test each control without
+treating a unit test as runtime proof.
+
+| Control | Test focus | Regression evidence |
+|---|---|---|
+| JWT owner authorization | API tokens are rejected; guest/foreign IDs return 403/404 without confirming existence; capabilities/history/logs remain readable while submission is disabled | [test_jobs.py](../../backend/tests/api/test_jobs.py), [test_job_ownership.py](../../backend/tests/security/test_job_ownership.py) |
+| Plan availability | Server launch rejects plans with `allow_servers=false`; job submission and admission reject CPU plans without `allow_batch_jobs`; disabling server availability while servers still use a plan returns 409; changing the job rate/flag is rechecked at admission | [test_plan_service.py](../../backend/tests/services/test_plan_service.py), [test_server_launch_service.py](../../backend/tests/services/test_server_launch_service.py), [test_batch_job_service.py](../../backend/tests/services/test_batch_job_service.py) |
+| Submission policy | Cohort removal, revoked revision/permission, changed plan snapshot, GPU plan, foreign/busy volume, oversized argv/runtime, and paid flag/hold rejection fail without a reservation | [test_batch_job_admission.py](../../backend/tests/services/test_batch_job_admission.py), [test_batch_job_service.py](../../backend/tests/services/test_batch_job_service.py) |
+| Credit hold and settlement | Paid submission creates one hold under the admission/user lock; insufficient spendable balance returns 402 with no row; foreign owners cannot release a hold; admission requires a held authorization matching the frozen charge; terminal results settle actual runtime, refund unused authorization, record unpaid instead of raising, and retain the hold for `recovery_required` | [test_credit_holds.py](../../backend/tests/services/test_credit_holds.py), [test_batch_job_billing.py](../../backend/tests/services/test_batch_job_billing.py), [test_paid_job_holds.py](../../backend/tests/security/test_paid_job_holds.py) |
+| Idempotency and replay | Reuse a key with the same payload returns the original job; a changed payload returns 409; broker redelivery cannot create a second runtime | [test_batch_job_admission.py](../../backend/tests/services/test_batch_job_admission.py), [test_batch_job_dispatch.py](../../backend/tests/services/test_batch_job_dispatch.py) |
+| Admin cross-owner privacy | `ADMIN_ACCESS` + a cross-owner job read grant (`jobs:read_all`, `jobs:access_others`, or the legacy `operations:read_all`) + JWT are required; owner names are bounded; argv, logs, environment values, image references, runtime identity, volume paths and fencing tokens never appear | [test_admin_jobs.py](../../backend/tests/api/test_admin_jobs.py), [test_admin_jobs_privacy.py](../../backend/tests/security/test_admin_jobs_privacy.py) |
+| Safe admin cancellation | `ADMIN_ACCESS` + (`jobs:write_all` or legacy `operations:manage_all`) + JWT and a bounded reason are required; queued jobs release the full hold, started jobs retain reservation/guard/hold until proof, `recovery_required` is refused, terminal rows are idempotent, audit failure blocks mutation, and force/release fields are rejected | [test_admin_jobs.py](../../backend/tests/api/test_admin_jobs.py), [test_admin_jobs_privacy.py](../../backend/tests/security/test_admin_jobs_privacy.py) |
+| Proof-only reconcile authorization | `ADMIN_ACCESS` + (`jobs:write_all` or legacy `operations:manage_all`) + JWT and a bounded reason are required; ambiguous/running/non-recovery rows return 409 and release nothing; terminal rows are idempotent; audit failure blocks mutation; no force/override input is accepted | [test_admin_jobs.py](../../backend/tests/api/test_admin_jobs.py), [test_batch_job_recovery.py](../../backend/tests/services/test_batch_job_recovery.py), [test_admin_jobs_privacy.py](../../backend/tests/security/test_admin_jobs_privacy.py) |
+| Storage enforcement truthfulness | Capabilities report kernel enforcement; required-but-unenforced submission fails closed; admission leaves the job queued without a reservation or guard; the probe performs no writes | [test_batch_job_storage_capability.py](../../backend/tests/services/test_batch_job_storage_capability.py) |
+| Retention and completion delivery | Expired payloads are physically removed without altering the result; completion notifications are deduplicated, bounded, and best effort; delivery failure leaves the result and guard release intact | [test_batch_job_retention.py](../../backend/tests/services/test_batch_job_retention.py), [test_batch_job_notifications.py](../../backend/tests/services/test_batch_job_notifications.py) |
+| Exclusive volume writer guard | `job_writer` conflicts with file mutation, sharing/metadata changes, launch mounts, backup/restore, and deletion; an unrelated volume is unaffected; release requires termination proof | [test_batch_job_volume_guard.py](../../backend/tests/services/test_batch_job_volume_guard.py) |
+| Hardened headless runtime | Fixed UID 65532, read-only rootfs, `CapDrop=ALL`, no-new-privileges, no network/ports/restart, bounded pids/memory/tmpfs, literal argv, and `/work` preparation before the job; reject malformed mounts/labels/env | [test_batch_driver.py](../../backend/tests/container/test_batch_driver.py), [test_batch_job_runtime.py](../../backend/tests/services/test_batch_job_runtime.py) |
+| Bounded input, logs and deadlines | Argument/runtime bounds reject before admission; logs keep only the newest byte-bounded tail; the deadline starts at observed start and stop/settle precedence preserves a natural early exit | [test_batch_job_service.py](../../backend/tests/services/test_batch_job_service.py), [test_batch_job_monitor.py](../../backend/tests/services/test_batch_job_monitor.py) |
+| Cleanup and recovery | Lost create/start responses retain the reservation; stale heartbeats only inspect; `recovery_required` keeps the guard; cleanup failure is recorded and retried without reopening the result | [test_batch_job_runtime.py](../../backend/tests/services/test_batch_job_runtime.py), [test_batch_job_recovery.py](../../backend/tests/services/test_batch_job_recovery.py), [test_batch_job_workers.py](../../backend/tests/tasks/test_batch_job_workers.py) |
+
+Run runtime races only on an isolated daemon. The current release has a real
+API→PostgreSQL/Redis/Celery/Docker `@jobs-runtime` scenario on a disposable
+Docker stack plus worker and broker interruption drills that prove one create,
+one start, one terminal result, one released guard, and zero billing. The same
+stack also proved a paid job end to end: a 2-NUKE hold, 1 NUKE charged for
+observed runtime, one `batch_job_usage` ledger entry, and a released hold. Paid
+integration, concurrency, and migration suites pass locally. The new explicit CI
+browser job and the XFS over-cap write still require execution on their target
+environments; an external assessment must not treat the mocked browser or
+service suites as those proofs.

@@ -11,6 +11,7 @@ export class ApiError extends Error {
   status: number
   retryAfter?: number
   code?: string
+  field?: string
   queueId?: string
 
   constructor(message: string, status: number, retryAfter?: number) {
@@ -19,6 +20,10 @@ export class ApiError extends Error {
     this.status = status
     this.retryAfter = retryAfter
   }
+}
+
+export interface ApiRequestOptions {
+  headers?: Record<string, string>
 }
 
 export const queryClient = new QueryClient({
@@ -179,12 +184,14 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
     let detail = response.statusText
     let retryAfter: number | undefined
     let code: string | undefined
+    let field: string | undefined
     let queueId: string | undefined
     try {
       const body = await response.json()
       detail = extractErrorDetail(body, response.statusText)
       if (body?.detail && typeof body.detail === 'object') {
         code = typeof body.detail.code === 'string' ? body.detail.code : undefined
+        field = typeof body.detail.field === 'string' ? body.detail.field : undefined
         queueId = isQueueId(body.detail.queue_id) ? body.detail.queue_id : undefined
       }
       if (response.status === 429 && body.retry_after) {
@@ -196,6 +203,7 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
     }
     const error = new ApiError(detail, response.status, retryAfter)
     error.code = code
+    error.field = field
     error.queueId = queueId
     // Capture server errors (5xx) in Sentry
     if (response.status >= 500) {
@@ -215,10 +223,11 @@ export const api = {
     return apiFetch<T>(path)
   },
 
-  async post<T>(path: string, data: unknown): Promise<T> {
+  async post<T>(path: string, data: unknown, options: ApiRequestOptions = {}): Promise<T> {
     return apiFetch<T>(path, {
       method: 'POST',
       body: JSON.stringify(data),
+      headers: options.headers,
     })
   },
 

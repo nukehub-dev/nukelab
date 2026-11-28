@@ -16,6 +16,7 @@ import io
 import json
 import logging
 import os
+import posixpath
 import re
 import shlex
 import tarfile
@@ -73,6 +74,350 @@ def _valid_digest_reference(value: object) -> bool:
         if not port.isascii() or not port.isdigit() or not 1 <= int(port) <= 65535:
             return False
     return True
+
+
+_BATCH_JOB_NAME_RE = re.compile(
+    r"nukelab-job-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
+)
+_BATCH_PREP_NAME_RE = re.compile(
+    r"nukelab-job-prep-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
+)
+_BATCH_IMAGE_ID_RE = re.compile(r"sha256:[a-f0-9]{64}")
+_BATCH_VOLUME_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+_BATCH_ENV_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_BATCH_LABEL_KEY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*")
+_BATCH_MOUNT_KEYS = {"Type", "Source", "Target", "ReadOnly"}
+_BATCH_FIXED_ENV = {
+    "HOME": "/tmp",
+    "TMPDIR": "/tmp",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONUNBUFFERED": "1",
+}
+_BATCH_FORBIDDEN_TOOLCHAIN_TARGETS = (
+    "/etc",
+    "/proc",
+    "/sys",
+    "/dev",
+    "/run",
+    "/usr",
+    "/bin",
+    "/lib",
+    "/lib64",
+)
+_BATCH_FIXED_TMPFS_TARGETS = ("/tmp", "/home")
+_BATCH_JOB_USER = "65532:65532"
+_BATCH_MAX_ARGV_ITEMS = 64
+_BATCH_MAX_ARGV_BYTES = 16384
+_BATCH_MAX_ENV_ENTRIES = 128
+_BATCH_MAX_ENV_KEY_CHARS = 128
+_BATCH_MAX_ENV_VALUE_CHARS = 8192
+_BATCH_MAX_ENV_BYTES = 32768
+_BATCH_MAX_LABELS = 32
+_BATCH_MAX_LABEL_KEY_CHARS = 128
+_BATCH_MAX_LABEL_VALUE_CHARS = 1024
+_BATCH_MAX_PATH_CHARS = 4096
+_BATCH_MAX_VOLUME_NAME_CHARS = 255
+_BATCH_MIN_MEMORY_BYTES = 64 * 1024**2
+_BATCH_MAX_MEMORY_BYTES = 1024**4
+_BATCH_MIN_PIDS = 16
+_BATCH_MAX_PIDS = 4096
+_BATCH_DEFAULT_TMPFS_BYTES = 64 * 1024**2
+_BATCH_MIN_TMPFS_BYTES = 16 * 1024**2
+_BATCH_MAX_TMPFS_BYTES = 1024**3
+_BATCH_MAX_TIMEOUT_SECONDS = 24 * 3600
+_BATCH_PREP_MAX_TIMEOUT_SECONDS = 300
+
+
+def _batch_error(reason: str) -> ContainerDriverError:
+    """Build a stable batch validation error without echoing owner data."""
+    return ContainerDriverError(f"Invalid batch job request: {reason}")
+
+
+def _valid_batch_absolute_path(value: object) -> bool:
+    """Return True for a bounded, absolute, normalized, traversal-free path."""
+    if (
+        not isinstance(value, str)
+        or not value.startswith("/")
+        or len(value) > _BATCH_MAX_PATH_CHARS
+        or "\x00" in value
+        or value == "/"
+        or posixpath.normpath(value) != value
+    ):
+        return False
+    return all(part not in ("", ".", "..") for part in value.split("/")[1:])
+
+
+def _validate_batch_name(name: object) -> str:
+    if not isinstance(name, str):
+        raise _batch_error("name")
+    match = _BATCH_JOB_NAME_RE.fullmatch(name)
+    if not match:
+        raise _batch_error("name")
+    job_id = match.group(1)
+    try:
+        if str(uuid.UUID(job_id)) != job_id:
+            raise ValueError
+    except ValueError:
+        raise _batch_error("name") from None
+    return job_id
+
+
+def _valid_batch_image_reference(value: str) -> bool:
+    """Require an exact digest reference with no tag before the digest."""
+    if not _valid_digest_reference(value):
+        return False
+    parts = value.rsplit("@", 1)[0].split("/")
+    for index, part in enumerate(parts):
+        if ":" not in part:
+            continue
+        # A colon is a registry port only in a multi-component first segment.
+        if index != 0 or len(parts) == 1:
+            return False
+        port = part.rsplit(":", 1)[1]
+        if not port.isdigit() or not 1 <= int(port) <= 65535:
+            return False
+    return True
+
+
+def _validate_batch_image(image: object) -> str:
+    """Accept only a local image ID or an exact ``repo@sha256:<digest>``."""
+    if not isinstance(image, str):
+        raise _batch_error("image")
+    if _BATCH_IMAGE_ID_RE.fullmatch(image) or _valid_batch_image_reference(image):
+        return image
+    raise _batch_error("image")
+
+
+def _validate_batch_argv(argv: object) -> list[str]:
+    if not isinstance(argv, list) or not argv or len(argv) > _BATCH_MAX_ARGV_ITEMS:
+        raise _batch_error("argv")
+    total_bytes = 0
+    for arg in argv:
+        if not isinstance(arg, str) or "\x00" in arg:
+            raise _batch_error("argv")
+        try:
+            total_bytes += len(arg.encode("utf-8"))
+        except UnicodeEncodeError:
+            raise _batch_error("argv") from None
+        if total_bytes > _BATCH_MAX_ARGV_BYTES:
+            raise _batch_error("argv")
+    if not argv[0] or argv[0].startswith("-"):
+        raise _batch_error("argv")
+    return list(argv)
+
+
+def _validate_batch_mounts(mounts: object) -> list[dict]:
+    """Allow exactly one writable /work mount and at most one toolchain mount."""
+    if not isinstance(mounts, list) or not 1 <= len(mounts) <= 2:
+        raise _batch_error("mounts")
+    validated = []
+    targets: set[str] = set()
+    work_count = 0
+    toolchain_count = 0
+    for mount in mounts:
+        if not isinstance(mount, dict) or set(mount) != _BATCH_MOUNT_KEYS:
+            raise _batch_error("mount shape")
+        mount_type = mount["Type"]
+        source = mount["Source"]
+        target = mount["Target"]
+        read_only = mount["ReadOnly"]
+        if mount_type not in ("volume", "bind") or type(read_only) is not bool:
+            raise _batch_error("mount type")
+        if not _valid_batch_absolute_path(target) or target in targets:
+            raise _batch_error("mount target")
+        if not isinstance(source, str) or "\x00" in source:
+            raise _batch_error("mount source")
+        if mount_type == "volume":
+            if len(source) > _BATCH_MAX_VOLUME_NAME_CHARS or not _BATCH_VOLUME_NAME_RE.fullmatch(
+                source
+            ):
+                raise _batch_error("mount source")
+        elif not _valid_batch_absolute_path(source):
+            raise _batch_error("mount source")
+
+        if target == "/work":
+            if read_only is not False:
+                raise _batch_error("work mount")
+            work_count += 1
+        else:
+            if read_only is not True:
+                raise _batch_error("toolchain mount")
+            if _batch_target_is_forbidden(target):
+                raise _batch_error("toolchain target")
+            toolchain_count += 1
+
+        targets.add(target)
+        validated.append(
+            {
+                "Type": mount_type,
+                "Source": source,
+                "Target": target,
+                "ReadOnly": read_only,
+            }
+        )
+
+    if work_count != 1 or toolchain_count > 1:
+        raise _batch_error("mounts")
+    return validated
+
+
+def _batch_target_is_forbidden(target: str) -> bool:
+    if target == "/work" or target.startswith("/work/"):
+        return True
+    if target in _BATCH_FIXED_TMPFS_TARGETS:
+        return True
+    return any(
+        target == root or target.startswith(root + "/")
+        for root in _BATCH_FORBIDDEN_TOOLCHAIN_TARGETS
+    )
+
+
+def _validate_bounded_labels(labels: object) -> dict[str, str]:
+    if not isinstance(labels, dict) or len(labels) > _BATCH_MAX_LABELS:
+        raise _batch_error("labels")
+    validated: dict[str, str] = {}
+    for key, value in labels.items():
+        if (
+            not isinstance(key, str)
+            or not isinstance(value, str)
+            or not key
+            or len(key) > _BATCH_MAX_LABEL_KEY_CHARS
+            or not _BATCH_LABEL_KEY_RE.fullmatch(key)
+            or len(value) > _BATCH_MAX_LABEL_VALUE_CHARS
+            or any(ord(char) < 32 or ord(char) == 127 for char in value)
+        ):
+            raise _batch_error("labels")
+        validated[key] = value
+    return validated
+
+
+def _validate_batch_labels(labels: object, job_id: str) -> dict[str, str]:
+    validated = _validate_bounded_labels(labels)
+    if validated.get("nukelab.workload") != "job":
+        raise _batch_error("labels")
+    if validated.get("nukelab.job.id") != job_id:
+        raise _batch_error("labels")
+    fence = validated.get("nukelab.job.fence")
+    try:
+        uuid.UUID(fence)
+    except (TypeError, ValueError):
+        raise _batch_error("labels") from None
+    return validated
+
+
+def _validate_batch_prep_name(name: object) -> str:
+    if not isinstance(name, str):
+        raise _batch_error("name")
+    match = _BATCH_PREP_NAME_RE.fullmatch(name)
+    if not match:
+        raise _batch_error("name")
+    job_id = match.group(1)
+    try:
+        if str(uuid.UUID(job_id)) != job_id:
+            raise ValueError
+    except ValueError:
+        raise _batch_error("name") from None
+    return job_id
+
+
+def _validate_batch_prep_labels(labels: object, job_id: str) -> dict[str, str]:
+    validated = _validate_bounded_labels(labels)
+    if validated.get("nukelab.managed", "true") != "true":
+        raise _batch_error("labels")
+    if validated.get("nukelab.batch.prep", job_id) != job_id:
+        raise _batch_error("labels")
+    validated["nukelab.managed"] = "true"
+    validated["nukelab.batch.prep"] = job_id
+    if len(validated) > _BATCH_MAX_LABELS:
+        raise _batch_error("labels")
+    return validated
+
+
+def _validate_batch_volume(volume: object) -> str:
+    if (
+        not isinstance(volume, str)
+        or len(volume) > _BATCH_MAX_VOLUME_NAME_CHARS
+        or not _BATCH_VOLUME_NAME_RE.fullmatch(volume)
+    ):
+        raise _batch_error("volume")
+    return volume
+
+
+def _validate_batch_prep_timeout(timeout_seconds: object) -> int:
+    if (
+        type(timeout_seconds) is not int
+        or not 1 <= timeout_seconds <= _BATCH_PREP_MAX_TIMEOUT_SECONDS
+    ):
+        raise _batch_error("timeout")
+    return timeout_seconds
+
+
+def _validate_batch_limits(limits: object) -> dict:
+    allowed = {"cpu", "memory_bytes", "pids_limit", "tmpfs_bytes"}
+    if (
+        not isinstance(limits, dict)
+        or not {"cpu", "memory_bytes", "pids_limit"} <= set(limits)
+        or set(limits) - allowed
+    ):
+        raise _batch_error("limits")
+    cpu = limits["cpu"]
+    memory_bytes = limits["memory_bytes"]
+    pids_limit = limits["pids_limit"]
+    tmpfs_bytes = limits.get("tmpfs_bytes", _BATCH_DEFAULT_TMPFS_BYTES)
+    if isinstance(cpu, bool) or not isinstance(cpu, (int, float)) or not 0.1 <= cpu <= 1024:
+        raise _batch_error("limits")
+    if type(memory_bytes) is not int or not (
+        _BATCH_MIN_MEMORY_BYTES <= memory_bytes <= _BATCH_MAX_MEMORY_BYTES
+    ):
+        raise _batch_error("limits")
+    if type(pids_limit) is not int or not _BATCH_MIN_PIDS <= pids_limit <= _BATCH_MAX_PIDS:
+        raise _batch_error("limits")
+    if type(tmpfs_bytes) is not int or not (
+        _BATCH_MIN_TMPFS_BYTES <= tmpfs_bytes <= _BATCH_MAX_TMPFS_BYTES
+    ):
+        raise _batch_error("limits")
+    return {
+        "cpu": float(cpu),
+        "memory_bytes": memory_bytes,
+        "pids_limit": pids_limit,
+        "tmpfs_bytes": tmpfs_bytes,
+    }
+
+
+def _validate_batch_env(env: object) -> dict[str, str]:
+    if not isinstance(env, dict) or len(env) > _BATCH_MAX_ENV_ENTRIES:
+        raise _batch_error("environment")
+    validated: dict[str, str] = {}
+    total_bytes = 0
+    for key, value in env.items():
+        if (
+            not isinstance(key, str)
+            or not isinstance(value, str)
+            or not key
+            or len(key) > _BATCH_MAX_ENV_KEY_CHARS
+            or not _BATCH_ENV_KEY_RE.fullmatch(key)
+            or len(value) > _BATCH_MAX_ENV_VALUE_CHARS
+            or "\x00" in value
+        ):
+            raise _batch_error("environment")
+        if key in _BATCH_FIXED_ENV:
+            raise _batch_error("environment")
+        try:
+            total_bytes += len(key.encode("utf-8")) + len(value.encode("utf-8"))
+        except UnicodeEncodeError:
+            raise _batch_error("environment") from None
+        if total_bytes > _BATCH_MAX_ENV_BYTES:
+            raise _batch_error("environment")
+        validated[key] = value
+    return validated
+
+
+def _validate_batch_timeout(timeout_seconds: object) -> int | None:
+    if timeout_seconds is None:
+        return None
+    if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= _BATCH_MAX_TIMEOUT_SECONDS:
+        raise _batch_error("timeout")
+    return timeout_seconds
 
 
 class DockerDriver(ContainerDriver):
@@ -607,6 +952,187 @@ class DockerDriver(ContainerDriver):
             raise _map_error(e) from e
         await self._inject_cpu_files(container, cpu_limit)
         return container.id
+
+    async def create_batch_container(
+        self,
+        *,
+        name: str,
+        image: str,
+        argv: list[str],
+        mounts: list[dict],
+        labels: dict[str, str],
+        limits: dict,
+        env: dict[str, str],
+        workdir: str = "/work",
+        timeout_seconds: int | None = None,
+    ) -> str:
+        """Create an unstarted hardened headless job container and return its id.
+
+        Validation is fail-closed and happens before any runtime call. The
+        caller has already proved local image identity; this method never
+        pulls or substitutes an artifact, and it never starts the container.
+        """
+        job_id = _validate_batch_name(name)
+        image = _validate_batch_image(image)
+        argv = _validate_batch_argv(argv)
+        mounts = _validate_batch_mounts(mounts)
+        labels = _validate_batch_labels(labels, job_id)
+        limits = _validate_batch_limits(limits)
+        env = _validate_batch_env(env)
+        if workdir != "/work":
+            raise _batch_error("workdir")
+        timeout_seconds = _validate_batch_timeout(timeout_seconds)
+
+        if timeout_seconds is None:
+            entrypoint = [argv[0]]
+            command = argv[1:]
+        else:
+            entrypoint = ["/usr/bin/timeout"]
+            command = [
+                "--signal=TERM",
+                "--kill-after=10",
+                str(timeout_seconds),
+                *argv,
+            ]
+
+        docker_mounts = [
+            {
+                "Type": mount["Type"],
+                "Source": mount["Source"],
+                "Target": mount["Target"],
+                "ReadOnly": mount["ReadOnly"],
+                **({"VolumeOptions": {"NoCopy": True}} if mount["Type"] == "volume" else {}),
+            }
+            for mount in mounts
+        ]
+        memory_bytes = limits["memory_bytes"]
+        tmpfs_bytes = limits["tmpfs_bytes"]
+
+        # The batch profile fixes the approved non-root identity. A customized
+        # interactive setting can never weaken it to root or another user.
+        user = _BATCH_JOB_USER
+
+        config = {
+            "Image": image,
+            "Entrypoint": entrypoint,
+            "Cmd": command,
+            "User": user,
+            "WorkingDir": workdir,
+            "Env": [
+                *(f"{key}={value}" for key, value in _BATCH_FIXED_ENV.items()),
+                *(f"{key}={value}" for key, value in env.items()),
+            ],
+            "Labels": labels,
+            "Healthcheck": {"Test": ["NONE"]},
+            "HostConfig": {
+                "Mounts": docker_mounts,
+                "ReadonlyRootfs": True,
+                "CapDrop": ["ALL"],
+                "SecurityOpt": ["no-new-privileges:true"],
+                "NetworkMode": "none",
+                "PublishAllPorts": False,
+                "Memory": memory_bytes,
+                "MemorySwap": memory_bytes,
+                "NanoCpus": int(limits["cpu"] * 1_000_000_000),
+                "PidsLimit": limits["pids_limit"],
+                "Tmpfs": {
+                    "/tmp": (f"rw,nosuid,nodev,noexec,size={tmpfs_bytes},mode=1777"),
+                    "/home": "rw,nosuid,nodev,noexec,size=16777216,mode=1777",
+                },
+                "RestartPolicy": {"Name": "no"},
+                "AutoRemove": False,
+                "LogConfig": {
+                    "Type": "json-file",
+                    "Config": {"max-size": "1m", "max-file": "1"},
+                },
+            },
+        }
+        try:
+            container = await self.client.containers.create(config, name=name)
+        except aiodocker.DockerError as e:
+            raise _map_error(e) from e
+        return container.id
+
+    async def prepare_batch_volume(
+        self,
+        *,
+        name: str,
+        image: str,
+        volume: str,
+        labels: dict[str, str],
+        timeout_seconds: int = 30,
+    ) -> None:
+        """Fix job volume ownership with a bounded root helper, then remove it.
+
+        The helper is the only trusted root process in the batch profile. It
+        runs a fixed chmod against the single job volume with no network, no
+        capabilities and no user-controlled arguments. Any uncertainty after
+        creation is reported distinctly so the runtime can require recovery
+        instead of starting the job.
+        """
+        job_id = _validate_batch_prep_name(name)
+        image = _validate_batch_image(image)
+        volume = _validate_batch_volume(volume)
+        labels = _validate_batch_prep_labels(labels, job_id)
+        timeout_seconds = _validate_batch_prep_timeout(timeout_seconds)
+
+        config = {
+            "Image": image,
+            "Entrypoint": ["/bin/chmod"],
+            "Cmd": ["0777", "/work"],
+            "User": "0:0",
+            "WorkingDir": "/",
+            "Labels": labels,
+            "Healthcheck": {"Test": ["NONE"]},
+            "HostConfig": {
+                "Mounts": [
+                    {
+                        "Type": "volume",
+                        "Source": volume,
+                        "Target": "/work",
+                        "ReadOnly": False,
+                        "VolumeOptions": {"NoCopy": True},
+                    }
+                ],
+                "ReadonlyRootfs": True,
+                "CapDrop": ["ALL"],
+                "SecurityOpt": ["no-new-privileges:true"],
+                "NetworkMode": "none",
+                "Memory": 64 * 1024**2,
+                "NanoCpus": 100_000_000,
+                "PidsLimit": 16,
+                "RestartPolicy": {"Name": "no"},
+                "AutoRemove": False,
+                "LogConfig": {
+                    "Type": "json-file",
+                    "Config": {"max-size": "1m", "max-file": "1"},
+                },
+            },
+        }
+        try:
+            helper = await self.client.containers.create(config, name=name)
+        except aiodocker.DockerError as error:
+            raise _map_error(error) from error
+
+        try:
+            try:
+                await helper.start()
+                result = await asyncio.wait_for(helper.wait(), timeout=timeout_seconds)
+                exit_code = result.get("StatusCode") if isinstance(result, dict) else None
+                if type(exit_code) is not int or exit_code != 0:
+                    raise ContainerDriverError("batch_volume_prepare_failed")
+            except ContainerDriverError:
+                raise
+            except Exception as error:
+                raise ContainerDriverError("batch_volume_prepare_failed") from error
+        finally:
+            try:
+                await helper.delete(force=True)
+            except aiodocker.DockerError as error:
+                if getattr(error, "status", None) != 404:
+                    raise ContainerDriverError("batch_volume_prepare_unknown") from error
+            except Exception as error:
+                raise ContainerDriverError("batch_volume_prepare_unknown") from error
 
     async def start_container(self, container_id: str):
         """Start a container"""

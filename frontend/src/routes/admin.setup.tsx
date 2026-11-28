@@ -27,6 +27,7 @@ import { usePageGuard } from '../hooks/use-page-guard'
 import { usePlanActions, usePlans } from '../hooks/use-plans'
 import { PERMISSIONS } from '../stores/auth-store'
 import { cn, formatPlanResource } from '../lib/utils'
+import { isServerPlan } from '../lib/plan-availability'
 import type { Environment, Plan } from '../types/api'
 
 export const Route = createFileRoute('/admin/setup')({
@@ -39,7 +40,11 @@ const manageLinkClass = cn(
 )
 
 function isPlanAvailableToUsers(plan: Plan): boolean {
-  return plan.is_active && (plan.is_public || (plan.visible_to_roles || []).includes('user'))
+  return (
+    plan.is_active &&
+    plan.allow_servers !== false &&
+    (plan.is_public || (plan.visible_to_roles || []).includes('user'))
+  )
 }
 
 function planResourceSummary(plan: Plan): string {
@@ -460,8 +465,9 @@ function AdminSetupPage() {
   if (!allowed) return null
 
   const plans = plansData?.data ?? []
-  const activePlans = plans.filter((plan) => plan.is_active)
-  const inactivePlanCount = plans.length - activePlans.length
+  const serverPlans = plans.filter(isServerPlan)
+  const activePlans = serverPlans.filter((plan) => plan.is_active)
+  const inactivePlanCount = serverPlans.length - activePlans.length
   const environments = environmentsData?.data ?? []
   const activePublicEnvironments = environments.filter((env) => env.is_active && env.is_public)
   const activeUserVisiblePlans = activePlans.filter(isPlanAvailableToUsers)

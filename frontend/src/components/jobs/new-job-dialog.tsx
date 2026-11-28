@@ -1,0 +1,803 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { useNavigate } from '@tanstack/react-router'
+import {
+  AlertTriangle,
+  Cpu,
+  ExternalLink,
+  HardDrive,
+  Info,
+  MemoryStick,
+  Play,
+  Terminal,
+  Zap,
+} from 'lucide-react'
+import { ApiError } from '../../lib/api'
+import {
+  JOB_RUNTIME_UNIT_OPTIONS,
+  MIN_JOB_RUNTIME_SECONDS,
+  convertJobRuntime,
+  createJobIdempotencyKey,
+  formatJobCredits,
+  isJobFormField,
+  jobErrorMessage,
+  jobErrorField,
+  jobMaximumCost,
+  jobRequestSignature,
+  jobRuntimeDisplay,
+  jobRuntimeSeconds,
+  parseJobArgs,
+  validateJobArgv,
+  type JobRuntimeUnit,
+} from '../../lib/batch-job'
+import { cn, formatBytes, formatDuration, parseMemoryString } from '../../lib/utils'
+import { isBatchJobPlan } from '../../lib/plan-availability'
+import { usePlans } from '../../hooks/use-plans'
+import { useEligibleJobRevisions, useCreateJob } from '../../hooks/use-jobs'
+import { useVolumes } from '../../hooks/use-volumes'
+import { PERMISSIONS, useAuthStore } from '../../stores/auth-store'
+import { useToastStore } from '../../stores/toast-store'
+import type {
+  CreateJobRequest,
+  EligibleJobRevision,
+  JobCapabilities,
+  JobFormField,
+} from '../../types/batch-job'
+import type { Plan } from '../../types/api'
+import type { Volume } from '../../hooks/use-volumes'
+import { Button } from '../ui/button'
+import { Combobox, type ComboboxOption } from '../ui/combobox'
+import { Input } from '../ui/input'
+import { Label } from '../ui/label'
+import { Textarea } from '../ui/textarea'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../ui/dialog'
+
+interface JobFormState {
+  name: string
+  revisionId: string
+  planId: string
+  volumeId: string
+  executable: string
+  argsText: string
+  runtimeValue: string
+  runtimeUnit: JobRuntimeUnit
+}
+
+const RUNTIME_UNIT_FACTOR: Record<JobRuntimeUnit, number> = {
+  seconds: 1,
+  minutes: 60,
+  hours: 3600,
+}
+
+function emptyForm(capabilities: JobCapabilities): JobFormState {
+  const runtime = jobRuntimeDisplay(capabilities.limits.default_runtime_seconds)
+  return {
+    name: '',
+    revisionId: '',
+    planId: '',
+    volumeId: '',
+    executable: '',
+    argsText: '',
+    runtimeValue: runtime.value,
+    runtimeUnit: runtime.unit,
+  }
+}
+
+function FieldMessage({ id, message }: { id: string; message?: string }) {
+  if (!message) return null
+  return (
+    <p id={id} role="alert" className="text-xs text-destructive">
+      {message}
+    </p>
+  )
+}
+
+function isJobPlan(plan: Plan) {
+  return plan.is_active && isBatchJobPlan(plan)
+}
+
+function planLabel(plan: Plan) {
+  const cost = plan.cost_per_hour > 0 ? ` · ${formatJobCredits(plan.cost_per_hour)} NUKE/h` : ''
+  return `${plan.name} · ${plan.cpu_limit} vCPU · ${formatBytes(
+    parseMemoryString(plan.memory_limit)
+  )} RAM · ${formatBytes(parseMemoryString(plan.disk_limit))} disk${cost}`
+}
+
+function eligibleVolumes(volumes: Volume[], ownerId: string | undefined) {
+  return volumes.filter(
+    (volume) =>
+      volume.visibility === 'private' && volume.owner_id === ownerId && volume.status === 'active'
+  )
+}
+
+function revisionLabel(revision: EligibleJobRevision) {
+  return revision.display_label || `${revision.environment_name} (${revision.revision_id})`
+}
+
+export function NewJobDialog({
+  open,
+  onOpenChange,
+  capabilities,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  capabilities: JobCapabilities
+}) {
+  const navigate = useNavigate()
+  const user = useAuthStore((state) => state.user)
+  const ownerId = user?.id
+  const canWrite = useAuthStore((state) => state.hasPermission(PERMISSIONS.JOBS_WRITE_OWN))
+  const titleId = useId()
+  const descriptionId = useId()
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  const revisions = useEligibleJobRevisions(capabilities.enabled && capabilities.can_submit)
+  const plansQuery = usePlans({ is_active: true, limit: 100 })
+  const volumesQuery = useVolumes()
+  const createJob = useCreateJob()
+
+  const allJobPlans = (plansQuery.data?.data ?? []).filter(isJobPlan)
+  const paidPlansDisabled = capabilities.billing_mode === 'zero_cost'
+  const plans = allJobPlans.filter((plan) => !paidPlansDisabled || plan.cost_per_hour === 0)
+  const disabledPaidPlans = allJobPlans.length - plans.length
+  const volumes = eligibleVolumes(volumesQuery.data ?? [], ownerId)
+  const revisionsAvailable = (revisions.data?.items ?? []).filter(
+    (revision) => revision.supports_jobs && !revision.reason_code
+  )
+  const revisionOptions: ComboboxOption[] = revisionsAvailable.map((revision) => ({
+    value: revision.revision_id,
+    label: revisionLabel(revision),
+    testId: `job-revision-${revision.revision_id}`,
+  }))
+  const planOptions: ComboboxOption[] = allJobPlans.map((plan) => {
+    const disabled = paidPlansDisabled && plan.cost_per_hour > 0
+    return {
+      value: plan.id,
+      label: planLabel(plan),
+      testId: `job-plan-${plan.id}`,
+      disabled,
+      hint: disabled ? 'Paid plan — paid batch jobs are disabled on this deployment' : undefined,
+    }
+  })
+  const volumeOptions: ComboboxOption[] = volumes.map((volume) => ({
+    value: volume.id,
+    label: `${volume.display_name} · ${formatBytes(volume.size_bytes)}`,
+    testId: `job-volume-${volume.id}`,
+  }))
+  const savedPlanId =
+    typeof user?.preferences?.default_plan === 'string' ? user.preferences.default_plan : ''
+  const savedEnvironmentId =
+    typeof user?.preferences?.default_environment === 'string'
+      ? user.preferences.default_environment
+      : ''
+  const savedRevisions = revisionsAvailable.filter(
+    (revision) => revision.environment_id === savedEnvironmentId
+  )
+  const defaultRevisionId =
+    savedRevisions.length === 1
+      ? savedRevisions[0].revision_id
+      : revisionsAvailable.length === 1
+        ? revisionsAvailable[0].revision_id
+        : ''
+  const defaultPlanId = plans.some((plan) => plan.id === savedPlanId)
+    ? savedPlanId
+    : plans.length === 1
+      ? plans[0].id
+      : ''
+  const [form, setForm] = useState<JobFormState>(() => emptyForm(capabilities))
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<JobFormField, string>>>({})
+  const [formError, setFormError] = useState<string | null>(null)
+  const keyRef = useRef<{ key: string | null; signature: string | null }>({
+    key: null,
+    signature: null,
+  })
+  const effectiveRevisionId = form.revisionId || defaultRevisionId
+  const effectivePlanId = form.planId || defaultPlanId
+  const selectedPlan = plans.find((plan) => plan.id === effectivePlanId)
+  const selectedVolume = volumes.find((volume) => volume.id === form.volumeId)
+  const selectedRevision = revisionsAvailable.find(
+    (revision) => revision.revision_id === effectiveRevisionId
+  )
+  const runtimeSeconds = jobRuntimeSeconds(form.runtimeValue, form.runtimeUnit)
+  const runtimeFactor = RUNTIME_UNIT_FACTOR[form.runtimeUnit]
+  const runtimeMin = MIN_JOB_RUNTIME_SECONDS / runtimeFactor
+  const runtimeMax = capabilities.limits.max_runtime_seconds / runtimeFactor
+  const maximumCost =
+    selectedPlan && Number.isFinite(runtimeSeconds)
+      ? jobMaximumCost(selectedPlan.cost_per_hour, runtimeSeconds, capabilities.billing_mode)
+      : 0
+  const submissionDisabled = !capabilities.can_submit || !canWrite
+
+  useEffect(() => {
+    if (!open) return
+    const previous = document.activeElement
+    const frame = requestAnimationFrame(() => contentRef.current?.focus())
+    return () => {
+      cancelAnimationFrame(frame)
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus()
+    }
+  }, [open])
+
+  const update = <K extends keyof JobFormState>(key: K, value: JobFormState[K]) => {
+    setForm((current) => ({ ...current, [key]: value }))
+    const field =
+      key === 'revisionId'
+        ? 'revision_id'
+        : key === 'planId'
+          ? 'plan_id'
+          : key === 'volumeId'
+            ? 'volume_id'
+            : key === 'runtimeValue' || key === 'runtimeUnit'
+              ? 'max_runtime_seconds'
+              : key === 'executable' || key === 'argsText'
+                ? 'argv'
+                : key === 'name'
+                  ? 'name'
+                  : null
+    if (!field) return
+    setFieldErrors((current) => {
+      if (!current[field]) return current
+      const next = { ...current }
+      delete next[field]
+      return next
+    })
+  }
+
+  const updateRuntimeUnit = (unit: JobRuntimeUnit) => {
+    setForm((current) => ({
+      ...current,
+      runtimeUnit: unit,
+      runtimeValue: convertJobRuntime(current.runtimeValue, current.runtimeUnit, unit),
+    }))
+    setFieldErrors((current) => {
+      if (!current.max_runtime_seconds) return current
+      const next = { ...current }
+      delete next.max_runtime_seconds
+      return next
+    })
+  }
+
+  const validate = (): CreateJobRequest | null => {
+    const errors: Partial<Record<JobFormField, string>> = {}
+    const name = form.name.trim()
+    if (!name) errors.name = 'Enter a name for this job.'
+    if (!selectedRevision) errors.revision_id = 'Select an approved environment revision.'
+    if (!selectedPlan) {
+      errors.plan_id =
+        capabilities.billing_mode === 'zero_cost'
+          ? 'Select an available zero-cost plan.'
+          : 'Select an available plan.'
+    }
+    if (!selectedVolume) errors.volume_id = 'Select an owned private volume.'
+    if (!form.executable.trim()) {
+      errors.argv = 'Enter the executable to run.'
+    } else if (form.executable.includes('\n') || form.executable.includes('\r')) {
+      errors.argv = 'The executable must be one argument.'
+    }
+
+    const argv = [form.executable, ...parseJobArgs(form.argsText)]
+    if (!errors.argv) {
+      const argvError = validateJobArgv(argv, capabilities.limits)
+      if (argvError) errors.argv = argvError
+    }
+
+    if (!Number.isFinite(runtimeSeconds) || runtimeSeconds <= 0) {
+      errors.max_runtime_seconds = 'Enter a positive duration.'
+    } else if (runtimeSeconds < MIN_JOB_RUNTIME_SECONDS) {
+      errors.max_runtime_seconds = 'Use at least 1 minute (60 seconds).'
+    } else if (runtimeSeconds > capabilities.limits.max_runtime_seconds) {
+      errors.max_runtime_seconds = `Use at most ${formatDuration(
+        capabilities.limits.max_runtime_seconds
+      )}.`
+    }
+
+    setFieldErrors(errors)
+    if (Object.keys(errors).length > 0) return null
+    return {
+      name,
+      revision_id: effectiveRevisionId,
+      plan_id: effectivePlanId,
+      volume_id: form.volumeId,
+      argv,
+      max_runtime_seconds: runtimeSeconds,
+    }
+  }
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (submissionDisabled || createJob.isPending) return
+    setFormError(null)
+    const request = validate()
+    if (!request) return
+
+    const signature = jobRequestSignature(request)
+    let idempotencyKey = keyRef.current.key
+    if (!idempotencyKey || keyRef.current.signature !== signature) {
+      idempotencyKey = createJobIdempotencyKey()
+      keyRef.current = { key: idempotencyKey, signature }
+    }
+
+    createJob.mutate(
+      { request, idempotencyKey },
+      {
+        onSuccess: (job) => {
+          if (useAuthStore.getState().user?.id !== ownerId) return
+          useToastStore.getState().addToast({
+            type: job.replayed ? 'info' : 'success',
+            title: job.replayed ? 'Existing job opened' : 'Job submitted',
+            message: job.name,
+          })
+          onOpenChange(false)
+          void navigate({ to: '/jobs/$jobId', params: { jobId: job.id } })
+        },
+        onError: (error) => {
+          if (useAuthStore.getState().user?.id !== ownerId) return
+          const apiError = error instanceof ApiError ? error : null
+          const code = apiError?.code
+          const reportedField = apiError?.field
+          const field = isJobFormField(reportedField) ? reportedField : jobErrorField(code)
+          const message = code
+            ? jobErrorMessage(code, error.message)
+            : error.message || 'The job could not be submitted. Try again.'
+          if (field) {
+            setFieldErrors((current) => ({ ...current, [field]: message }))
+          } else {
+            setFormError(message)
+          }
+          if (code === 'idempotency_conflict') {
+            // This request identity can no longer be reused; the draft stays editable.
+            keyRef.current = { key: null, signature: null }
+          }
+        },
+      }
+    )
+  }
+
+  const nameErrorId = 'job-name-error'
+  const argvErrorId = 'job-argv-error'
+  const runtimeErrorId = 'job-runtime-error'
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} size="lg">
+      <DialogContent
+        ref={contentRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        tabIndex={-1}
+        className="flex min-h-full flex-col"
+        onKeyDown={(event) => {
+          if (event.key !== 'Tab') return
+          const contentControls = Array.from(
+            contentRef.current?.querySelectorAll<HTMLElement>(
+              'button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]'
+            ) ?? []
+          )
+          // Combobox panels are portaled so they escape drawer clipping.
+          // Include their open controls in the dialog's focus cycle.
+          const panelControls = Array.from(
+            document.querySelectorAll<HTMLElement>(
+              '[data-combobox-panel] input:not(:disabled), [data-combobox-panel] button:not(:disabled)'
+            )
+          )
+          const controls = [...contentControls, ...panelControls]
+          const first = controls[0]
+          const last = controls[controls.length - 1]
+          if (!first || !last) {
+            event.preventDefault()
+            return
+          }
+          if (
+            event.shiftKey &&
+            (document.activeElement === first || document.activeElement === contentRef.current)
+          ) {
+            event.preventDefault()
+            last.focus()
+          } else if (
+            !event.shiftKey &&
+            (document.activeElement === last || document.activeElement === contentRef.current)
+          ) {
+            event.preventDefault()
+            first.focus()
+          }
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle id={titleId} className="flex items-center gap-2">
+            <Terminal className="h-4 w-4 text-primary" aria-hidden="true" />
+            New job
+          </DialogTitle>
+          <DialogDescription id={descriptionId}>
+            Run one noninteractive command in an approved environment using an owned private volume.
+            The backend rechecks every choice before queueing.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="mt-5 flex flex-1 flex-col gap-5" noValidate>
+          {submissionDisabled && (
+            <div
+              role="status"
+              className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-muted-foreground"
+            >
+              <AlertTriangle
+                className="mt-0.5 h-4 w-4 shrink-0 text-amber-400"
+                aria-hidden="true"
+              />
+              <span>
+                {capabilities.reason_code
+                  ? jobErrorMessage(capabilities.reason_code, 'Job submission is unavailable.')
+                  : !canWrite
+                    ? 'You do not have permission to submit jobs.'
+                    : 'Job submission is currently disabled.'}{' '}
+                Authorized history remains available.
+              </span>
+            </div>
+          )}
+
+          {formError && (
+            <div
+              role="alert"
+              className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+            >
+              {formError}
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="job-name">Job name</Label>
+            <Input
+              id="job-name"
+              data-testid="job-name"
+              value={form.name}
+              maxLength={120}
+              autoComplete="off"
+              placeholder="Checksum run"
+              aria-invalid={!!fieldErrors.name}
+              aria-describedby={fieldErrors.name ? nameErrorId : undefined}
+              onChange={(event) => update('name', event.target.value)}
+            />
+            <FieldMessage id={nameErrorId} message={fieldErrors.name} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Environment revision</Label>
+            <Combobox
+              value={effectiveRevisionId}
+              onChange={(value) => update('revisionId', value)}
+              options={revisionOptions}
+              placeholder={
+                revisions.isPending ? 'Loading approved environments…' : 'Select a revision'
+              }
+              searchPlaceholder="Search approved revisions…"
+              disabled={revisions.isPending || revisions.isError || revisionsAvailable.length === 0}
+              data-testid="job-revision"
+            />
+            <p className="text-xs text-muted-foreground">
+              Only approved revisions that support single-run jobs are listed. The selected image is
+              fixed at submission.
+            </p>
+            {revisions.isError ? (
+              <p role="status" className="text-xs text-destructive">
+                Approved environments could not be loaded.{' '}
+                <button
+                  type="button"
+                  className="underline underline-offset-2"
+                  onClick={() => void revisions.refetch()}
+                >
+                  Retry
+                </button>
+              </p>
+            ) : revisions.data && revisionsAvailable.length === 0 ? (
+              <p role="status" className="text-xs text-amber-400">
+                No approved environment revision is available for jobs. Contact an administrator.
+              </p>
+            ) : null}
+            <FieldMessage id="job-revision-error" message={fieldErrors.revision_id} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Resource plan</Label>
+            <Combobox
+              value={effectivePlanId}
+              onChange={(value) => update('planId', value)}
+              options={planOptions}
+              placeholder={plansQuery.isPending ? 'Loading plans…' : 'Select a plan'}
+              searchPlaceholder="Search CPU plans…"
+              disabled={plansQuery.isPending || plansQuery.isError || allJobPlans.length === 0}
+              data-testid="job-plan"
+            />
+            {plansQuery.isError ? (
+              <p role="status" className="text-xs text-destructive">
+                Resource plans could not be loaded.{' '}
+                <button
+                  type="button"
+                  className="underline underline-offset-2"
+                  onClick={() => void plansQuery.refetch()}
+                >
+                  Retry
+                </button>
+              </p>
+            ) : plansQuery.data && allJobPlans.length === 0 ? (
+              <p role="status" className="text-xs text-amber-400">
+                No active CPU plan is enabled for batch jobs. Contact an administrator.
+              </p>
+            ) : plansQuery.data && plans.length === 0 ? (
+              <p role="status" className="text-xs text-amber-400">
+                All active CPU plans are paid, and paid batch jobs are disabled on this deployment.
+              </p>
+            ) : null}
+            {disabledPaidPlans > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {disabledPaidPlans} paid CPU plan{disabledPaidPlans === 1 ? '' : 's'} listed but
+                disabled because paid batch jobs are off.
+              </p>
+            )}
+            <FieldMessage id="job-plan-error" message={fieldErrors.plan_id} />
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-3">
+              <Label>Private work volume</Label>
+              <div className="flex items-center gap-3 text-xs">
+                <button
+                  type="button"
+                  className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  onClick={() => void volumesQuery.refetch()}
+                >
+                  Refresh
+                </button>
+                <a
+                  href="/volumes"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+                >
+                  Create volume
+                  <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                </a>
+              </div>
+            </div>
+            <Combobox
+              value={form.volumeId}
+              onChange={(value) => update('volumeId', value)}
+              options={volumeOptions}
+              placeholder={volumesQuery.isPending ? 'Loading volumes…' : 'Select a private volume'}
+              searchPlaceholder="Search owned private volumes…"
+              disabled={volumesQuery.isPending || volumesQuery.isError || volumes.length === 0}
+              data-testid="job-volume"
+            />
+            <p className="text-xs text-muted-foreground">
+              The volume is mounted read/write at <code className="font-mono">/work</code> for the
+              exclusive duration of the job. Inputs must already be present.
+            </p>
+            {volumesQuery.isError ? (
+              <p role="status" className="text-xs text-destructive">
+                Volumes could not be loaded.{' '}
+                <button
+                  type="button"
+                  className="underline underline-offset-2"
+                  onClick={() => void volumesQuery.refetch()}
+                >
+                  Retry
+                </button>
+              </p>
+            ) : volumesQuery.data && volumes.length === 0 ? (
+              <p role="status" className="text-xs text-amber-400">
+                No owned private volume is available.{' '}
+                <a
+                  href="/volumes"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline underline-offset-2"
+                >
+                  Create an active private volume
+                </a>{' '}
+                first.
+              </p>
+            ) : null}
+            <FieldMessage id="job-volume-error" message={fieldErrors.volume_id} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="job-executable">Executable</Label>
+            <Input
+              id="job-executable"
+              data-testid="job-executable"
+              value={form.executable}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="python"
+              className="font-mono"
+              aria-invalid={!!fieldErrors.argv}
+              aria-describedby={fieldErrors.argv ? argvErrorId : undefined}
+              onChange={(event) => update('executable', event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              One executable name or path. It is passed to the runtime literally; no shell is
+              involved.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="job-args">Arguments</Label>
+            <Textarea
+              id="job-args"
+              data-testid="job-args"
+              value={form.argsText}
+              autoResize={false}
+              spellCheck={false}
+              rows={4}
+              placeholder={'/work/input.py\n--checksum'}
+              className="min-h-24 font-mono text-xs"
+              aria-invalid={!!fieldErrors.argv}
+              aria-describedby={fieldErrors.argv ? argvErrorId : 'job-args-help'}
+              onChange={(event) => update('argsText', event.target.value)}
+            />
+            <p id="job-args-help" className="text-xs text-muted-foreground">
+              One argument per line. Quoting, pipes, globs and variable expansion are not parsed.
+            </p>
+            <FieldMessage id={argvErrorId} message={fieldErrors.argv} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="job-runtime">Maximum runtime</Label>
+            <div className="flex gap-2">
+              <Input
+                id="job-runtime"
+                data-testid="job-runtime"
+                type="number"
+                min={runtimeMin}
+                step="any"
+                max={runtimeMax}
+                value={form.runtimeValue}
+                className="flex-1"
+                aria-invalid={!!fieldErrors.max_runtime_seconds}
+                aria-describedby={
+                  fieldErrors.max_runtime_seconds ? runtimeErrorId : 'job-runtime-help'
+                }
+                onChange={(event) => update('runtimeValue', event.target.value)}
+              />
+              <div
+                role="group"
+                aria-label="Runtime unit"
+                className="flex h-9 shrink-0 overflow-hidden rounded-lg border border-input bg-input/80"
+              >
+                {JOB_RUNTIME_UNIT_OPTIONS.map((option) => {
+                  const selected = form.runtimeUnit === option.value
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={selected}
+                      aria-label={option.label}
+                      data-testid={`job-runtime-unit-${option.value}`}
+                      onClick={() => updateRuntimeUnit(option.value)}
+                      className={cn(
+                        'w-9 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50',
+                        selected
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:bg-accent'
+                      )}
+                    >
+                      {option.shortLabel}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <p id="job-runtime-help" className="text-xs text-muted-foreground">
+              Default {formatDuration(capabilities.limits.default_runtime_seconds)}; minimum{' '}
+              {formatDuration(MIN_JOB_RUNTIME_SECONDS)}; maximum{' '}
+              {formatDuration(capabilities.limits.max_runtime_seconds)}. The deadline starts when
+              the runtime is observed running.
+            </p>
+            <FieldMessage id={runtimeErrorId} message={fieldErrors.max_runtime_seconds} />
+          </div>
+
+          <div className="rounded-xl border border-border/50 bg-surface/50 p-4">
+            <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <Info className="h-3.5 w-3.5" aria-hidden="true" />
+              Execution summary
+            </h3>
+            <dl className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
+              <div>
+                <dt className="text-muted-foreground">Working directory</dt>
+                <dd className="mt-0.5 font-mono text-foreground">/work</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Output volume</dt>
+                <dd className="mt-0.5 break-words text-foreground">
+                  {selectedVolume?.display_name ?? 'Select a volume'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Requested plan</dt>
+                <dd className="mt-0.5 break-words text-foreground">
+                  {selectedPlan?.name ?? 'Select a plan'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">
+                  {capabilities.billing_mode === 'paid' ? 'Maximum hold' : 'Maximum cost'}
+                </dt>
+                <dd
+                  className="mt-0.5 font-medium text-foreground"
+                  data-testid={
+                    capabilities.billing_mode === 'paid' ? 'job-maximum-hold' : undefined
+                  }
+                >
+                  {capabilities.billing_mode === 'zero_cost'
+                    ? 'Zero cost'
+                    : selectedPlan
+                      ? `${formatJobCredits(maximumCost)} NUKE`
+                      : 'Select a plan'}
+                </dd>
+                {capabilities.billing_mode === 'paid' && selectedPlan && (
+                  <p
+                    data-testid="job-hold-refund-note"
+                    className="mt-1 text-[11px] leading-relaxed text-muted-foreground"
+                  >
+                    Held until the job finishes. Unused credits are refunded after the terminal
+                    result.
+                  </p>
+                )}
+              </div>
+            </dl>
+            {selectedPlan && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                <span className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-surface/60 px-2 py-1 text-[11px] text-muted-foreground">
+                  <Cpu className="h-3 w-3" aria-hidden="true" />
+                  {selectedPlan.cpu_limit} vCPU
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-surface/60 px-2 py-1 text-[11px] text-muted-foreground">
+                  <MemoryStick className="h-3 w-3" aria-hidden="true" />
+                  {selectedPlan.memory_limit} RAM
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-surface/60 px-2 py-1 text-[11px] text-muted-foreground">
+                  <HardDrive className="h-3 w-3" aria-hidden="true" />
+                  {selectedPlan.disk_limit} disk
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-surface/60 px-2 py-1 text-[11px] text-muted-foreground">
+                  <Zap className="h-3 w-3" aria-hidden="true" />
+                  {selectedPlan.gpu_limit} GPU
+                </span>
+              </div>
+            )}
+            <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+              The environment is offline. Write outputs under{' '}
+              <code className="font-mono">/work</code> so they remain on the selected volume after
+              the runtime is removed.
+            </p>
+          </div>
+
+          <DialogFooter className="mt-auto">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              data-testid="job-submit"
+              loading={createJob.isPending}
+              disabled={submissionDisabled}
+            >
+              <Play className="h-4 w-4" aria-hidden="true" />
+              Submit job
+            </Button>
+          </DialogFooter>
+        </form>
+        <DialogClose onClick={() => onOpenChange(false)} />
+      </DialogContent>
+    </Dialog>
+  )
+}

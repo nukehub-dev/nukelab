@@ -26,6 +26,11 @@ executor outcomes. Owner APIs and task orchestration use these records for
 queueing, approved recreation and offline private-volume recovery. Runtime
 uncertainty preserves protection until explicit verified reconciliation.
 
+`batch_jobs` keeps single-run command intent and execution independent of
+`servers`; a job never creates a Server row. Its reservation participates in the
+same quota/resource-pool accounting, and `job_writer` extends the existing
+exclusive volume guard. `batch_job_logs` stores only a bounded retained tail.
+
 `volume_backups` records source metadata, archive format/checksum and bounded
 completion counts, operation fence, storage reservation and expiry. Its nullable
 source foreign key uses `SET NULL` so completed copies survive source deletion.
@@ -252,8 +257,35 @@ restarted incarnation.
 Durable writer/mount/backup/restore exclusion. Composite key
 `(operation_id, volume_id)`; fields include `owner_id`, `kind`, `state`,
 `fencing_token`, `helper_identity`, `reason_code`, and timestamps. A partial
-unique index permits one exclusive backup/restore operation per volume while it
-is `reserved`, `running`, or `recovery_required`.
+unique index permits one exclusive backup, restore, or batch `job_writer`
+operation per volume while it is `reserved`, `running`, or
+`recovery_required`. The guard releases only after the claimant's termination is
+proved.
+
+### BatchJob and BatchJobLog
+
+`batch_jobs` is the durable owner intent and execution journal for one
+noninteractive command. Fields include `user_id`, `name`,
+`idempotency_key_hash`, `request_fingerprint`, `revision_id`, `plan_id`,
+`volume_id`, literal `argv`, `max_runtime_seconds`, `state`, `reason_code`,
+queue/create/start/deadline/stop timestamps, immutable revision/plan/volume
+snapshots, reservation fields (`reservation_active`, reserved CPU/memory/disk,
+`volume_operation_id`, `volume_fencing_token`), observed runtime identity,
+`executor_id`, `heartbeat_at`, `fencing_token`, terminal result fields,
+`cleanup_state`/`cleanup_attempts`, log metadata, and zero-cost billing fields.
+
+Indexes cover owner history `(user_id, created_at, id)`, unique owner idempotency
+`(user_id, idempotency_key_hash)`, queued dispatch `(created_at, id)`, queued
+expiry `(queue_expires_at, id)`, active recovery
+`(state, heartbeat_at, id)`, and unreleased reservations
+`(reserved_at, id) WHERE reservation_active`.
+
+`batch_job_logs` has one row per job: `job_id` primary key, bounded `text`,
+`encoding`, `truncated`, `size_bytes`, `captured_at`, and `expires_at`. Payloads
+are capped by `BATCH_JOBS_LOG_TAIL_BYTES` and hidden by the API after
+`expires_at`; the bounded `purge_batch_job_logs` task removes expired payload
+rows and leaves the terminal result and log metadata intact. See
+[BATCH-JOBS.md](BATCH-JOBS.md) for the lifecycle and admission contract.
 
 ### VolumeBackup and VolumeRestore
 
@@ -280,11 +312,20 @@ history.
 - Foreign keys enforce referential integrity; deletion is generally restricted,
   cascaded for owned child rows, or set to null for optional references.
 - Alembic revisions form exactly one head. Migration tests assert the single
-  head, and mixed or branched heads are unsupported for deployment.
+  head, and mixed or branched heads are unsupported for deployment. The batch
+  job additions extend the chain through `a3b8c1d4e5f6`, including
+  `server_plans.allow_servers` and `server_plans.allow_batch_jobs`.
+
+`credit_holds` stores one authorization per paid batch job: owner/job references,
+held amount, state (`held`/`settled`/`released`), captured charge, unpaid
+remainder, the optional `batch_job_usage` transaction id, and creation/settlement
+times. A unique job id prevents duplicate holds. Batch jobs also carry
+`authorized_credits`, `billing_rate_per_hour`, and `billing_state`.
 
 ## Related documents
 
 - [SERVER-LIFECYCLE.md](SERVER-LIFECYCLE.md) for how entities transition through states
+- [BATCH-JOBS.md](BATCH-JOBS.md) for single-run batch-job lifecycle and admission
 - [AUTH.md](AUTH.md) for user and role authorization details
 - [operations/OPERATIONS.md](../operations/OPERATIONS.md) for database profiling and partition management
 - `backend/app/models/` and `backend/alembic/versions/` for the complete schema

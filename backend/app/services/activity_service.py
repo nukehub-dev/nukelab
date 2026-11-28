@@ -20,6 +20,29 @@ class ActivityService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    def record(
+        self,
+        action: str,
+        target_type: str,
+        target_id: str | None = None,
+        actor_id: str | None = None,
+        details: dict[str, Any] | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> ActivityLog:
+        """Add an activity row without committing the caller's transaction."""
+        log = ActivityLog(
+            actor_id=uuid.UUID(actor_id) if actor_id else None,
+            action=action,
+            target_type=target_type,
+            target_id=uuid.UUID(target_id) if target_id else None,
+            details=details or {},
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        self.db.add(log)
+        return log
+
     async def log(
         self,
         action: str,
@@ -31,17 +54,15 @@ class ActivityService:
         user_agent: str | None = None,
     ) -> ActivityLog:
         """Log an activity"""
-        log = ActivityLog(
-            actor_id=uuid.UUID(actor_id) if actor_id else None,
+        log = self.record(
             action=action,
             target_type=target_type,
-            target_id=uuid.UUID(target_id) if target_id else None,
-            details=details or {},
+            target_id=target_id,
+            actor_id=actor_id,
+            details=details,
             ip_address=ip_address,
             user_agent=user_agent,
         )
-
-        self.db.add(log)
         await self.db.commit()
         await self.db.refresh(log)
 

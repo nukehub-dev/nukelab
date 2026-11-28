@@ -63,7 +63,7 @@ Browser
 - Validates JWT access tokens signed with EdDSA (Ed25519)
 - Enforces RBAC through role and permission checks
 - Handles server spawn/start/stop/restart/delete requests
-- Owns durable queue admission, fenced lifecycle reservations, saved launch provenance and private-volume recovery workflows
+- Owns durable queue admission, fenced lifecycle reservations, saved launch provenance, single-run batch-job admission/execution, and private-volume recovery workflows
 - Manages users, environments, plans, credits, quotas, workspaces, volumes, and notifications
 - Writes audit logs and request metrics
 - Exposes Prometheus metrics at `/api/metrics` when enabled
@@ -100,7 +100,7 @@ Responsibilities:
 - Attach Traefik routing labels
 - Handle start/stop/delete lifecycle transitions and cleanup
 
-### Queue, provenance and recovery services
+### Queue, provenance, batch-job and recovery services
 
 Locations: `backend/app/services/server_queue_service.py`,
 `server_queue_dispatch_service.py`, `server_launch_service.py`,
@@ -110,7 +110,11 @@ Locations: `backend/app/services/server_queue_service.py`,
 `operation_reconciler.py`, `recovery_metrics.py`,
 `recovery_notifications.py`, `volume_operation_service.py`,
 `volume_backup_service.py`, `volume_recovery_runtime.py`,
-`registry_artifact_service.py`, `environment_revision_admin_service.py`.
+`registry_artifact_service.py`, `environment_revision_admin_service.py`,
+`batch_job_service.py`, `batch_job_admission_service.py`,
+`batch_job_dispatch_service.py`, `batch_job_runtime.py`,
+`batch_job_monitor.py`, `batch_job_finalizer.py`,
+`batch_job_reconciliation.py`.
 
 Responsibilities:
 
@@ -127,6 +131,9 @@ Responsibilities:
   verify registry digests/platform identity for admin-approved revisions.
 - Capture and restore private volume archives through the trusted helper with
   storage budgets, retention pins and writer exclusion.
+- Admit one noninteractive batch job against the same resource pools and an
+  exclusive `job_writer` volume guard, run it in a hardened no-network
+  container, and monitor/recover it without a second create or TTL takeover.
 - Publish bounded recovery metrics and deduplicated owner notifications.
 
 ### Volume recovery helper
@@ -169,6 +176,7 @@ Responsibilities:
 - Send notifications (in-app, email, WebSocket)
 - Execute maintenance window enable/disable
 - Dispatch durable queue batches and reconcile expired or uncertain launches
+- Dispatch, monitor and recover single-run batch jobs and retry bounded cleanup
 - Run periodic cleanup, recovery retention and health tasks
 
 ### NukeIDE container
@@ -195,4 +203,4 @@ Optional compose overlays extend the core stack:
 | `compose.tracing.yml` | OpenTelemetry collector and Jaeger |
 | `compose.loadtest.yml` | Load testing tooling |
 
-See [MONITORING.md](MONITORING.md) for observability details and [operations/PRODUCTION-DEPLOYMENT.md](../operations/PRODUCTION-DEPLOYMENT.md) for deployment guidance.
+See [MONITORING.md](MONITORING.md) for observability details, [BATCH-JOBS.md](BATCH-JOBS.md) for single-run batch execution, and [operations/PRODUCTION-DEPLOYMENT.md](../operations/PRODUCTION-DEPLOYMENT.md) for deployment guidance.

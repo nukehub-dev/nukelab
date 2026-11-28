@@ -35,6 +35,7 @@ import { Route as AdminCreditsRouteImport } from './routes/admin.credits'
 import { Route as AdminEnvironmentsRouteImport } from './routes/admin.environments'
 import { Route as AdminHealthRouteImport } from './routes/admin.health'
 import { Route as AdminIpRestrictionsRouteImport } from './routes/admin.ip-restrictions'
+import { Route as AdminJobsRouteImport } from './routes/admin.jobs'
 import { Route as AdminMaintenanceWindowsRouteImport } from './routes/admin.maintenance-windows'
 import { Route as AdminOperationsRouteImport } from './routes/admin.operations'
 import { Route as AdminPermissionsRouteImport } from './routes/admin.permissions'
@@ -47,6 +48,8 @@ import { Route as AdminSetupRouteImport } from './routes/admin.setup'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminVolumesRouteImport } from './routes/admin.volumes'
 import { Route as AdminWorkspacesRouteImport } from './routes/admin.workspaces'
+import { Route as JobsIndexRouteImport } from './routes/jobs.index'
+import { Route as JobsJobIdRouteImport } from './routes/jobs.$jobId'
 import { Route as ServersIndexRouteImport } from './routes/servers.index'
 import { Route as ServersServerIdRouteImport } from './routes/servers.$serverId'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
@@ -193,6 +196,11 @@ const AdminIpRestrictionsRoute = AdminIpRestrictionsRouteImport.update({
   path: '/ip-restrictions',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminJobsRoute = AdminJobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminMaintenanceWindowsRoute = AdminMaintenanceWindowsRouteImport.update({
   id: '/maintenance-windows',
   path: '/maintenance-windows',
@@ -252,6 +260,16 @@ const AdminWorkspacesRoute = AdminWorkspacesRouteImport.update({
   id: '/workspaces',
   path: '/workspaces',
   getParentRoute: () => AdminRoute,
+} as any)
+const JobsIndexRoute = JobsIndexRouteImport.update({
+  id: '/jobs/',
+  path: '/jobs/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JobsJobIdRoute = JobsJobIdRouteImport.update({
+  id: '/jobs/$jobId',
+  path: '/jobs/$jobId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ServersIndexRoute = ServersIndexRouteImport.update({
   id: '/',
@@ -355,6 +373,7 @@ export interface FileRoutesByFullPath {
   '/admin/environments': typeof AdminEnvironmentsRoute
   '/admin/health': typeof AdminHealthRoute
   '/admin/ip-restrictions': typeof AdminIpRestrictionsRoute
+  '/admin/jobs': typeof AdminJobsRoute
   '/admin/maintenance-windows': typeof AdminMaintenanceWindowsRoute
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/permissions': typeof AdminPermissionsRoute
@@ -367,6 +386,7 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/volumes': typeof AdminVolumesRoute
   '/admin/workspaces': typeof AdminWorkspacesRoute
+  '/jobs/$jobId': typeof JobsJobIdRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/credits': typeof SettingsCreditsRoute
@@ -376,6 +396,7 @@ export interface FileRoutesByFullPath {
   '/settings/tokens': typeof SettingsTokensRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
   '/admin/': typeof AdminIndexRoute
+  '/jobs/': typeof JobsIndexRoute
   '/servers/': typeof ServersIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/workspaces/': typeof WorkspacesIndexRoute
@@ -406,6 +427,7 @@ export interface FileRoutesByTo {
   '/admin/environments': typeof AdminEnvironmentsRoute
   '/admin/health': typeof AdminHealthRoute
   '/admin/ip-restrictions': typeof AdminIpRestrictionsRoute
+  '/admin/jobs': typeof AdminJobsRoute
   '/admin/maintenance-windows': typeof AdminMaintenanceWindowsRoute
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/permissions': typeof AdminPermissionsRoute
@@ -417,6 +439,7 @@ export interface FileRoutesByTo {
   '/admin/setup': typeof AdminSetupRoute
   '/admin/volumes': typeof AdminVolumesRoute
   '/admin/workspaces': typeof AdminWorkspacesRoute
+  '/jobs/$jobId': typeof JobsJobIdRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/credits': typeof SettingsCreditsRoute
@@ -426,6 +449,7 @@ export interface FileRoutesByTo {
   '/settings/tokens': typeof SettingsTokensRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
   '/admin': typeof AdminIndexRoute
+  '/jobs': typeof JobsIndexRoute
   '/servers': typeof ServersIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/workspaces': typeof WorkspacesIndexRoute
@@ -461,6 +485,7 @@ export interface FileRoutesById {
   '/admin/environments': typeof AdminEnvironmentsRoute
   '/admin/health': typeof AdminHealthRoute
   '/admin/ip-restrictions': typeof AdminIpRestrictionsRoute
+  '/admin/jobs': typeof AdminJobsRoute
   '/admin/maintenance-windows': typeof AdminMaintenanceWindowsRoute
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/permissions': typeof AdminPermissionsRoute
@@ -473,6 +498,7 @@ export interface FileRoutesById {
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/volumes': typeof AdminVolumesRoute
   '/admin/workspaces': typeof AdminWorkspacesRoute
+  '/jobs/$jobId': typeof JobsJobIdRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/credits': typeof SettingsCreditsRoute
@@ -482,6 +508,7 @@ export interface FileRoutesById {
   '/settings/tokens': typeof SettingsTokensRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
   '/admin/': typeof AdminIndexRoute
+  '/jobs/': typeof JobsIndexRoute
   '/servers/': typeof ServersIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/workspaces/': typeof WorkspacesIndexRoute
@@ -518,6 +545,7 @@ export interface FileRouteTypes {
     | '/admin/environments'
     | '/admin/health'
     | '/admin/ip-restrictions'
+    | '/admin/jobs'
     | '/admin/maintenance-windows'
     | '/admin/operations'
     | '/admin/permissions'
@@ -530,6 +558,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/admin/volumes'
     | '/admin/workspaces'
+    | '/jobs/$jobId'
     | '/servers/$serverId'
     | '/settings/appearance'
     | '/settings/credits'
@@ -539,6 +568,7 @@ export interface FileRouteTypes {
     | '/settings/tokens'
     | '/workspaces/$workspaceId'
     | '/admin/'
+    | '/jobs/'
     | '/servers/'
     | '/settings/'
     | '/workspaces/'
@@ -569,6 +599,7 @@ export interface FileRouteTypes {
     | '/admin/environments'
     | '/admin/health'
     | '/admin/ip-restrictions'
+    | '/admin/jobs'
     | '/admin/maintenance-windows'
     | '/admin/operations'
     | '/admin/permissions'
@@ -580,6 +611,7 @@ export interface FileRouteTypes {
     | '/admin/setup'
     | '/admin/volumes'
     | '/admin/workspaces'
+    | '/jobs/$jobId'
     | '/servers/$serverId'
     | '/settings/appearance'
     | '/settings/credits'
@@ -589,6 +621,7 @@ export interface FileRouteTypes {
     | '/settings/tokens'
     | '/workspaces/$workspaceId'
     | '/admin'
+    | '/jobs'
     | '/servers'
     | '/settings'
     | '/workspaces'
@@ -623,6 +656,7 @@ export interface FileRouteTypes {
     | '/admin/environments'
     | '/admin/health'
     | '/admin/ip-restrictions'
+    | '/admin/jobs'
     | '/admin/maintenance-windows'
     | '/admin/operations'
     | '/admin/permissions'
@@ -635,6 +669,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/admin/volumes'
     | '/admin/workspaces'
+    | '/jobs/$jobId'
     | '/servers/$serverId'
     | '/settings/appearance'
     | '/settings/credits'
@@ -644,6 +679,7 @@ export interface FileRouteTypes {
     | '/settings/tokens'
     | '/workspaces/$workspaceId'
     | '/admin/'
+    | '/jobs/'
     | '/servers/'
     | '/settings/'
     | '/workspaces/'
@@ -673,6 +709,8 @@ export interface RootRouteChildren {
   UsersRoute: typeof UsersRoute
   VolumesRoute: typeof VolumesRoute
   WorkspacesRoute: typeof WorkspacesRouteWithChildren
+  JobsJobIdRoute: typeof JobsJobIdRoute
+  JobsIndexRoute: typeof JobsIndexRoute
   UserUsernameServerNameRoute: typeof UserUsernameServerNameRoute
 }
 
@@ -860,6 +898,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIpRestrictionsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/jobs': {
+      id: '/admin/jobs'
+      path: '/jobs'
+      fullPath: '/admin/jobs'
+      preLoaderRoute: typeof AdminJobsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/maintenance-windows': {
       id: '/admin/maintenance-windows'
       path: '/maintenance-windows'
@@ -943,6 +988,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/workspaces'
       preLoaderRoute: typeof AdminWorkspacesRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/jobs/': {
+      id: '/jobs/'
+      path: '/jobs'
+      fullPath: '/jobs/'
+      preLoaderRoute: typeof JobsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/jobs/$jobId': {
+      id: '/jobs/$jobId'
+      path: '/jobs/$jobId'
+      fullPath: '/jobs/$jobId'
+      preLoaderRoute: typeof JobsJobIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/servers/': {
       id: '/servers/'
@@ -1073,6 +1132,7 @@ interface AdminRouteChildren {
   AdminEnvironmentsRoute: typeof AdminEnvironmentsRoute
   AdminHealthRoute: typeof AdminHealthRoute
   AdminIpRestrictionsRoute: typeof AdminIpRestrictionsRoute
+  AdminJobsRoute: typeof AdminJobsRoute
   AdminMaintenanceWindowsRoute: typeof AdminMaintenanceWindowsRoute
   AdminOperationsRoute: typeof AdminOperationsRoute
   AdminPermissionsRoute: typeof AdminPermissionsRoute
@@ -1095,6 +1155,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminEnvironmentsRoute: AdminEnvironmentsRoute,
   AdminHealthRoute: AdminHealthRoute,
   AdminIpRestrictionsRoute: AdminIpRestrictionsRoute,
+  AdminJobsRoute: AdminJobsRoute,
   AdminMaintenanceWindowsRoute: AdminMaintenanceWindowsRoute,
   AdminOperationsRoute: AdminOperationsRoute,
   AdminPermissionsRoute: AdminPermissionsRoute,
@@ -1195,6 +1256,8 @@ const rootRouteChildren: RootRouteChildren = {
   UsersRoute: UsersRoute,
   VolumesRoute: VolumesRoute,
   WorkspacesRoute: WorkspacesRouteWithChildren,
+  JobsJobIdRoute: JobsJobIdRoute,
+  JobsIndexRoute: JobsIndexRoute,
   UserUsernameServerNameRoute: UserUsernameServerNameRoute,
 }
 export const routeTree = rootRouteImport

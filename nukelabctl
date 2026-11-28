@@ -48,7 +48,7 @@ COMPOSE_OVERLAY_FILES=()
 
 # Per-command options that take a value. These are passed through to command
 # parsers so the value is not misinterpreted as a target.
-VALUE_OPTIONS=("--tail" "-n" "--timeout" "-t" "-k")
+VALUE_OPTIONS=("--tail" "-n" "--timeout" "-t" "-k" "--expected-version")
 
 parse_args() {
     # Phase 1: consume global flags that may appear before the command.
@@ -277,7 +277,7 @@ ${BOLD}Security:${RESET}
   ${GREEN}verify-hardening${RESET} [container]         Verify spawned container hardening
 
 ${BOLD}Diagnostics:${RESET}
-  ${GREEN}doctor${RESET}                               Check host environment readiness
+  ${GREEN}doctor${RESET}       [--post-upgrade]        Check host readiness or verify an upgrade
   ${GREEN}version${RESET}                              Show version and engine info
 
 ${BOLD}Other:${RESET}
@@ -327,6 +327,7 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl check-env                  # Check active env file for drift
   ./nukelabctl check-env --all --changed  # Check all env files including value drift
   ./nukelabctl sync-env .env.development --dry-run  # Preview missing keys
+  ./nukelabctl doctor --post-upgrade      # Read-only post-upgrade deployment verification
 
 EOF
 }

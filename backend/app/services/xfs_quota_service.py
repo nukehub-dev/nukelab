@@ -20,12 +20,25 @@ Setup on host (replace /data/docker with your Docker data-root):
 
 import hashlib
 import os
+import shutil
 import subprocess
+from dataclasses import dataclass
 
 from app.config import settings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+_DEFAULT_STORAGE_PATH = "/var/lib/docker/volumes"
+
+
+@dataclass(frozen=True, slots=True)
+class XfsQuotaProbe:
+    """Read-only result of checking the configured volume storage path."""
+
+    available: bool
+    reason: str
+    path: str
 
 
 class XfsQuotaService:
@@ -83,7 +96,7 @@ class XfsQuotaService:
             self._xfs_available = False
             return False
 
-        check_path = settings.volume_storage_path or "/var/lib/docker/volumes"
+        check_path = settings.volume_storage_path or _DEFAULT_STORAGE_PATH
         is_xfs = self._is_xfs(check_path)
 
         if not is_xfs:
@@ -108,6 +121,61 @@ class XfsQuotaService:
             )
 
         return self._xfs_available
+
+    def probe_configured_storage(self) -> XfsQuotaProbe:
+        """Report whether the configured storage path can enforce write limits.
+
+        This is a read-only preflight. It never creates directories, writes the
+        projects file, applies a project ID or changes a quota. The result is
+        intentionally not cached so an operator can repair the host and retry
+        without restarting the backend.
+        """
+        configured = settings.volume_storage_path or _DEFAULT_STORAGE_PATH
+        if not settings.xfs_quota_enabled:
+            return XfsQuotaProbe(False, "xfs_quota_disabled", configured)
+        existing = _existing_ancestor(configured)
+        if existing is None:
+            return XfsQuotaProbe(False, "storage_path_unavailable", configured)
+        if shutil.which("xfs_quota") is None:
+            return XfsQuotaProbe(False, "xfs_quota_missing", configured)
+        if not self._is_xfs(existing):
+            return XfsQuotaProbe(False, "storage_not_xfs", configured)
+        mountpoint = self._find_mountpoint(existing)
+        if not {"prjquota", "pquota"} & self._mount_options(mountpoint):
+            return XfsQuotaProbe(False, "project_quota_not_enabled", configured)
+        if not _has_effective_cap_sys_admin():
+            return XfsQuotaProbe(False, "cap_sys_admin_missing", configured)
+        if not self._xfs_quota_can_query(mountpoint):
+            return XfsQuotaProbe(False, "xfs_quota_unusable", configured)
+        return XfsQuotaProbe(True, "enforced", configured)
+
+    @staticmethod
+    def _mount_options(mountpoint: str) -> set[str]:
+        """Return the kernel mount options for a mountpoint (read-only)."""
+        try:
+            target = os.path.realpath(mountpoint)
+            with open("/proc/self/mounts", encoding="utf-8") as mounts:
+                for line in mounts:
+                    fields = line.split()
+                    if len(fields) >= 4 and os.path.realpath(_unescape_mount(fields[1])) == target:
+                        return set(fields[3].split(","))
+        except OSError:
+            pass
+        return set()
+
+    @staticmethod
+    def _xfs_quota_can_query(mountpoint: str) -> bool:
+        """Run the read-only xfs_quota state query without changing anything."""
+        try:
+            result = subprocess.run(
+                ["xfs_quota", "-x", "-c", "state", mountpoint],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return False
+        return result.returncode == 0
 
     def _get_volume_path(self, volume_name: str) -> str | None:
         """Resolve the host filesystem path for a named volume."""
@@ -349,6 +417,42 @@ class XfsQuotaService:
                 except ValueError:
                     continue
         return None
+
+
+_CAP_SYS_ADMIN_BIT = 21
+
+
+def _has_effective_cap_sys_admin() -> bool:
+    """Read the effective capability set without changing process state."""
+    try:
+        with open("/proc/self/status", encoding="utf-8") as status:
+            for line in status:
+                if line.startswith("CapEff:"):
+                    return bool(int(line.split()[1], 16) & (1 << _CAP_SYS_ADMIN_BIT))
+    except (OSError, ValueError, IndexError):
+        return False
+    return False
+
+
+def _existing_ancestor(path: str) -> str | None:
+    """Return the nearest existing ancestor without creating anything."""
+    current = os.path.abspath(path)
+    while not os.path.exists(current):
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
+    return current
+
+
+def _unescape_mount(value: str) -> str:
+    """Decode the octal escapes used by /proc/self/mounts."""
+    return (
+        value.replace("\\040", " ")
+        .replace("\\011", "\t")
+        .replace("\\012", "\n")
+        .replace("\\134", "\\")
+    )
 
 
 def _parse_quota_value(value: str) -> int | None:

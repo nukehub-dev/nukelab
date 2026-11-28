@@ -22,6 +22,7 @@ import {
   HandCoins,
   MessageSquare,
   XCircle,
+  Terminal,
 } from 'lucide-react'
 import { useMyCreditSummary, useMyCreditHistory } from '../hooks/use-credits'
 import { useMyCreditRequests, useCancelCreditRequest } from '../hooks/use-credit-requests'
@@ -57,6 +58,12 @@ const TYPE_CONFIG: Record<
     color: 'text-violet-400',
     bg: 'bg-violet-500/10',
   },
+  batch_job_usage: {
+    label: 'Batch Job Usage',
+    icon: Terminal,
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/10',
+  },
 }
 
 const FILTER_OPTIONS = [
@@ -64,6 +71,7 @@ const FILTER_OPTIONS = [
   { value: 'admin_grant', label: 'Grant' },
   { value: 'admin_deduct', label: 'Deduct' },
   { value: 'server_usage', label: 'Usage' },
+  { value: 'batch_job_usage', label: 'Batch Jobs' },
   { value: 'daily_allowance', label: 'Allowance' },
 ]
 

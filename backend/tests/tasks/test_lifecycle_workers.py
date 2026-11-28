@@ -273,7 +273,10 @@ def test_billing_only_charges_running_usage_and_routes_depletion_to_guarded_stop
     plan = SimpleNamespace(id=uuid.uuid4(), cost_per_hour=rate)
     db = database(objects={(Server, row.id): row, (ServerPlan, plan.id): plan})
     db.execute.side_effect = [result(rows=[(row, plan)]), result(scalar=balance)]
-    credit = SimpleNamespace(consume_credits=AsyncMock())
+    credit = SimpleNamespace(
+        consume_credits=AsyncMock(),
+        get_spendable_balance=AsyncMock(return_value=balance),
+    )
     notify = SimpleNamespace(low_balance=AsyncMock())
     with (
         worker_resources(db),
@@ -302,6 +305,7 @@ def test_failed_billing_does_not_increment_cost_or_force_a_runtime_stop():
         patch("app.services.credit_service.CreditService") as credit,
         patch("app.tasks._stop_server_with_bookkeeping", new_callable=AsyncMock) as terminate,
     ):
+        credit.return_value.get_spendable_balance = AsyncMock(return_value=100)
         credit.return_value.consume_credits = AsyncMock(
             side_effect=RuntimeError("ledger unavailable")
         )

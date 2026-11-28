@@ -166,6 +166,45 @@ class ContainerDriver(ABC):
     async def start_container(self, container_id: str):
         """Start a container."""
 
+    async def create_batch_container(
+        self,
+        *,
+        name: str,
+        image: str,
+        argv: list[str],
+        mounts: list[dict],
+        labels: dict[str, str],
+        limits: dict,
+        env: dict[str, str],
+        workdir: str = "/work",
+        timeout_seconds: int | None = None,
+    ) -> str:
+        """Create an unstarted hardened headless job container and return its id.
+
+        The batch profile is deliberately separate from interactive servers:
+        it runs a literal argument vector with no network, ports, health probe
+        or restart policy, and it requires a read-only rootfs with mandatory
+        resource bounds. Drivers that cannot provide every control must fail
+        closed instead of degrading the profile.
+        """
+        raise ContainerDriverError("Batch job containers are unsupported")
+
+    async def prepare_batch_volume(
+        self,
+        *,
+        name: str,
+        image: str,
+        volume: str,
+        labels: dict[str, str],
+        timeout_seconds: int = 30,
+    ) -> None:
+        """Prepare a batch volume for use by the fixed non-root job identity.
+
+        Drivers that cannot provide a bounded, trusted ownership fixup must
+        fail closed rather than starting a job whose volume is unusable.
+        """
+        raise ContainerDriverError("Batch job volume preparation is unsupported")
+
     @abstractmethod
     async def stop_container(self, container_id: str, timeout: int = 30):
         """Stop a container. Raises ContainerDriverError on runtime failure."""

@@ -156,6 +156,8 @@ class PlanService:
         cooldown_seconds: int = 0,
         is_public: bool = False,
         visible_to_roles: list[str] | None = None,
+        allow_servers: bool = True,
+        allow_batch_jobs: bool = False,
         priority: int = 0,
     ) -> ServerPlan:
         """Create new server plan"""
@@ -182,6 +184,8 @@ class PlanService:
             cooldown_seconds=cooldown_seconds,
             is_public=is_public,
             visible_to_roles=visible_to_roles or [],
+            allow_servers=allow_servers,
+            allow_batch_jobs=allow_batch_jobs,
             priority=priority,
         )
 
@@ -195,8 +199,8 @@ class PlanService:
 
     @staticmethod
     def _is_user_usable(plan: ServerPlan) -> bool:
-        """Return True when a plan is active and exposed to the normal user role."""
-        if not plan.is_active:
+        """Return True when a plan is active, server-enabled, and exposed to users."""
+        if not plan.is_active or not plan.allow_servers:
             return False
         return bool(plan.is_public or "user" in (plan.visible_to_roles or []))
 
@@ -233,6 +237,7 @@ class PlanService:
         proposed_active: bool,
         proposed_public: bool,
         proposed_roles: list[str] | None,
+        proposed_allow_servers: bool = True,
     ) -> None:
         """Reject changes that would leave the platform without a usable plan.
 
@@ -255,8 +260,10 @@ class PlanService:
                 ),
             )
 
-        proposed_user_usable = proposed_active and bool(
-            proposed_public or "user" in (proposed_roles or [])
+        proposed_user_usable = (
+            proposed_active
+            and proposed_allow_servers
+            and bool(proposed_public or "user" in (proposed_roles or []))
         )
         if (
             self._is_user_usable(plan)
@@ -289,13 +296,32 @@ class PlanService:
         proposed_roles = updates.get("visible_to_roles")
         if proposed_roles is None:
             proposed_roles = plan.visible_to_roles
+        proposed_allow_servers = updates.get("allow_servers")
+        if proposed_allow_servers is None:
+            proposed_allow_servers = plan.allow_servers
 
         await self._ensure_plan_remains_usable(
             plan,
             proposed_active=proposed_active,
             proposed_public=proposed_public,
             proposed_roles=proposed_roles,
+            proposed_allow_servers=proposed_allow_servers,
         )
+
+        if updates.get("allow_servers") is False:
+            from app.models.server import Server
+
+            in_use = (
+                await self.db.execute(select(Server.id).where(Server.plan_id == plan.id).limit(1))
+            ).first()
+            if in_use is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Cannot disable server availability while servers use this plan. "
+                        "Move or delete those servers first."
+                    ),
+                )
 
         # Update fields
         for key, value in updates.items():

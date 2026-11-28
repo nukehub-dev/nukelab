@@ -62,6 +62,58 @@ class TestPlanCRUD:
         assert response.status_code == 201
 
     @pytest.mark.asyncio
+    async def test_create_job_only_plan(self, client, admin_token):
+        response = await client.post(
+            "/api/plans/",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={
+                "name": "Job Only Plan",
+                "slug": "job-only-plan",
+                "category": "cpu",
+                "cpu_limit": 2.0,
+                "memory_limit": "4g",
+                "disk_limit": "20g",
+                "gpu_limit": 0,
+                "cost_per_hour": 0,
+                "visible_to_roles": ["user"],
+                "allow_servers": False,
+                "allow_batch_jobs": True,
+            },
+        )
+
+        assert response.status_code == 201
+        plan = response.json()["data"]
+        assert plan["allow_servers"] is False
+        assert plan["allow_batch_jobs"] is True
+
+    @pytest.mark.asyncio
+    async def test_update_plan_availability(self, client, admin_token, db_session):
+        plan = ServerPlan(
+            name="Editable Plan",
+            slug="editable-plan",
+            cpu_limit=2,
+            memory_limit="4g",
+            disk_limit="20g",
+            cost_per_hour=0,
+            is_active=True,
+            is_public=False,
+            visible_to_roles=["admin"],
+        )
+        db_session.add(plan)
+        await db_session.commit()
+
+        response = await client.put(
+            f"/api/plans/{plan.id}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"allow_servers": False, "allow_batch_jobs": True},
+        )
+
+        assert response.status_code == 200
+        updated = response.json()["data"]
+        assert updated["allow_servers"] is False
+        assert updated["allow_batch_jobs"] is True
+
+    @pytest.mark.asyncio
     async def test_create_plan_as_user_forbidden(self, client, user_token):
         """Regular user should not create plans."""
         response = await client.post(

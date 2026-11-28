@@ -2,7 +2,16 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { motion } from 'framer-motion'
-import { ArrowDownLeft, Server, Gift, Clock, User, ChevronLeft, ChevronRight } from 'lucide-react'
+import {
+  ArrowDownLeft,
+  Server,
+  Gift,
+  Clock,
+  User,
+  ChevronLeft,
+  ChevronRight,
+  Terminal,
+} from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { formatDate } from '../../lib/utils'
 import type { CreditTransaction } from '../../types/api'
@@ -38,6 +47,12 @@ const TYPE_CONFIG: Record<
     icon: Gift,
     color: 'text-violet-400',
     bg: 'bg-violet-500/10',
+  },
+  batch_job_usage: {
+    label: 'Batch Job Usage',
+    icon: Terminal,
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/10',
   },
 }
 

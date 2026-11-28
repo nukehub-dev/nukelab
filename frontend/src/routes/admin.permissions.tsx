@@ -23,6 +23,7 @@ import {
   FolderOpen,
   CheckCheck,
   ArrowLeft,
+  Terminal,
 } from 'lucide-react'
 import { api } from '../lib/api'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
@@ -108,6 +109,11 @@ const PERMISSION_LABELS: Record<string, string> = {
   'servers:read_all': 'Read All Servers',
   'servers:write_all': 'Write All Servers',
   'servers:access_others': 'Access All Servers',
+  'jobs:read_own': 'Read Own Jobs',
+  'jobs:write_own': 'Submit and Cancel Own Jobs',
+  'jobs:read_all': 'Read All Jobs',
+  'jobs:write_all': 'Cancel and Reconcile All Jobs',
+  'jobs:access_others': 'Access All Jobs',
   'resources:read_own': 'Read Own Resources',
   'resources:read_all': 'Read All Resources',
   'environment:create': 'Create Environments',
@@ -154,6 +160,14 @@ function getCategories(allPermissions: string[]): PermissionCategory[] {
       color: 'text-emerald-400',
       bgColor: 'bg-emerald-400/10',
       permissions: allPermissions.filter((p) => p.startsWith('servers:')),
+    },
+    {
+      id: 'jobs',
+      label: 'Jobs',
+      icon: Terminal,
+      color: 'text-sky-400',
+      bgColor: 'bg-sky-400/10',
+      permissions: allPermissions.filter((p) => p.startsWith('jobs:')),
     },
     {
       id: 'resources',

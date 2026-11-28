@@ -37,6 +37,17 @@ _doctor_info() {
     info "[INFO] $*"
 }
 
+# Bound read-only probes so a wedged daemon or database cannot hang doctor.
+_doctor_timeout() {
+    local seconds="$1"
+    shift
+    if command -v timeout > /dev/null 2>&1; then
+        timeout "$seconds" "$@"
+    else
+        "$@"
+    fi
+}
+
 _doctor_is_positive_int() {
     [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -gt 0 ]
 }
@@ -56,7 +67,7 @@ _doctor_psql() {
     # COMPOSE may be a multi-word command ("docker compose"); the split is
     # intentional, matching the rest of the management scripts.
     # shellcheck disable=SC2086
-    $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres \
+    _doctor_timeout 15 $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres \
         psql -X -q -t -A -F '|' -v ON_ERROR_STOP=1 \
         -U "${DATABASE_USER:-nukelab}" -d "${DATABASE_NAME:-nukelab}" \
         -c "$sql" 2> /dev/null

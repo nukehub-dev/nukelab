@@ -19,7 +19,9 @@ from app.config import settings
 from app.db.base import Base
 
 PREVIOUS_REVISION = "34ce1a62ffe8"
-HEAD_REVISION = "a4c9e2f7b1d3"
+BATCH_REVISION = "b7d4e1c9a2f5"
+ADMISSION_REVISION = "e2c7a9f4d6b1"
+HEAD_REVISION = "a3b8c1d4e5f6"
 NEW_TABLES = {
     "environment_revisions",
     "server_launch_records",
@@ -27,6 +29,9 @@ NEW_TABLES = {
     "server_launch_intents",
     "server_launch_operations",
     "volume_restores",
+    "batch_jobs",
+    "batch_job_logs",
+    "credit_holds",
 }
 
 
@@ -85,17 +90,94 @@ async def tables(name):
         await connection.close()
 
 
+async def _plan_availability(name):
+    connection = await connect(name)
+    try:
+        return await connection.fetchrow(
+            "SELECT allow_servers, allow_batch_jobs FROM server_plans WHERE slug = 'legacy-plan'"
+        )
+    finally:
+        await connection.close()
+
+
+async def _plan_columns(name):
+    connection = await connect(name)
+    try:
+        rows = await connection.fetch(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'server_plans'"
+        )
+        return {row["column_name"] for row in rows}
+    finally:
+        await connection.close()
+
+
+def test_plan_availability_backfill_and_downgrade(migration_database):
+    config, database = migration_database
+    command.upgrade(config, "f1a2b3c4d5e6")
+
+    async def insert_legacy_plan():
+        connection = await connect(database)
+        try:
+            await connection.execute(
+                "INSERT INTO server_plans (id, name, slug) VALUES ($1, $2, $3)",
+                uuid.uuid4(),
+                "Legacy Plan",
+                "legacy-plan",
+            )
+        finally:
+            await connection.close()
+
+    asyncio.run(insert_legacy_plan())
+    command.upgrade(config, "head")
+    row = asyncio.run(_plan_availability(database))
+    assert row["allow_servers"] is True
+    assert row["allow_batch_jobs"] is True
+
+    command.downgrade(config, "f1a2b3c4d5e6")
+    assert "allow_servers" not in asyncio.run(_plan_columns(database))
+    assert "allow_batch_jobs" not in asyncio.run(_plan_columns(database))
+
+
 def test_fresh_upgrade_downgrade_and_reupgrade(migration_database):
     config, name = migration_database
     assert ScriptDirectory.from_config(config).get_heads() == [HEAD_REVISION]
     command.upgrade(config, "head")
     assert NEW_TABLES <= asyncio.run(tables(name))
+    # The first downgrade removes only the paid billing journal.
+    command.downgrade(config, ADMISSION_REVISION)
+    after_billing = asyncio.run(tables(name))
+    assert "credit_holds" not in after_billing
+    assert NEW_TABLES - {"credit_holds"} <= after_billing
+    # The next downgrade removes only the admission reservation columns.
+    command.downgrade(config, BATCH_REVISION)
+    after_admission = asyncio.run(tables(name))
+    assert "batch_jobs" in after_admission
+    # The next downgrade removes the additive batch tables.
+    command.downgrade(config, "-1")
+    after_batch = asyncio.run(tables(name))
+    assert "batch_jobs" not in after_batch
+    assert "batch_job_logs" not in after_batch
+    assert (
+        NEW_TABLES
+        - {
+            "batch_jobs",
+            "batch_job_logs",
+            "credit_holds",
+        }
+        <= after_batch
+    )
+    # Four more steps reach the pre-workflow baseline used by this rehearsal.
     command.downgrade(config, "-1")
     command.downgrade(config, "-1")
     command.downgrade(config, "-1")
     command.downgrade(config, "-1")
     assert "volume_restores" not in asyncio.run(tables(name))
-    assert NEW_TABLES - {"volume_restores"} <= asyncio.run(tables(name))
+    assert NEW_TABLES - {
+        "volume_restores",
+        "batch_jobs",
+        "batch_job_logs",
+        "credit_holds",
+    } <= asyncio.run(tables(name))
     command.upgrade(config, "head")
     command.downgrade(config, PREVIOUS_REVISION)
     assert NEW_TABLES.isdisjoint(asyncio.run(tables(name)))
