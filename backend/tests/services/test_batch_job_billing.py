@@ -88,6 +88,7 @@ async def make_resources(db, owner, *, cost_per_hour=10, max_runtime_seconds=180
         gpu_limit=0,
         cost_per_hour=cost_per_hour,
         max_servers_per_user=10,
+        allow_batch_jobs=True,
         is_active=True,
         is_public=True,
         visible_to_roles=["user"],

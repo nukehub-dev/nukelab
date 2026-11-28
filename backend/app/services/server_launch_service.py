@@ -317,6 +317,8 @@ class ServerLaunchService:
         )
         if plan is None or not plan.is_active:
             raise LaunchError("configuration_changed")
+        if not plan.allow_servers:
+            raise LaunchError("configuration_changed")
         if not await PlanService(self.db).can_user_use_plan(
             str(plan.id), owner.role, str(owner.id)
         ):

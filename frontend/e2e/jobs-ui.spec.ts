@@ -54,6 +54,8 @@ const plan = {
   is_active: true,
   is_public: true,
   visible_to_roles: [],
+  allow_servers: true,
+  allow_batch_jobs: true,
   priority: 0,
   created_at: '2026-11-15T12:00:00',
 }
@@ -465,6 +467,25 @@ test('maximum runtime accepts seconds, minutes, and hours', async ({ page }) => 
   await expect(dialog.getByText('Use at least 1 minute (60 seconds).')).toBeVisible()
   await dialog.getByTestId('job-runtime').fill('600')
   await expect(dialog.getByText('Use at least 1 minute (60 seconds).')).toHaveCount(0)
+})
+
+test('server-only plans are not offered for batch jobs', async ({ page }) => {
+  const serverOnlyPlan = {
+    ...plan,
+    id: ids.paidPlan,
+    name: 'Server Only CPU',
+    slug: 'server-only-cpu',
+    allow_servers: true,
+    allow_batch_jobs: false,
+  }
+  await mockJobs(page, { plans: [plan, serverOnlyPlan] })
+  await page.goto('/jobs')
+  await page.getByTestId('new-job').click()
+  const dialog = page.getByRole('dialog')
+
+  await dialog.getByTestId('job-plan-trigger').click()
+  await expect(page.getByTestId(`job-plan-${ids.paidPlan}`)).toHaveCount(0)
+  await expect(page.getByTestId(`job-plan-${ids.plan}`)).toBeVisible()
 })
 
 test('zero-cost mode lists paid CPU plans as disabled and explains why', async ({ page }) => {

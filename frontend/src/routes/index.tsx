@@ -29,6 +29,7 @@ import { StatCard } from '../components/data/stat-card'
 import { useDashboard } from '../hooks/use-dashboard'
 import { useServers } from '../hooks/use-servers'
 import { usePlans } from '../hooks/use-plans'
+import { isServerPlan } from '../lib/plan-availability'
 import { useEnvironments } from '../hooks/use-environments'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
 import { SkeletonCard } from '../components/feedback/skeleton'
@@ -78,7 +79,7 @@ function DashboardPage() {
     [servers, userId]
   )
 
-  const plans = plansData?.data ?? []
+  const plans = (plansData?.data ?? []).filter(isServerPlan)
   const environments = environmentsData?.data ?? []
   // Admins see the whole catalog, so guidance still resolves the baseline
   // user-visible entries. Normal users only receive plans/environments the API

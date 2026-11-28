@@ -270,8 +270,10 @@ Keep the `BATCH_JOBS_*` runtime, interval and limit values consistent across the
 backend, worker and Beat; Beat schedules using the interval settings. An empty
 cohort falls back to `jobs:write_own`. Paid plans require
 `BATCH_JOBS_ALLOW_PAID_PLANS=true` and `CREDITS_ENABLED=true`; restrict the paid
-plan through its visibility/role rules. A paid job holds its maximum runtime
-cost, settles actual runtime at terminal proof, and refunds the unused hold.
+plan through its visibility/role rules. Mark the plan **Batch jobs** in Admin →
+Plans and uncheck **Servers** if it should be job-only. A paid job holds its
+maximum runtime cost, settles actual runtime at terminal proof, and refunds the
+unused hold.
 For a writable production pilot, enable
 `BATCH_JOBS_REQUIRE_STORAGE_ENFORCEMENT=true` only after the volume storage path
 is XFS with `prjquota`/`pquota` and the backend has effective `CAP_SYS_ADMIN`.

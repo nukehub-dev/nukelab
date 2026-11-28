@@ -34,6 +34,8 @@ function makePlan(overrides: Partial<CatalogPlan> = {}): CatalogPlan {
     cooldown_seconds: 0,
     is_public: true,
     visible_to_roles: ['user'],
+    allow_servers: true,
+    allow_batch_jobs: true,
     is_active: true,
     priority: 0,
     created_at: '2026-11-15T12:00:00',
@@ -359,6 +361,22 @@ test('unambiguous catalog is preselected on the dashboard, reviewed and launched
       },
     ],
   })
+})
+
+test('job-only plans are hidden from server deployment', async ({ page }) => {
+  const jobOnly = makePlan({
+    id: ids.planMedium,
+    name: 'Jobs Only',
+    slug: 'jobs-only',
+    allow_servers: false,
+    allow_batch_jobs: true,
+  })
+  await mockGuidedLaunch(page, { plans: [makePlan(), jobOnly] })
+  await openDashboardDialog(page)
+
+  await page.getByTestId('deploy-server-plan-trigger').click()
+  await expect(page.getByTestId(`deploy-server-plan-${ids.planMedium}`)).toHaveCount(0)
+  await expect(page.getByTestId(`deploy-server-plan-${ids.planSmall}`)).toBeVisible()
 })
 
 test('long plan names wrap in the plan menu without horizontal overflow', async ({ page }) => {

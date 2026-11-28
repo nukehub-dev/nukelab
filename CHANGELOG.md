@@ -25,6 +25,10 @@ section.
   submission, fenced admission, shared CPU/memory/disk accounting, owner/fleet
   caps, and an exclusive `job_writer` volume guard. Job history, retained logs,
   and cancellation remain available while submission is disabled.
+- Plan-level server/job availability: admins can mark a CPU plan for batch jobs,
+  keep it server-only, or make it job-only in Admin → Plans. Server launch
+  rejects job-only plans, and the Jobs form only offers plans explicitly marked
+  for jobs. The shared hourly cost still determines free versus paid jobs.
 - A faster batch-job form: searchable environment, plan, and private-volume
   pickers; a link to `/volumes` with list refresh for creating a work volume;
   second/minute/hour runtime units with a one-minute minimum; and all active

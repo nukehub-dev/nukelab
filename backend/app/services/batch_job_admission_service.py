@@ -522,6 +522,9 @@ class BatchJobAdmissionService:
             ):
                 await self._fail_job(job, "plan_unavailable", _POLICY_PROOF, now)
                 return None
+            if not plan.allow_batch_jobs:
+                await self._fail_job(job, "plan_unavailable", _POLICY_PROOF, now)
+                return None
             if (plan.gpu_limit or 0) != 0:
                 await self._fail_job(job, "plan_unavailable", _POLICY_PROOF, now)
                 return None

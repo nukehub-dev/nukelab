@@ -558,7 +558,10 @@ after the normal pinned upgrade and schema migration complete:
    An empty cohort falls back to the `jobs:write_own` grant. Grant
    `jobs:read_own` to anyone who should keep history access. Cross-owner
    operators need `ADMIN_ACCESS` plus `jobs:read_all`; add `jobs:write_all`
-   for safe cancel and proof-backed reconcile. Keep the `BATCH_JOBS_*` runtime,
+   for safe cancel and proof-backed reconcile. In Admin → Plans, enable
+   **Batch jobs** on each CPU plan that should accept jobs and uncheck
+   **Servers** for job-only plans. A zero hourly cost creates a free job plan;
+   a nonzero cost requires the paid gate below. Keep the `BATCH_JOBS_*` runtime,
    interval and limit values consistent across `backend`, `celery-worker` and
    `celery-beat`; Beat schedules using the interval settings.
    Paid plans additionally require `BATCH_JOBS_ALLOW_PAID_PLANS=true` and

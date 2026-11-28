@@ -21,7 +21,7 @@ from app.db.base import Base
 PREVIOUS_REVISION = "34ce1a62ffe8"
 BATCH_REVISION = "b7d4e1c9a2f5"
 ADMISSION_REVISION = "e2c7a9f4d6b1"
-HEAD_REVISION = "f1a2b3c4d5e6"
+HEAD_REVISION = "a3b8c1d4e5f6"
 NEW_TABLES = {
     "environment_revisions",
     "server_launch_records",
@@ -88,6 +88,54 @@ async def tables(name):
         )
     finally:
         await connection.close()
+
+
+async def _plan_availability(name):
+    connection = await connect(name)
+    try:
+        return await connection.fetchrow(
+            "SELECT allow_servers, allow_batch_jobs FROM server_plans WHERE slug = 'legacy-plan'"
+        )
+    finally:
+        await connection.close()
+
+
+async def _plan_columns(name):
+    connection = await connect(name)
+    try:
+        rows = await connection.fetch(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'server_plans'"
+        )
+        return {row["column_name"] for row in rows}
+    finally:
+        await connection.close()
+
+
+def test_plan_availability_backfill_and_downgrade(migration_database):
+    config, database = migration_database
+    command.upgrade(config, "f1a2b3c4d5e6")
+
+    async def insert_legacy_plan():
+        connection = await connect(database)
+        try:
+            await connection.execute(
+                "INSERT INTO server_plans (id, name, slug) VALUES ($1, $2, $3)",
+                uuid.uuid4(),
+                "Legacy Plan",
+                "legacy-plan",
+            )
+        finally:
+            await connection.close()
+
+    asyncio.run(insert_legacy_plan())
+    command.upgrade(config, "head")
+    row = asyncio.run(_plan_availability(database))
+    assert row["allow_servers"] is True
+    assert row["allow_batch_jobs"] is True
+
+    command.downgrade(config, "f1a2b3c4d5e6")
+    assert "allow_servers" not in asyncio.run(_plan_columns(database))
+    assert "allow_batch_jobs" not in asyncio.run(_plan_columns(database))
 
 
 def test_fresh_upgrade_downgrade_and_reupgrade(migration_database):

@@ -132,6 +132,8 @@ async def _seed() -> dict[str, object]:
             plan.allow_snapshots = False
             plan.is_public = True
             plan.visible_to_roles = []
+            plan.allow_servers = False
+            plan.allow_batch_jobs = True
             plan.is_active = True
             plan.priority = 0
 
@@ -157,6 +159,8 @@ async def _seed() -> dict[str, object]:
             paid.allow_snapshots = False
             paid.is_public = True
             paid.visible_to_roles = []
+            paid.allow_servers = False
+            paid.allow_batch_jobs = True
             paid.is_active = True
             paid.priority = 0
 
@@ -187,6 +191,8 @@ async def _seed() -> dict[str, object]:
             filler.allow_snapshots = False
             filler.is_public = True
             filler.visible_to_roles = []
+            filler.allow_servers = True
+            filler.allow_batch_jobs = True
             filler.is_active = True
             filler.priority = 0
 

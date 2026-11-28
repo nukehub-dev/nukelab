@@ -19,7 +19,7 @@ PORTABLE_REVISION = "c5f8a2d91e47"
 SCAN_REVISION = "a4c9e2f7b1d3"
 BATCH_REVISION = "b7d4e1c9a2f5"
 ADMISSION_REVISION = "e2c7a9f4d6b1"
-HEAD_REVISION = "f1a2b3c4d5e6"
+HEAD_REVISION = "a3b8c1d4e5f6"
 OPERATION_TABLES = ("server_launch_operations", "volume_backups", "volume_restores")
 ALL_TABLES = ("worker_heartbeats", *OPERATION_TABLES)
 
@@ -119,7 +119,8 @@ def test_recovery_schema_upgrade_downgrade_reupgrade(migration_database):
     assert script.get_revision(SCAN_REVISION).down_revision == PORTABLE_REVISION
     assert script.get_revision(BATCH_REVISION).down_revision == SCAN_REVISION
     assert script.get_revision(ADMISSION_REVISION).down_revision == BATCH_REVISION
-    assert script.get_revision(HEAD_REVISION).down_revision == ADMISSION_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == "f1a2b3c4d5e6"
+    assert script.get_revision("f1a2b3c4d5e6").down_revision == ADMISSION_REVISION
 
     command.upgrade(config, "head")
     upgraded = asyncio.run(snapshot(database))

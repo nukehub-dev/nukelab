@@ -99,6 +99,7 @@ async def _targets(db):
         cpu_limit=2,
         memory_limit="4g",
         disk_limit="20g",
+        allow_batch_jobs=True,
     )
     db.add_all([revision, plan])
     await db.flush()

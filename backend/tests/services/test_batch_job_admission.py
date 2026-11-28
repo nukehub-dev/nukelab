@@ -130,6 +130,7 @@ async def _make_resources(
         gpu_limit=0,
         cost_per_hour=0,
         max_servers_per_user=10,
+        allow_batch_jobs=True,
         is_active=True,
         is_public=True,
     )

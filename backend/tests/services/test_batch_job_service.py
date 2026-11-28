@@ -80,6 +80,7 @@ async def make_plan(db, *, cost_per_hour=0, gpu_limit=0, is_public=True, visible
         disk_limit="10g",
         gpu_limit=gpu_limit,
         cost_per_hour=cost_per_hour,
+        allow_batch_jobs=True,
         is_active=True,
         is_public=is_public,
         visible_to_roles=["user"] if visible_to_roles is None else visible_to_roles,
@@ -521,6 +522,20 @@ async def test_submit_rejects_non_cpu_plan(db_session, test_user, enabled_jobs):
 
 
 @pytest.mark.asyncio
+async def test_submit_rejects_plan_not_marked_for_jobs(db_session, test_user, enabled_jobs):
+    _, revision, plan, volume = await make_resources(db_session, test_user)
+    plan.allow_batch_jobs = False
+    await db_session.flush()
+    with pytest.raises(JobError) as exc:
+        await BatchJobService(db_session).submit(
+            test_user,
+            "server-only-plan",
+            submit_request(revision, plan, volume),
+        )
+    assert exc.value.code == "plan_unavailable"
+
+
+@pytest.mark.asyncio
 async def test_submit_rejects_foreign_and_missing_resources_identically(
     db_session, test_user, enabled_jobs
 ):
@@ -873,5 +888,6 @@ def test_model_registration_and_migration_head():
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic"))
     script = ScriptDirectory.from_config(config)
-    assert script.get_heads() == ["f1a2b3c4d5e6"]
+    assert script.get_heads() == ["a3b8c1d4e5f6"]
+    assert script.get_revision("a3b8c1d4e5f6").down_revision == "f1a2b3c4d5e6"
     assert script.get_revision("f1a2b3c4d5e6").down_revision == "e2c7a9f4d6b1"

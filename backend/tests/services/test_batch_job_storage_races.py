@@ -156,6 +156,7 @@ async def committed_race_world(race_settings):
                 disk_limit="2g",
                 gpu_limit=0,
                 cost_per_hour=0,
+                allow_batch_jobs=True,
                 is_active=True,
                 is_public=True,
                 visible_to_roles=["user"],

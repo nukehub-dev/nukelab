@@ -444,6 +444,8 @@ async def create_server(
         raise HTTPException(status_code=404, detail="Plan not found")
     if not plan.is_active:
         raise HTTPException(status_code=400, detail="Plan is not active")
+    if not plan.allow_servers:
+        raise HTTPException(status_code=400, detail="Plan is not available for server deployment")
     if not await PlanService(db).can_user_use_plan(body.plan_id, current_user.role, str(owner_id)):
         raise HTTPException(status_code=403, detail="Plan not available for your role")
     if await EnvironmentService(db).get_by_id(body.environment_id) is None:
@@ -924,8 +926,14 @@ async def update_server(
     from app.models.environment_template import EnvironmentTemplate
     from app.models.server_plan import ServerPlan
 
-    if body.plan_id is not None and await db.get(ServerPlan, body.plan_id) is None:
-        raise HTTPException(status_code=404, detail="Plan not found")
+    if body.plan_id is not None:
+        requested_plan = await db.get(ServerPlan, body.plan_id)
+        if requested_plan is None:
+            raise HTTPException(status_code=404, detail="Plan not found")
+        if not requested_plan.allow_servers:
+            raise HTTPException(
+                status_code=400, detail="Plan is not available for server deployment"
+            )
     if (
         body.environment_id is not None
         and await db.get(EnvironmentTemplate, body.environment_id) is None

@@ -37,6 +37,10 @@ class ServerPlan(Base):
     allow_scheduling = Column(Boolean, default=True)
     allow_snapshots = Column(Boolean, default=False)
 
+    # Availability
+    allow_servers = Column(Boolean, default=True, nullable=False)
+    allow_batch_jobs = Column(Boolean, default=False, nullable=False)
+
     # Restrictions
     is_public = Column(Boolean, default=False)
     visible_to_roles = Column(JSON, default=list)
@@ -75,6 +79,8 @@ class ServerPlan(Base):
             "cooldown_seconds": self.cooldown_seconds,
             "allow_scheduling": self.allow_scheduling,
             "allow_snapshots": self.allow_snapshots,
+            "allow_servers": self.allow_servers,
+            "allow_batch_jobs": self.allow_batch_jobs,
             "is_public": self.is_public,
             "visible_to_roles": self.visible_to_roles or [],
             "is_active": self.is_active,

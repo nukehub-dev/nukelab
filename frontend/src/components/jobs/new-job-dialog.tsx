@@ -33,6 +33,7 @@ import {
   type JobRuntimeUnit,
 } from '../../lib/batch-job'
 import { cn, formatBytes, formatDuration, parseMemoryString } from '../../lib/utils'
+import { isBatchJobPlan } from '../../lib/plan-availability'
 import { usePlans } from '../../hooks/use-plans'
 import { useEligibleJobRevisions, useCreateJob } from '../../hooks/use-jobs'
 import { useVolumes } from '../../hooks/use-volumes'
@@ -101,8 +102,8 @@ function FieldMessage({ id, message }: { id: string; message?: string }) {
   )
 }
 
-function isCpuPlan(plan: Plan) {
-  return plan.is_active && plan.gpu_limit === 0
+function isJobPlan(plan: Plan) {
+  return plan.is_active && isBatchJobPlan(plan)
 }
 
 function planLabel(plan: Plan) {
@@ -145,10 +146,10 @@ export function NewJobDialog({
   const volumesQuery = useVolumes()
   const createJob = useCreateJob()
 
-  const allCpuPlans = (plansQuery.data?.data ?? []).filter(isCpuPlan)
+  const allJobPlans = (plansQuery.data?.data ?? []).filter(isJobPlan)
   const paidPlansDisabled = capabilities.billing_mode === 'zero_cost'
-  const plans = allCpuPlans.filter((plan) => !paidPlansDisabled || plan.cost_per_hour === 0)
-  const disabledPaidPlans = allCpuPlans.length - plans.length
+  const plans = allJobPlans.filter((plan) => !paidPlansDisabled || plan.cost_per_hour === 0)
+  const disabledPaidPlans = allJobPlans.length - plans.length
   const volumes = eligibleVolumes(volumesQuery.data ?? [], ownerId)
   const revisionsAvailable = (revisions.data?.items ?? []).filter(
     (revision) => revision.supports_jobs && !revision.reason_code
@@ -158,7 +159,7 @@ export function NewJobDialog({
     label: revisionLabel(revision),
     testId: `job-revision-${revision.revision_id}`,
   }))
-  const planOptions: ComboboxOption[] = allCpuPlans.map((plan) => {
+  const planOptions: ComboboxOption[] = allJobPlans.map((plan) => {
     const disabled = paidPlansDisabled && plan.cost_per_hour > 0
     return {
       value: plan.id,
@@ -513,7 +514,7 @@ export function NewJobDialog({
               options={planOptions}
               placeholder={plansQuery.isPending ? 'Loading plans…' : 'Select a plan'}
               searchPlaceholder="Search CPU plans…"
-              disabled={plansQuery.isPending || plansQuery.isError || allCpuPlans.length === 0}
+              disabled={plansQuery.isPending || plansQuery.isError || allJobPlans.length === 0}
               data-testid="job-plan"
             />
             {plansQuery.isError ? (
@@ -527,9 +528,9 @@ export function NewJobDialog({
                   Retry
                 </button>
               </p>
-            ) : plansQuery.data && allCpuPlans.length === 0 ? (
+            ) : plansQuery.data && allJobPlans.length === 0 ? (
               <p role="status" className="text-xs text-amber-400">
-                No active CPU plan is available. Contact an administrator.
+                No active CPU plan is enabled for batch jobs. Contact an administrator.
               </p>
             ) : plansQuery.data && plans.length === 0 ? (
               <p role="status" className="text-xs text-amber-400">

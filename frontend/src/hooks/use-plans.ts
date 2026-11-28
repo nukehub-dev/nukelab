@@ -56,6 +56,8 @@ interface CreatePlanData {
   cooldown_seconds?: number
   is_public?: boolean
   visible_to_roles?: string[]
+  allow_servers?: boolean
+  allow_batch_jobs?: boolean
   priority?: number
 }
 
@@ -72,6 +74,8 @@ interface UpdatePlanData {
   cooldown_seconds?: number
   is_public?: boolean
   visible_to_roles?: string[]
+  allow_servers?: boolean
+  allow_batch_jobs?: boolean
   priority?: number
   is_active?: boolean
 }

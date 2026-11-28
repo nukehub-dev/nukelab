@@ -571,6 +571,7 @@ async def test_successful_provision_redelivery_returns_same_server_without_runti
         ("read_only_role", "permission_revoked"),
         ("missing_plan", "configuration_changed"),
         ("inactive_plan", "configuration_changed"),
+        ("job_only_plan", "configuration_changed"),
         ("private_plan", "permission_revoked"),
         ("missing_environment", "permission_revoked"),
         ("inactive_environment", "permission_revoked"),
@@ -598,10 +599,12 @@ async def test_current_policy_rejections_precede_image_resolution(
             user.is_active = False
         else:
             user.role = "guest"
-    elif change in {"inactive_plan", "private_plan", "disabled_gpu"}:
+    elif change in {"inactive_plan", "job_only_plan", "private_plan", "disabled_gpu"}:
         plan = await db_session.get(ServerPlan, fixture.plan_id)
         if change == "inactive_plan":
             plan.is_active = False
+        elif change == "job_only_plan":
+            plan.allow_servers = False
         elif change == "private_plan":
             plan.is_public = False
             plan.visible_to_roles = []

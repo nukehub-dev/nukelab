@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from sqlalchemy import and_, select
 
 from app.models.plan_access import UserPlanAccess, WorkspacePlanAccess
+from app.models.server import Server
 from app.models.server_plan import ServerPlan
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 from app.services.plan_service import PlanService
@@ -217,6 +218,31 @@ class TestPlanServiceCRUD:
         with pytest.raises(Exception) as exc_info:
             await service.create_plan(name="Existing 2", slug="existing", cpu_limit=2)
         assert "already exists" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_cannot_disable_server_availability_for_used_plan(self, db_session, test_user):
+        service = PlanService(db_session)
+        plan = await service.create_plan(
+            name="Used Plan",
+            slug="used-plan",
+            cpu_limit=1,
+            allow_servers=True,
+            allow_batch_jobs=True,
+        )
+        db_session.add(
+            Server(
+                name="uses-the-plan",
+                user_id=test_user.id,
+                plan_id=plan.id,
+                status="stopped",
+            )
+        )
+        await db_session.commit()
+
+        with pytest.raises(HTTPException) as exc:
+            await service.update_plan(str(plan.id), allow_servers=False)
+        assert exc.value.status_code == 409
+        assert "servers use this plan" in str(exc.value.detail)
 
     @pytest.mark.asyncio
     async def test_update_plan_success(self, db_session):

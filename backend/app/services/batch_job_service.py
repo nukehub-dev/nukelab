@@ -555,6 +555,8 @@ class BatchJobService:
             raise JobError("plan_unavailable", 422, field="plan_id")
         if not await plan_service.can_user_use_plan(str(plan.id), user.role, str(user.id)):
             raise JobError("plan_unavailable", 422, field="plan_id")
+        if not plan.allow_batch_jobs:
+            raise JobError("plan_unavailable", 422, field="plan_id")
         if (plan.gpu_limit or 0) != 0:
             raise JobError("plan_unavailable", 422, field="plan_id")
         if (plan.cost_per_hour or 0) > 0 and not (

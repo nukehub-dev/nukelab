@@ -73,8 +73,9 @@ positive, and creation/settlement times. A unique job index prevents duplicate
 authorizations; `(user_id, state)` serves spendable-balance sums.
 
 The migrations are `b7d4e1c9a2f5` (tables/indexes), `e2c7a9f4d6b1`
-(reservation columns and `job_writer` exclusion), and `f1a2b3c4d5e6` (billing
-journal and `credit_holds`). The current Alembic head is `f1a2b3c4d5e6`. See
+(reservation columns and `job_writer` exclusion), `f1a2b3c4d5e6` (billing
+journal and `credit_holds`), and `a3b8c1d4e5f6` (plan availability flags). The
+current Alembic head is `a3b8c1d4e5f6`. See
 [DATA-MODEL.md](DATA-MODEL.md) for field-level detail.
 
 ## Lifecycle
@@ -106,15 +107,24 @@ queued ──admit──> starting ──observed running──> running ──e
 
 Submission validates a bounded name, literal argument vector, and maximum
 runtime. It requires an approved, non-revoked environment revision the actor can
-use, an active CPU-only plan the actor can use, and an owned active private
-volume. Plans with GPUs are rejected. A nonzero hourly cost is accepted only when
-`BATCH_JOBS_ALLOW_PAID_PLANS=true`.
+use, an active CPU-only plan marked `allow_batch_jobs` that the actor can use,
+and an owned active private volume. Plans with GPUs are rejected. A nonzero
+hourly cost is accepted only when `BATCH_JOBS_ALLOW_PAID_PLANS=true`.
+
+Admins create job plans in Admin → Plans with the **Batch jobs** availability
+checkbox. The same hourly cost applies to servers and jobs; a job-only plan
+unchecks **Servers** and is hidden from server deployment. The plan update guard
+refuses to disable server availability while servers still use that plan.
+Existing CPU plans are backfilled as job-enabled by migration `a3b8c1d4e5f6`;
+GPU plans and new API-created plans opt in explicitly.
 
 The owner dialog makes the frozen choices searchable. Environment revisions,
 CPU plans, and owned private volumes use a searchable picker; the volume picker
-links to `/volumes` and can refresh its list. All active CPU plans are shown,
-but nonzero-cost plans stay disabled with an inline explanation while paid
-batch jobs are off, so the list is not silently narrowed to zero-cost plans.
+links to `/volumes` and can refresh its list. All active CPU plans marked
+`allow_batch_jobs` are shown, but nonzero-cost plans stay disabled with an
+inline explanation while paid batch jobs are off, so the list is not silently
+narrowed to zero-cost plans.
+
 Maximum runtime accepts seconds, minutes, or hours and is converted to whole
 seconds before submission; the backend still enforces the 60-second minimum and
 the configured maximum.
@@ -357,10 +367,10 @@ endpoint.
 
 Implemented and executed for the 2.4.0 batch-job change set (2026-11-28):
 
-- Backend full suite: 5,141 passed, 6 skipped, 0 failed.
-- Frontend: 255 unit tests passed; lint/format/type-check/build passed.
-- Targeted mocked browser suites passed: `jobs-ui` (16),
-  `guided-first-launch` (10), `admin-jobs-ui` (16), and the existing
+- Backend full suite: 5,146 passed, 6 skipped, 0 failed.
+- Frontend: 258 unit tests passed; lint/format/type-check/build passed.
+- Targeted mocked browser suites passed: `jobs-ui` (18),
+  `guided-first-launch` (11), `admin-jobs-ui` (16), and the existing
   queue/admin-setup regressions (10).
 - Real API→PostgreSQL/Redis/Celery/Docker `@jobs-runtime` scenario passed on a
   rebuilt disposable stack. Capacity queueing, exactly one hardened runtime
@@ -382,6 +392,10 @@ Implemented and executed for the 2.4.0 batch-job change set (2026-11-28):
   release, running stop-request retention, recovery-only refusal, terminal
   idempotency, audit-failure rollback, owner notification, and sanitized
   response/audit payloads.
+- Plan availability coverage passed: job-only plans are hidden from server
+  deployment, server-only plans are hidden from jobs, server launch and job
+  admission reject mismatched plans, and migration `a3b8c1d4e5f6` backfills
+  existing CPU plans as job-enabled.
 - Last-slot CPU/memory/disk and volume writer/mount/backup/restore/share/delete
   races passed, including retained `recovery_required` protection.
 - Storage capability and fail-closed submission/admission coverage passed. The

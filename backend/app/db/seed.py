@@ -66,6 +66,8 @@ async def seed_plans(db: AsyncSession):
             "cost_per_hour": 1,
             "priority": 0,
             "visible_to_roles": ["user"],
+            "allow_servers": True,
+            "allow_batch_jobs": True,
         },
         {
             "name": "Medium",
@@ -79,6 +81,8 @@ async def seed_plans(db: AsyncSession):
             "cost_per_hour": 2,
             "priority": 1,
             "visible_to_roles": ["user"],
+            "allow_servers": True,
+            "allow_batch_jobs": True,
         },
         {
             "name": "Large",
@@ -92,6 +96,8 @@ async def seed_plans(db: AsyncSession):
             "cost_per_hour": 4,
             "priority": 2,
             "visible_to_roles": ["user"],
+            "allow_servers": True,
+            "allow_batch_jobs": True,
         },
         {
             "name": "XLarge",
@@ -105,6 +111,8 @@ async def seed_plans(db: AsyncSession):
             "cost_per_hour": 8,
             "priority": 3,
             "visible_to_roles": [],
+            "allow_servers": True,
+            "allow_batch_jobs": True,
         },
     ]
 
