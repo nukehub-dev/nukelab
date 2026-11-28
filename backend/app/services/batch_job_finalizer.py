@@ -26,6 +26,7 @@ from app.services.batch_job_admission_service import (
     BatchJobAdmissionService,
     JobAdmissionError,
 )
+from app.services.batch_job_notifications import BatchJobNotifier
 from app.services.worker_heartbeat import current_executor_id
 
 logger = get_logger(__name__)
@@ -80,10 +81,12 @@ class BatchJobFinalizer:
         driver: ContainerDriver,
         *,
         admission: BatchJobAdmissionService | None = None,
+        notifier: BatchJobNotifier | None = None,
     ):
         self.db = db
         self.driver = driver
         self.admission = admission or BatchJobAdmissionService(db, driver)
+        self.notifier = notifier or BatchJobNotifier(db)
 
     async def _clean_session(self) -> None:
         if self.db.new or self.db.dirty or self.db.deleted:
@@ -176,8 +179,18 @@ class BatchJobFinalizer:
             )
 
         already_terminal = job.result_recorded_at is not None and was_terminal
+        job_state = job.state
+        if job_state in _TERMINAL_STATES and not already_terminal:
+            # The terminal transaction has committed. Notification delivery is
+            # a best-effort side effect and must never change that result.
+            await self._notify_terminal(
+                job_id=job.id,
+                owner_id=job.user_id,
+                job_name=job.name,
+                state=job_state,
+            )
         cleanup = None
-        if job.state in _TERMINAL_STATES:
+        if job_state in _TERMINAL_STATES:
             try:
                 cleanup = await self.cleanup(job_id)
             except Exception as exc:
@@ -197,6 +210,31 @@ class BatchJobFinalizer:
             executor_unconfirmed=False,
             cleanup=cleanup,
         )
+
+    async def _notify_terminal(
+        self,
+        *,
+        job_id: uuid.UUID,
+        owner_id: uuid.UUID,
+        job_name: str | None,
+        state: str,
+    ) -> None:
+        try:
+            await self.notifier.notify_terminal(
+                job_id=job_id,
+                owner_id=owner_id,
+                job_name=job_name,
+                state=state,
+            )
+        except Exception as exc:
+            # Delivery is never allowed to fail or alter finalization.
+            logger.warning(
+                "Batch job completion notification deferred",
+                extra={
+                    "job_id": str(job_id),
+                    "error_class": type(exc).__name__,
+                },
+            )
 
     async def _is_terminal(self, job_id: uuid.UUID) -> bool:
         await self._clean_session()

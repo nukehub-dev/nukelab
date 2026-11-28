@@ -231,6 +231,8 @@ class Settings(BaseSettings):
     batch_jobs_max_input_bytes: int = Field(default=16384, gt=0)
     batch_jobs_log_tail_bytes: int = Field(default=262144, gt=0)
     batch_jobs_log_retention_seconds: int = Field(default=604800, gt=0)
+    batch_jobs_log_purge_interval_seconds: int = Field(default=3600, gt=0)
+    batch_jobs_log_purge_batch_size: int = Field(default=100, ge=1, le=1000)
 
     # Batch admission/runtime controls. The fleet cap counts active reservations
     # across owners; zero means unlimited. Interval and batch bounds keep

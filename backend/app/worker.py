@@ -417,6 +417,10 @@ celery_app.conf.update(
             "task": "app.tasks.reconcile_batch_jobs",
             "schedule": float(settings.batch_jobs_recovery_interval_seconds),
         },
+        "purge-batch-job-logs": {
+            "task": "app.tasks.purge_batch_job_logs",
+            "schedule": float(settings.batch_jobs_log_purge_interval_seconds),
+        },
         "evaluate-schedules": {
             "task": "app.tasks.evaluate_schedules",
             "schedule": 60.0,  # Every 60 seconds
