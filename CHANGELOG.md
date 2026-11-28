@@ -96,11 +96,14 @@ section.
 ### Security
 
 - Owner job routes require JWT and `jobs:read_own`/`jobs:write_own`; foreign job
-  IDs return 404. Admin job rows require a JWT session plus `operations:read_all`
-  and `ADMIN_ACCESS`, and never expose argv, logs, environment values, image
-  references, volume paths, runtime identity, or fencing tokens. Proof-only
-  reconcile additionally requires `operations:manage_all`, a bounded reason, and
-  a successful audit write; there is no force or manual-release path.
+  IDs return 404. Admin job rows require a JWT session plus `ADMIN_ACCESS` and a
+  cross-owner job read grant (`jobs:read_all` or `jobs:access_others`; legacy
+  `operations:read_all` remains a fallback), and never expose argv, logs,
+  environment values, image references, volume paths, runtime identity, or
+  fencing tokens. Safe cancel and proof-only reconcile require `jobs:write_all`
+  (or legacy `operations:manage_all`), a bounded reason, and a successful audit
+  write; cancel never force-releases a started job's protection and reconcile
+  has no force or manual-release path.
 - Batch containers run without network access, ports, capabilities, rootfs
   writes, restart policy, or platform credentials. Argument count/bytes, runtime,
   pids, memory, tmpfs, and log output are bounded; terminal release requires
@@ -125,16 +128,17 @@ section.
   last-slot/volume race suites passed locally on a disposable Docker stack. An
   actual over-cap write on XFS project-quota storage still needs target-storage
   evidence; the current host reports unenforced storage.
-- Podman job enablement and scoped workload secrets remain pending. Paid access
-  is a gated pilot, not a general release default.
+- Scoped workload secrets remain deferred, so batch jobs stay secrets-disabled.
+  Paid access is a gated pilot, not a general release default.
 
 ### Verification
 
-- Backend full suite passed: 5,122 passed, 6 skipped, 0 failed.
-- Frontend unit tests (247), lint, format check, type check, and production build
+- Backend full suite passed: 5,146 passed, 6 skipped, 0 failed. Targeted
+  plan-availability guard tests passed separately after the final policy change.
+- Frontend unit tests (258), lint, format check, type check, and production build
   passed.
-- Targeted mocked browser suites passed: jobs UI 14, guided first launch 9, admin
-  jobs UI 13, and the existing queue/admin-setup regressions 10.
+- Targeted mocked browser suites passed: jobs UI 18, guided first launch 11,
+  admin jobs UI 16, and the existing queue/admin-setup regressions 10.
 - A real API→PostgreSQL/Redis/Celery/Docker `@jobs-runtime` scenario passed on a
   rebuilt disposable stack: capacity queueing, one hardened runtime (UID 65532,
   read-only rootfs, `CapDrop=ALL`, no network, no ports, no restart), output and

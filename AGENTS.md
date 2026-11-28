@@ -204,8 +204,13 @@ High-level layout; see the Child NAD Index below for domain-specific details.
   Existing queued and admitted jobs continue dispatch, monitoring, cleanup and
   cancellation, and owner/admin history stays readable. Drain a pilot by
   disabling submission and letting active rows finish.
-- **Batch jobs are zero-cost only.** `BATCH_JOBS_ALLOW_PAID_PLANS` is inert,
-  nonzero-cost plans are rejected, and no credit settlement path exists.
+- **Batch jobs support zero-cost and gated paid plans.** Zero-cost plans always
+  work. A nonzero plan requires `BATCH_JOBS_ALLOW_PAID_PLANS=true` and
+  `CREDITS_ENABLED=true`; submission holds `ceil(rate × max_runtime / 3600)`
+  credits (minimum 1), terminal proof settles actual runtime, and the unused
+  authorization is refunded. `recovery_required` retains the hold until
+  proof-backed reconciliation. Plans must also be marked `allow_batch_jobs`;
+  job-only plans stay out of server deployment.
 - **A batch reservation holds the exclusive `job_writer` volume guard.**
   File deletion, metadata/sharing changes, backup/restore, server mount intent
   and volume deletion must respect it; release only after terminal runtime

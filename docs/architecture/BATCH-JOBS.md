@@ -415,9 +415,8 @@ Carried gaps:
   loss variants are not separately exercised.
 - No staging pinned upgrade/rollback/off-host restore rehearsal, and no registry
   `preload_only` staging proof.
-- Podman batch enablement is not verified.
 - Paid plans remain disabled by default and the new paid path has not yet run on
-  a GitHub runner. Scoped workload secrets are not implemented; the pilot stays
+  a GitHub runner. Scoped workload secrets are deferred; the pilot stays
   secrets-disabled.
 
 ## Related documents
