@@ -45,6 +45,21 @@ class TestExpandedRolePermissions:
         perms = get_expanded_role_permissions("user")
         assert isinstance(perms, frozenset)
 
+    def test_jobs_write_all_implies_own_and_read(self):
+        perms = get_expanded_role_permissions("admin")
+        assert Permission.JOBS_WRITE_ALL in perms
+        assert Permission.JOBS_WRITE_OWN in perms
+        assert Permission.JOBS_READ_ALL in perms
+        assert Permission.JOBS_READ_OWN in perms
+
+    def test_jobs_access_others_implies_read(self):
+        from app.core.roles import _expand_permissions
+
+        perms = _expand_permissions([Permission.JOBS_ACCESS_OTHERS])
+        assert Permission.JOBS_READ_ALL in perms
+        assert Permission.JOBS_READ_OWN in perms
+        assert Permission.JOBS_WRITE_ALL not in perms
+
 
 class TestRebuildExpansionCache:
     """Tests for _rebuild_expansion_cache."""

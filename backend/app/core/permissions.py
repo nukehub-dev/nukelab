@@ -62,9 +62,12 @@ class Permission:
     VOLUMES_READ_ALL = "volumes:read_all"
     VOLUMES_WRITE_ALL = "volumes:write_all"
 
-    # Batch job management (owner-scoped)
+    # Batch job management
     JOBS_READ_OWN = "jobs:read_own"
     JOBS_WRITE_OWN = "jobs:write_own"
+    JOBS_READ_ALL = "jobs:read_all"
+    JOBS_WRITE_ALL = "jobs:write_all"
+    JOBS_ACCESS_OTHERS = "jobs:access_others"
 
     # Operation recovery visibility and reconciliation
     OPERATIONS_READ_ALL = "operations:read_all"
@@ -119,6 +122,9 @@ class Permission:
             cls.VOLUMES_WRITE_ALL,
             cls.JOBS_READ_OWN,
             cls.JOBS_WRITE_OWN,
+            cls.JOBS_READ_ALL,
+            cls.JOBS_WRITE_ALL,
+            cls.JOBS_ACCESS_OTHERS,
             cls.OPERATIONS_READ_ALL,
             cls.OPERATIONS_MANAGE_ALL,
             cls.AUDIT_READ,

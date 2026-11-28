@@ -52,8 +52,17 @@ function job(
     cleanup_state: 'pending',
     cleanup_attempts: 0,
     can_reconcile: false,
+    can_cancel: false,
     ...overrides,
   }
+}
+
+function cancelableJobs(): AdminJobEntry[] {
+  return defaultJobs.map((entry) =>
+    entry.id === ids.running
+      ? { ...entry, can_cancel: true, reservation_active: true, guard_active: true }
+      : entry
+  )
 }
 
 const defaultJobs: AdminJobEntry[] = [
@@ -123,6 +132,11 @@ async function mockAdminJobs(
       body: unknown
       jobs?: AdminJobEntry[]
     }
+    cancel?: (job: AdminJobEntry) => {
+      status?: number
+      body: unknown
+      jobs?: AdminJobEntry[]
+    }
   } = {}
 ) {
   const currentAdmin = options.user ?? admin
@@ -132,6 +146,7 @@ async function mockAdminJobs(
     calls: [] as URL[],
     reads: 0,
     reconcileRequests: [] as Array<{ id: string; body: Record<string, unknown> }>,
+    cancelRequests: [] as Array<{ id: string; body: Record<string, unknown> }>,
     failuresLeft: options.failFirst ? 1 : 0,
     entered: Promise.resolve() as Promise<void>,
     release: () => {},
@@ -247,6 +262,39 @@ async function mockAdminJobs(
       })
     }
 
+    const cancelMatch = path.match(/^\/admin\/jobs\/([^/]+)\/cancel$/)
+    if (cancelMatch && request.method() === 'POST') {
+      const id = cancelMatch[1]
+      const body = (request.postDataJSON() ?? {}) as Record<string, unknown>
+      state.cancelRequests.push({ id, body })
+      const target = state.jobs.find((entry) => entry.id === id)
+      if (!target) return fulfill({ detail: { code: 'job_not_found' } }, 404)
+
+      if (options.cancel) {
+        const response = options.cancel(target)
+        if (response.jobs) state.jobs = response.jobs
+        return fulfill(response.body, response.status ?? 200)
+      }
+
+      if (target.state === 'recovery_required') {
+        return fulfill({ detail: { code: 'job_not_cancellable' } }, 409)
+      }
+      const updated: AdminJobEntry = {
+        ...target,
+        state: 'cancelling',
+        reason_code: 'cancellation_requested',
+        can_cancel: false,
+      }
+      state.jobs = state.jobs.map((entry) => (entry.id === id ? updated : entry))
+      return fulfill({
+        job: updated,
+        applied: true,
+        already_terminal: false,
+        outcome: 'cancellation_requested',
+        previous_state: target.state,
+      })
+    }
+
     return fulfill({})
   })
 
@@ -281,8 +329,8 @@ test('empty state explains that no batch jobs are recorded', async ({ page }) =>
     timeout: 15_000,
   })
   await expect(page.getByText('No batch jobs recorded')).toBeVisible()
-  await expect(page.getByText('Proof-backed recovery only')).toBeVisible()
-  await expect(page.getByText(/no manual release or cancel control/)).toBeVisible()
+  await expect(page.getByText('Proof-backed recovery and safe cancellation')).toBeVisible()
+  await expect(page.getByText(/cancellation never force-releases/)).toBeVisible()
 })
 
 test('load error offers a retry and then renders confirmed rows', async ({ page }) => {
@@ -344,7 +392,21 @@ test('operator rows omit command, log, and environment content', async ({ page }
   await expect(page.getByRole('button', { name: /cancel|reconcile|view logs/i })).toHaveCount(0)
 })
 
-test('read-only operator sees no reconcile action on reconcilable rows', async ({ page }) => {
+test('admin with a jobs read grant can open the view without operations permissions', async ({
+  page,
+}) => {
+  const state = await mockAdminJobs(page, {
+    user: { ...admin, permissions: ['admin:access', 'jobs:read_all'] },
+    jobs: cancelableJobs(),
+  })
+
+  await page.goto('/admin/jobs')
+  await expect(page.getByTestId(`table-row-${ids.running}`)).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId(`admin-job-cancel-${ids.running}`)).toHaveCount(0)
+  expect(state.reads).toBeGreaterThan(0)
+})
+
+test('read-only operator sees no cancel or reconcile action', async ({ page }) => {
   await mockAdminJobs(page, {
     user: { ...admin, permissions: ['admin:access', 'operations:read_all'] },
     jobs: reconcileableJobs(),
@@ -353,7 +415,69 @@ test('read-only operator sees no reconcile action on reconcilable rows', async (
   await page.goto('/admin/jobs')
   await expect(page.getByTestId(`table-row-${ids.recovery}`)).toBeVisible({ timeout: 15_000 })
   await expect(page.getByTestId(`admin-job-reconcile-${ids.recovery}`)).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /reconcile/i })).toHaveCount(0)
+  await expect(page.getByTestId(`admin-job-cancel-${ids.running}`)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /cancel|reconcile/i })).toHaveCount(0)
+})
+
+test('manage operator can request cancellation with a recorded reason', async ({ page }) => {
+  const state = await mockAdminJobs(page, { jobs: cancelableJobs() })
+  await page.goto('/admin/jobs')
+  const row = page.getByTestId(`table-row-${ids.running}`)
+  await expect(row).toBeVisible({ timeout: 15_000 })
+  const readsBefore = state.reads
+
+  await page.getByTestId(`admin-job-cancel-${ids.running}`).click()
+  const dialog = page.getByTestId('admin-job-cancel-dialog')
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByText('Running').first()).toBeVisible()
+  await expect(dialog.getByTestId('admin-job-cancel-submit')).toBeDisabled()
+
+  const reason = 'Operator requested cancellation for the pilot.'
+  await dialog.getByTestId('admin-job-cancel-reason').fill(reason)
+  await expect(dialog.getByTestId('admin-job-cancel-submit')).toBeEnabled()
+  await dialog.getByTestId('admin-job-cancel-submit').click()
+
+  await expect.poll(() => state.cancelRequests.length).toBe(1)
+  expect(state.cancelRequests[0]).toEqual({ id: ids.running, body: { reason } })
+
+  await expect(dialog).toHaveCount(0)
+  const outcome = page.getByTestId('admin-job-cancel-outcome')
+  await expect(outcome).toContainText('Cancellation requested')
+  await expect(outcome).toContainText('reservation, volume guard, and credit hold remain')
+  await expect.poll(() => state.reads).toBeGreaterThan(readsBefore)
+  await expect(row.getByTestId('admin-job-status-pills')).toContainText('Cancelling')
+  await expect(row.getByText('Reservation held')).toBeVisible()
+  await expect(row.getByText('Volume guard active')).toBeVisible()
+})
+
+test('recovery-only cancellation is refused without changing protection', async ({ page }) => {
+  const state = await mockAdminJobs(page, {
+    jobs: [{ ...defaultJobs[0], can_cancel: true }],
+    cancel: () => ({
+      status: 409,
+      body: { detail: { code: 'job_not_cancellable' } },
+    }),
+  })
+  await page.goto('/admin/jobs')
+  const row = page.getByTestId(`table-row-${ids.recovery}`)
+  await expect(row).toBeVisible({ timeout: 15_000 })
+  const readsBefore = state.reads
+
+  await page.getByTestId(`admin-job-cancel-${ids.recovery}`).click()
+  const dialog = page.getByTestId('admin-job-cancel-dialog')
+  await dialog
+    .getByTestId('admin-job-cancel-reason')
+    .fill('Operator tried to cancel a recovery row.')
+  await dialog.getByTestId('admin-job-cancel-submit').click()
+
+  await expect(dialog.getByTestId('admin-job-cancel-error')).toContainText('Recovery-only job')
+  await expect(dialog.getByTestId('admin-job-cancel-error')).toContainText(
+    'no reservation, volume guard, or credit hold was released'
+  )
+  await expect(row.getByTestId('admin-job-status-pills')).toContainText('Recovery required')
+  await expect(row.getByText('Reservation held')).toBeVisible()
+  await expect(row.getByText('Volume guard active')).toBeVisible()
+  expect(state.reads).toBe(readsBefore)
 })
 
 test('manage operator sees reconcile only on rows the server marks reconcilable', async ({
@@ -366,6 +490,7 @@ test('manage operator sees reconcile only on rows the server marks reconcilable'
   await expect(page.getByTestId(`admin-job-reconcile-${ids.recovery}`)).toBeVisible()
   await expect(page.getByTestId(`admin-job-reconcile-${ids.running}`)).toHaveCount(0)
   await expect(page.getByTestId(`admin-job-reconcile-${ids.succeeded}`)).toHaveCount(0)
+  await expect(page.getByTestId(`admin-job-cancel-${ids.recovery}`)).toHaveCount(0)
 })
 
 test('successful reconcile posts the reason, refreshes the row, and reports the proof result', async ({

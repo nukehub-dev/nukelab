@@ -64,6 +64,7 @@ interface AdminCategory {
   href: string
   requiredPermission?: string
   requiredPermissions?: string[]
+  requiredAnyPermissions?: string[]
   color: string
   external?: boolean
 }
@@ -119,10 +120,15 @@ const categories: AdminCategory[] = [
   },
   {
     label: 'Jobs',
-    description: 'Read-only cross-owner batch job state, protection, and cleanup evidence',
+    description: 'Cross-owner batch job state, safe cancellation, and proof-backed recovery',
     icon: Terminal,
     href: '/admin/jobs',
-    requiredPermissions: [PERMISSIONS.OPERATIONS_READ_ALL, PERMISSIONS.ADMIN_ACCESS],
+    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
+    requiredAnyPermissions: [
+      PERMISSIONS.JOBS_READ_ALL,
+      PERMISSIONS.JOBS_ACCESS_OTHERS,
+      PERMISSIONS.OPERATIONS_READ_ALL,
+    ],
     color: 'bg-cyan-500/10 text-cyan-400',
   },
   {
@@ -269,6 +275,8 @@ function AdminIndexPage() {
   const visibleCategories = categories.filter(
     (c) =>
       (c.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true) &&
+      (!c.requiredAnyPermissions ||
+        c.requiredAnyPermissions.some((permission) => hasPermission(permission))) &&
       (!c.requiredPermission || hasPermission(c.requiredPermission))
   )
 

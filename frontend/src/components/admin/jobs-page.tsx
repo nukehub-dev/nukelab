@@ -7,24 +7,27 @@ import { ResourcePageLayout } from '../layout/resource-page-layout'
 import { Button } from '../ui/button'
 import { Select, SelectItem } from '../ui/select'
 import { AdminJobsTable } from './jobs-table'
+import { AdminJobCancelDialog, AdminJobCancelOutcome } from './job-cancel-dialog'
 import { AdminJobReconcileDialog, AdminJobReconcileOutcome } from './job-reconcile-dialog'
-import { useAdminJobs, useReconcileAdminJob } from '../../hooks/use-admin-jobs'
+import { useAdminJobs, useCancelAdminJob, useReconcileAdminJob } from '../../hooks/use-admin-jobs'
 import { useDataTable } from '../../hooks/use-data-table'
 import { usePageGuard } from '../../hooks/use-page-guard'
 import {
   ADMIN_JOB_AGE_OPTIONS,
-  ADMIN_JOB_READ_PERMISSIONS,
+  ADMIN_JOB_READ_ANY_PERMISSIONS,
   adminJobAccess,
+  adminJobCancelErrorInfo,
   adminJobReconcileErrorInfo,
   adminJobsLoadErrorInfo,
   emptyAdminJobSummary,
   sanitizeAdminJobSummary,
   type AdminJobAgeFilter,
+  type AdminJobErrorInfo,
 } from '../../lib/admin-jobs'
-import type { AdminJobReconcileErrorInfo } from '../../lib/admin-jobs'
-import { useAuthStore } from '../../stores/auth-store'
+import { PERMISSIONS, useAuthStore } from '../../stores/auth-store'
 import { useThemeStore } from '../../stores/theme-store'
 import type {
+  AdminJobCancelResult,
   AdminJobEntry,
   AdminJobFilters,
   AdminJobListState,
@@ -64,12 +67,20 @@ export function AdminJobsPageContent() {
   const failedCount = summary.failed + summary.timed_out
 
   const canManage = useAuthStore(
-    (state) => adminJobAccess((permissions) => state.hasAllPermissions(permissions)).canManage
+    (state) =>
+      adminJobAccess(
+        (permissions) => state.hasAllPermissions(permissions),
+        (permissions) => state.hasAnyPermission(permissions)
+      ).canManage
   )
   const reconcile = useReconcileAdminJob()
+  const cancel = useCancelAdminJob()
   const [reconcileEntry, setReconcileEntry] = useState<AdminJobEntry | null>(null)
   const [reconcileResult, setReconcileResult] = useState<AdminJobReconcileResult | null>(null)
-  const [reconcileError, setReconcileError] = useState<AdminJobReconcileErrorInfo | null>(null)
+  const [reconcileError, setReconcileError] = useState<AdminJobErrorInfo | null>(null)
+  const [cancelEntry, setCancelEntry] = useState<AdminJobEntry | null>(null)
+  const [cancelResult, setCancelResult] = useState<AdminJobCancelResult | null>(null)
+  const [cancelError, setCancelError] = useState<AdminJobErrorInfo | null>(null)
 
   const openReconcile = (entry: AdminJobEntry) => {
     if (!canManage || !entry.can_reconcile) return
@@ -103,6 +114,38 @@ export function AdminJobsPageContent() {
     )
   }
 
+  const openCancel = (entry: AdminJobEntry) => {
+    if (!canManage || !entry.can_cancel) return
+    cancel.reset()
+    setCancelError(null)
+    setCancelEntry(entry)
+  }
+
+  const closeCancel = () => {
+    if (cancel.isPending) return
+    setCancelEntry(null)
+    setCancelError(null)
+  }
+
+  const submitCancel = (reason: string) => {
+    if (!cancelEntry) return
+    setCancelError(null)
+    cancel.mutate(
+      { id: cancelEntry.id, reason },
+      {
+        onSuccess: (result) => {
+          setCancelError(null)
+          setCancelResult(result)
+          setCancelEntry(null)
+        },
+        onError: (mutationError) => {
+          setCancelResult(null)
+          setCancelError(adminJobCancelErrorInfo(mutationError))
+        },
+      }
+    )
+  }
+
   const clearFilters = () => {
     setStateFilter('all')
     setAgeFilter('all')
@@ -113,7 +156,7 @@ export function AdminJobsPageContent() {
     <div data-testid="admin-jobs-page">
       <ResourcePageLayout
         title="Batch Jobs"
-        subtitle="Read-only cross-owner job state, protection, and cleanup evidence"
+        subtitle="Cross-owner job state, safe cancellation, and proof-backed recovery"
         icon={Terminal}
         backTo="/admin"
         stats={[
@@ -161,15 +204,21 @@ export function AdminJobsPageContent() {
         <div className="bubble flex items-start gap-3 p-4">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
           <div className="min-w-0">
-            <p className="text-sm font-medium">Proof-backed recovery only</p>
+            <p className="text-sm font-medium">Proof-backed recovery and safe cancellation</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Command arguments, logs, and environment values stay with the job owner. Reconcile is
-              offered only when the server marks a job reconcilable and only to operators with
-              manage permission. It reruns read-only proof inspection; it cannot force a state or
-              release a reservation or volume guard. There is no manual release or cancel control.
+              Command arguments, logs, and environment values stay with the job owner. Operators
+              with manage permission can request cancellation of a queued, starting, or running job
+              with a recorded reason. A started job stops only after verified runtime termination;
+              cancellation never force-releases a reservation, volume guard, or credit hold. A
+              recovery-required row is reconcile-only, and reconcile reruns read-only proof
+              inspection without a force path.
             </p>
           </div>
         </div>
+
+        {cancelResult && (
+          <AdminJobCancelOutcome result={cancelResult} onDismiss={() => setCancelResult(null)} />
+        )}
 
         {reconcileResult && (
           <AdminJobReconcileOutcome
@@ -255,10 +304,21 @@ export function AdminJobsPageContent() {
           onPageChange={setPage}
           onLimitChange={setLimit}
           onRetry={() => void refetch()}
+          onCancel={openCancel}
           onReconcile={openReconcile}
           density={density}
         />
       </ResourcePageLayout>
+
+      {cancelEntry && (
+        <AdminJobCancelDialog
+          entry={cancelEntry}
+          busy={cancel.isPending}
+          error={cancelError}
+          onSubmit={submitCancel}
+          onClose={closeCancel}
+        />
+      )}
 
       {reconcileEntry && (
         <AdminJobReconcileDialog
@@ -275,8 +335,8 @@ export function AdminJobsPageContent() {
 
 export function AdminJobsPage() {
   const allowed = usePageGuard({
-    permissions: [...ADMIN_JOB_READ_PERMISSIONS],
-    requireAll: true,
+    permission: PERMISSIONS.ADMIN_ACCESS,
+    anyPermission: [...ADMIN_JOB_READ_ANY_PERMISSIONS],
     redirectTo: '/admin',
   })
 

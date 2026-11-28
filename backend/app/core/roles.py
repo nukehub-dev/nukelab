@@ -59,9 +59,9 @@ ROLE_PERMISSIONS = {
         # Volumes (admin level)
         Permission.VOLUMES_READ_ALL,
         Permission.VOLUMES_WRITE_ALL,
-        # Batch jobs (owner-scoped)
-        Permission.JOBS_READ_OWN,
-        Permission.JOBS_WRITE_OWN,
+        # Batch jobs (cross-owner read and manage; write_all implies own/read)
+        Permission.JOBS_READ_ALL,
+        Permission.JOBS_WRITE_ALL,
         # Operation recovery visibility and reconciliation
         Permission.OPERATIONS_READ_ALL,
         Permission.OPERATIONS_MANAGE_ALL,
@@ -100,9 +100,9 @@ ROLE_PERMISSIONS = {
         # Volumes (full)
         Permission.VOLUMES_READ_ALL,
         Permission.VOLUMES_WRITE_ALL,
-        # Batch jobs (owner-scoped)
-        Permission.JOBS_READ_OWN,
-        Permission.JOBS_WRITE_OWN,
+        # Batch jobs (cross-owner read and manage; write_all implies own/read)
+        Permission.JOBS_READ_ALL,
+        Permission.JOBS_WRITE_ALL,
         # Audit
         Permission.AUDIT_READ,
     ],
@@ -130,8 +130,8 @@ ROLE_PERMISSIONS = {
         # Volumes (write own + read all)
         Permission.VOLUMES_WRITE_OWN,
         Permission.VOLUMES_READ_ALL,
-        # Batch jobs (owner-scoped)
-        Permission.JOBS_READ_OWN,
+        # Batch jobs (read all, write own)
+        Permission.JOBS_READ_ALL,
         Permission.JOBS_WRITE_OWN,
     ],
     "user": [
@@ -234,6 +234,16 @@ def _expand_permissions(permissions: list) -> set:
         Permission.SERVERS_ACCESS_OTHERS: {
             Permission.SERVERS_READ_ALL,
             Permission.SERVERS_READ_OWN,
+        },
+        Permission.JOBS_READ_ALL: {Permission.JOBS_READ_OWN},
+        Permission.JOBS_WRITE_ALL: {
+            Permission.JOBS_WRITE_OWN,
+            Permission.JOBS_READ_ALL,
+            Permission.JOBS_READ_OWN,
+        },
+        Permission.JOBS_ACCESS_OTHERS: {
+            Permission.JOBS_READ_ALL,
+            Permission.JOBS_READ_OWN,
         },
         Permission.VOLUMES_READ_ALL: {Permission.VOLUMES_READ_OWN},
         Permission.VOLUMES_WRITE_ALL: {

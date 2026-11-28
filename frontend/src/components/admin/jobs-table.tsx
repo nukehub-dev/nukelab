@@ -3,6 +3,7 @@
 
 import {
   AlertTriangle,
+  Ban,
   Clock,
   HeartPulse,
   Inbox,
@@ -49,6 +50,7 @@ interface AdminJobsTableProps {
   onPageChange: (page: number) => void
   onLimitChange: (limit: number) => void
   onRetry?: () => void
+  onCancel?: (entry: AdminJobEntry) => void
   onReconcile?: (entry: AdminJobEntry) => void
   density?: 'compact' | 'comfortable'
 }
@@ -123,35 +125,61 @@ function JobEvidenceCell({ entry }: { entry: AdminJobEntry }) {
 
 function JobActionCell({
   entry,
+  onCancel,
   onReconcile,
 }: {
   entry: AdminJobEntry
+  onCancel?: (entry: AdminJobEntry) => void
   onReconcile?: (entry: AdminJobEntry) => void
 }) {
-  if (!entry.can_reconcile || !onReconcile) {
+  const actions = []
+  if (entry.can_cancel && onCancel) {
+    actions.push(
+      <Button
+        key="cancel"
+        type="button"
+        size="sm"
+        variant="outline"
+        className="gap-1.5"
+        aria-label={`Cancel job ${shortAdminJobReference(entry.id)}`}
+        data-testid={`admin-job-cancel-${entry.id}`}
+        onClick={() => onCancel(entry)}
+      >
+        <Ban className="h-3.5 w-3.5" />
+        Cancel
+      </Button>
+    )
+  }
+  if (entry.can_reconcile && onReconcile) {
+    actions.push(
+      <Button
+        key="reconcile"
+        type="button"
+        size="sm"
+        variant="outline"
+        className="gap-1.5"
+        aria-label={`Reconcile job ${shortAdminJobReference(entry.id)}`}
+        data-testid={`admin-job-reconcile-${entry.id}`}
+        onClick={() => onReconcile(entry)}
+      >
+        <Wrench className="h-3.5 w-3.5" />
+        Reconcile
+      </Button>
+    )
+  }
+  if (actions.length === 0) {
     return <span className="text-xs text-muted-foreground">—</span>
   }
-  return (
-    <Button
-      type="button"
-      size="sm"
-      variant="outline"
-      className="gap-1.5"
-      aria-label={`Reconcile job ${shortAdminJobReference(entry.id)}`}
-      data-testid={`admin-job-reconcile-${entry.id}`}
-      onClick={() => onReconcile(entry)}
-    >
-      <Wrench className="h-3.5 w-3.5" />
-      Reconcile
-    </Button>
-  )
+  return <div className="flex flex-wrap gap-1.5">{actions}</div>
 }
 
 export function AdminJobMobileCard({
   entry,
+  onCancel,
   onReconcile,
 }: {
   entry: AdminJobEntry
+  onCancel?: (entry: AdminJobEntry) => void
   onReconcile?: (entry: AdminJobEntry) => void
 }) {
   const recovery = isAdminJobRecoveryRequired(entry.state)
@@ -215,9 +243,25 @@ export function AdminJobMobileCard({
       ) : (
         entry.guard_active && (
           <p className="rounded-lg border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">
-            The volume guard is still active. No release control is exposed without runtime proof.
+            The volume guard is still active. A cancellation request stops only after verified
+            runtime termination, and the guard is never force-released.
           </p>
         )
+      )}
+
+      {onCancel && entry.can_cancel && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="w-full gap-1.5"
+          aria-label={`Cancel job ${shortAdminJobReference(entry.id)}`}
+          data-testid={`admin-job-card-cancel-${entry.id}`}
+          onClick={() => onCancel(entry)}
+        >
+          <Ban className="h-3.5 w-3.5" />
+          Request cancellation
+        </Button>
       )}
 
       {onReconcile && entry.can_reconcile && (
@@ -271,8 +315,8 @@ function JobsEmptyState({
 
 /**
  * Bounded job table. Only operators with manage permission see a row action,
- * and only when the server marks the row reconcilable. It still exposes no
- * admin cancel, retry, log, argv, or raw runtime control.
+ * and only when the server marks the row cancellable or reconcilable. It never
+ * exposes retry, logs, argv, or raw runtime control.
  */
 export function AdminJobsTable({
   entries,
@@ -289,6 +333,7 @@ export function AdminJobsTable({
   onPageChange,
   onLimitChange,
   onRetry,
+  onCancel,
   onReconcile,
   density = 'comfortable',
 }: AdminJobsTableProps) {
@@ -352,12 +397,14 @@ export function AdminJobsTable({
     },
   ]
 
-  if (canManage && onReconcile) {
+  if (canManage && (onCancel || onReconcile)) {
     columns.push({
       id: 'action',
       header: 'Action',
       enableSorting: false,
-      cell: ({ row }) => <JobActionCell entry={row.original} onReconcile={onReconcile} />,
+      cell: ({ row }) => (
+        <JobActionCell entry={row.original} onCancel={onCancel} onReconcile={onReconcile} />
+      ),
     })
   }
 
@@ -387,7 +434,11 @@ export function AdminJobsTable({
       searchable={false}
       emptyState={<JobsEmptyState hasFilters={hasFilters} onClearFilters={onClearFilters} />}
       mobileCardRenderer={(entry) => (
-        <AdminJobMobileCard entry={entry} onReconcile={canManage ? onReconcile : undefined} />
+        <AdminJobMobileCard
+          entry={entry}
+          onCancel={canManage ? onCancel : undefined}
+          onReconcile={canManage ? onReconcile : undefined}
+        />
       )}
       enableRowSelection={false}
       defaultMobileView={!isDesktop}

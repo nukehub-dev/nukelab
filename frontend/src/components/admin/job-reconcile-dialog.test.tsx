@@ -29,6 +29,7 @@ const entry: AdminJobEntry = {
   cleanup_state: 'pending',
   cleanup_attempts: 2,
   can_reconcile: true,
+  can_cancel: false,
 }
 
 function submitButton(html: string): string {

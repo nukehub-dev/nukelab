@@ -321,8 +321,13 @@ export function CommandPalette() {
         'Jobs',
         '/admin/jobs',
         Terminal,
-        ['jobs', 'batch', 'runs', 'operator'],
-        hasAllPermissions([PERMISSIONS.OPERATIONS_READ_ALL, PERMISSIONS.ADMIN_ACCESS])
+        ['jobs', 'batch', 'runs', 'operator', 'cancel'],
+        hasPermission(PERMISSIONS.ADMIN_ACCESS) &&
+          hasAnyPermission([
+            PERMISSIONS.JOBS_READ_ALL,
+            PERMISSIONS.JOBS_ACCESS_OTHERS,
+            PERMISSIONS.OPERATIONS_READ_ALL,
+          ])
       ),
       ...adminPage(
         'Analytics',

@@ -6,12 +6,18 @@ import type { QueryClient } from '@tanstack/react-query'
 import {
   adminJobAccess,
   buildAdminJobsQuery,
+  cancelAdminJob,
   fetchAdminJobs,
   reconcileAdminJob,
 } from '../lib/admin-jobs'
 import { queryClient } from '../lib/api'
 import { useAuthStore } from '../stores/auth-store'
-import type { AdminJobFilters, AdminJobPage, AdminJobReconcileResult } from '../types/admin-jobs'
+import type {
+  AdminJobCancelResult,
+  AdminJobFilters,
+  AdminJobPage,
+  AdminJobReconcileResult,
+} from '../types/admin-jobs'
 
 export const adminJobKeys = {
   all: ['admin-jobs'] as const,
@@ -43,7 +49,11 @@ export function invalidateAdminJobData(client: QueryClient): Promise<void> {
 export function useAdminJobs(filters: AdminJobFilters = {}) {
   const ownerId = useAuthStore((state) => state.user?.id)
   const canRead = useAuthStore(
-    (state) => adminJobAccess((permissions) => state.hasAllPermissions(permissions)).canRead
+    (state) =>
+      adminJobAccess(
+        (permissions) => state.hasAllPermissions(permissions),
+        (permissions) => state.hasAnyPermission(permissions)
+      ).canRead
   )
 
   return useQuery<AdminJobPage>({
@@ -64,6 +74,21 @@ export function useReconcileAdminJob() {
 
   return useMutation<AdminJobReconcileResult, Error, ReconcileJobVariables>({
     mutationFn: ({ id, reason }) => reconcileAdminJob(id, reason),
+    onSuccess: () => invalidateAdminJobData(client),
+  })
+}
+
+interface CancelJobVariables {
+  id: string
+  reason: string
+}
+
+/** Cancellation is server-owned; the list refreshes instead of patching locally. */
+export function useCancelAdminJob() {
+  const client = useQueryClient()
+
+  return useMutation<AdminJobCancelResult, Error, CancelJobVariables>({
+    mutationFn: ({ id, reason }) => cancelAdminJob(id, reason),
     onSuccess: () => invalidateAdminJobData(client),
   })
 }

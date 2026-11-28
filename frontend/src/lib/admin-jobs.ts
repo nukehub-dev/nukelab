@@ -6,6 +6,8 @@ import { formatHeartbeatAge } from './admin-operations'
 import { formatDate, formatRelativeTime, parseUtcDate } from './utils'
 import { PERMISSIONS } from '../stores/auth-store'
 import type {
+  AdminJobCancelOutcome,
+  AdminJobCancelResult,
   AdminJobEntry,
   AdminJobFilters,
   AdminJobListState,
@@ -16,14 +18,17 @@ import type {
   AdminJobSummary,
 } from '../types/admin-jobs'
 
-export const ADMIN_JOB_READ_PERMISSIONS = [
+/** Admin access is required; one cross-owner job read grant is also required. */
+export const ADMIN_JOB_READ_ANY_PERMISSIONS = [
+  PERMISSIONS.JOBS_READ_ALL,
+  PERMISSIONS.JOBS_ACCESS_OTHERS,
   PERMISSIONS.OPERATIONS_READ_ALL,
-  PERMISSIONS.ADMIN_ACCESS,
 ] as const
 
-export const ADMIN_JOB_MANAGE_PERMISSIONS = [
+/** One cross-owner job manage grant is required for cancel or reconcile. */
+export const ADMIN_JOB_MANAGE_ANY_PERMISSIONS = [
+  PERMISSIONS.JOBS_WRITE_ALL,
   PERMISSIONS.OPERATIONS_MANAGE_ALL,
-  ...ADMIN_JOB_READ_PERMISSIONS,
 ] as const
 
 export const ADMIN_JOB_REASON_MIN_LENGTH = 8
@@ -68,13 +73,19 @@ export interface AdminJobAccess {
   canManage: boolean
 }
 
-/** Reads need read_all; the proof-only reconcile action needs manage_all. */
+/**
+ * Cross-owner reads need admin access plus one job read grant. Cancel and
+ * reconcile need admin access plus one job manage grant; the Jobs-specific
+ * grants are primary and the Operations grants remain compatibility fallbacks.
+ */
 export function adminJobAccess(
-  hasAllPermissions: (permissions: string[]) => boolean
+  hasAllPermissions: (permissions: string[]) => boolean,
+  hasAnyPermission: (permissions: string[]) => boolean
 ): AdminJobAccess {
+  const admin = hasAllPermissions([PERMISSIONS.ADMIN_ACCESS])
   return {
-    canRead: hasAllPermissions([...ADMIN_JOB_READ_PERMISSIONS]),
-    canManage: hasAllPermissions([...ADMIN_JOB_MANAGE_PERMISSIONS]),
+    canRead: admin && hasAnyPermission([...ADMIN_JOB_READ_ANY_PERMISSIONS]),
+    canManage: admin && hasAnyPermission([...ADMIN_JOB_MANAGE_ANY_PERMISSIONS]),
   }
 }
 
@@ -388,9 +399,10 @@ export function sanitizeAdminJobEntry(entry: AdminJobEntry): AdminJobEntry {
     log_state: safeAdminJobCode(entry.log_state) ?? 'unknown',
     cleanup_state: safeAdminJobCode(entry.cleanup_state) ?? 'unknown',
     cleanup_attempts: boundedInteger(entry.cleanup_attempts, 0, 2_000_000_000) ?? 0,
-    // Preserve the server's proof-backed action flag, but never for a row with
-    // an invalid reference that cannot address the reconcile endpoint.
+    // Preserve the server's proof-backed action flags, but never for a row with
+    // an invalid reference that cannot address the action endpoint.
     can_reconcile: isAdminJobReference(entry.id) && entry.can_reconcile === true,
+    can_cancel: isAdminJobReference(entry.id) && entry.can_cancel === true,
   }
 }
 
@@ -449,6 +461,10 @@ export function adminJobReconcilePath(id: string): string {
   return `/admin/jobs/${encodeURIComponent(id)}/reconcile`
 }
 
+export function adminJobCancelPath(id: string): string {
+  return `/admin/jobs/${encodeURIComponent(id)}/cancel`
+}
+
 export function fetchAdminJobs(filters: AdminJobFilters = {}): Promise<AdminJobPage> {
   return api.get<AdminJobPage>(adminJobsPath(filters)).then((page) => sanitizeAdminJobPage(page))
 }
@@ -472,13 +488,35 @@ export class AdminJobReconcileRequestError extends Error {
   }
 }
 
+export class AdminJobCancelRequestError extends Error {
+  readonly status: number
+  readonly code: string | null
+
+  constructor(message: string, status: number, code: string | null) {
+    super(message)
+    this.name = 'AdminJobCancelRequestError'
+    this.status = status
+    this.code = code
+  }
+}
+
 function jobErrorStatus(error: unknown): number {
-  if (error instanceof AdminJobReconcileRequestError) return error.status
+  if (
+    error instanceof AdminJobReconcileRequestError ||
+    error instanceof AdminJobCancelRequestError
+  ) {
+    return error.status
+  }
   return error instanceof ApiError ? error.status : 0
 }
 
 function jobErrorCode(error: unknown): string | null {
-  if (error instanceof AdminJobReconcileRequestError) return error.code
+  if (
+    error instanceof AdminJobReconcileRequestError ||
+    error instanceof AdminJobCancelRequestError
+  ) {
+    return error.code
+  }
   if (error instanceof ApiError) return error.code ?? null
   if (error && typeof error === 'object' && 'code' in error) {
     const value = (error as { code?: unknown }).code
@@ -646,5 +684,121 @@ export async function reconcileAdminJob(
       status,
       code
     )
+  }
+}
+
+const CANCEL_OUTCOMES: readonly AdminJobCancelOutcome[] = [
+  'cancelled',
+  'cancellation_requested',
+  'already_cancelling',
+  'already_terminal',
+]
+
+function isAdminJobCancelOutcome(value: unknown): value is AdminJobCancelOutcome {
+  return typeof value === 'string' && (CANCEL_OUTCOMES as readonly string[]).includes(value)
+}
+
+function invalidCancelResponse(): AdminJobCancelRequestError {
+  return new AdminJobCancelRequestError(
+    'The server returned an unexpected response. Refresh before retrying.',
+    200,
+    'invalid_response'
+  )
+}
+
+/**
+ * Normalizes a cancellation result before it reaches UI state. The server
+ * already strips argv, logs, environment values, and runtime identity; this
+ * keeps the dialog and result banner bounded even if the payload drifts.
+ */
+export function sanitizeAdminJobCancelResult(value: unknown): AdminJobCancelResult {
+  const record = asRecord(value)
+  const job = asRecord(record?.job)
+  if (!record || !job || !isAdminJobCancelOutcome(record.outcome)) {
+    throw invalidCancelResponse()
+  }
+
+  const outcome = record.outcome
+  const applied = record.applied === true
+  const alreadyTerminal = record.already_terminal === true
+
+  return {
+    job: sanitizeAdminJobEntry(job as unknown as AdminJobEntry),
+    applied,
+    already_terminal: alreadyTerminal,
+    outcome,
+    previous_state: safeAdminJobCode(record.previous_state),
+  }
+}
+
+export function adminJobCancelErrorMessage(code: string | null, status: number): string {
+  switch (code) {
+    case 'job_not_cancellable':
+      return 'This job is recovery-only or past the point where cancellation can be requested. Use proof-backed reconcile; no reservation, volume guard, or credit hold was released.'
+    case 'job_not_found':
+      return 'The job no longer exists. Refresh the list and try again.'
+    case 'permission_denied':
+    case 'permission_revoked':
+      return 'You do not have permission to cancel this job.'
+    case 'invalid_reason':
+      return `Enter a reason between ${ADMIN_JOB_REASON_MIN_LENGTH} and ${ADMIN_JOB_REASON_MAX_LENGTH} characters without control characters.`
+    case 'invalid_job_reference':
+      return 'This job reference is invalid. Refresh the list and try again.'
+    case 'invalid_response':
+      return 'The server returned an unexpected response. Refresh before retrying.'
+    case 'audit_unavailable':
+      return 'The audit trail is unavailable, so no cancellation was applied. Try again later.'
+    case 'cancellation_failed':
+      return 'The cancellation request could not be completed. Refresh before retrying.'
+    default:
+      break
+  }
+  if (status === 404) return 'The job no longer exists. Refresh the list and try again.'
+  if (status === 403) return 'You do not have permission to cancel this job.'
+  if (status === 409) {
+    return 'This job is recovery-only or no longer cancellable. No reservation or volume guard was released.'
+  }
+  if (status === 422) {
+    return `Enter a reason between ${ADMIN_JOB_REASON_MIN_LENGTH} and ${ADMIN_JOB_REASON_MAX_LENGTH} characters without control characters.`
+  }
+  if (status === 401) return 'Your session expired. Sign in again.'
+  if (status >= 500) return 'The server could not complete the request. No change was confirmed.'
+  if (status === 0) return 'The request could not reach the server. No change was confirmed.'
+  return 'The request failed. No change was confirmed.'
+}
+
+export function adminJobCancelErrorInfo(error: unknown): AdminJobErrorInfo {
+  const code = jobErrorCode(error)
+  const status = jobErrorStatus(error)
+  return { code, message: adminJobCancelErrorMessage(code, status) }
+}
+
+/**
+ * Submits a bounded reason and returns only the sanitized cancellation
+ * outcome. Validation and API failures are converted to a sanitized error so
+ * raw server payloads never reach the dialog.
+ */
+export async function cancelAdminJob(id: string, reason: string): Promise<AdminJobCancelResult> {
+  if (!isAdminJobReference(id)) {
+    throw new AdminJobCancelRequestError(
+      'This job reference is invalid. Refresh the list and try again.',
+      422,
+      'invalid_job_reference'
+    )
+  }
+  const normalized = normalizeAdminJobReason(reason)
+  const validation = adminJobReasonValidationError(normalized)
+  if (validation) {
+    throw new AdminJobCancelRequestError(validation, 422, 'invalid_reason')
+  }
+
+  try {
+    const body = await api.post<unknown>(adminJobCancelPath(id), { reason: normalized })
+    return sanitizeAdminJobCancelResult(body)
+  } catch (error) {
+    if (error instanceof AdminJobCancelRequestError) throw error
+    const code = jobErrorCode(error)
+    const status = jobErrorStatus(error)
+    throw new AdminJobCancelRequestError(adminJobCancelErrorMessage(code, status), status, code)
   }
 }

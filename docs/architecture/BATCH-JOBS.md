@@ -15,12 +15,22 @@ and no scoped secret injection.
 | Submit | `POST /api/jobs` | JWT + `jobs:write_own`, submission enabled, cohort match, `Idempotency-Key` |
 | List/detail/logs | `GET /api/jobs`, `GET /api/jobs/{id}`, `GET /api/jobs/{id}/logs` | JWT + `jobs:read_own` |
 | Cancel | `POST /api/jobs/{id}/cancel` | JWT + `jobs:write_own` |
-| Admin visibility | `GET /api/admin/jobs`, `GET /api/admin/jobs/{id}` | JWT + `operations:read_all` + `ADMIN_ACCESS` |
-| Proof-only reconcile | `POST /api/admin/jobs/{id}/reconcile` | JWT + `operations:manage_all` + `ADMIN_ACCESS` + bounded reason |
+| Admin visibility | `GET /api/admin/jobs`, `GET /api/admin/jobs/{id}` | JWT + `ADMIN_ACCESS` + any of `jobs:read_all`, `jobs:access_others`, `operations:read_all` |
+| Safe admin cancel | `POST /api/admin/jobs/{id}/cancel` | JWT + `ADMIN_ACCESS` + (`jobs:write_all` or `operations:manage_all`) + bounded reason |
+| Proof-only reconcile | `POST /api/admin/jobs/{id}/reconcile` | JWT + `ADMIN_ACCESS` + (`jobs:write_all` or `operations:manage_all`) + bounded reason |
 
 Owner routes are JWT-only; API-token authentication is not accepted. Foreign and
 unknown job IDs both return `job_not_found` (404). Disabling submission does not
 disable reads, logs, or cancellation.
+
+Jobs mirror the server cross-owner model: `jobs:read_all` grants sanitized
+cross-owner visibility, `jobs:write_all` grants cross-owner cancel/reconcile and
+implies own-write plus read-all/read-own, and `jobs:access_others` also implies
+read-all/read-own. Admin defaults grant read-all and write-all to `admin` and
+`moderator`; `support` gets read-all plus own-write; `super_admin` retains `*`.
+The admin surface still requires `ADMIN_ACCESS`, so a custom role needs both the
+grants and dashboard access. Operations read/manage remain compatibility
+fallbacks for roles created before the Jobs grants existed.
 
 Submission is disabled by default. `BATCH_JOBS_ALLOWED_USER_IDS` is an optional
 comma-separated pilot cohort; when empty, the `jobs:write_own` grant defines
@@ -290,22 +300,36 @@ Rows include reason codes, bounded owner/environment/plan/volume display names,
 timestamps, reservation and active volume-guard flags, heartbeat age, and
 log/cleanup state. Command arguments, logs, environment values, image
 references, runtime identity, volume paths, fencing tokens, and executors are
-never returned. `can_reconcile` is true only for a `recovery_required` row when
-the caller also has `operations:manage_all`.
+never returned. `can_reconcile` is true only for a `recovery_required` row with
+manage authority. `can_cancel` is true only for a `queued`, `starting`, or
+`running` row with manage authority.
 
-The manage-gated row action opens a reason dialog and posts to
-`POST /api/admin/jobs/{id}/reconcile`. It renders the server result only after a
-confirmed response and never optimistically changes the row. Proof-insufficient
-or non-reconcilable responses leave the row and its protection unchanged. There
-is no admin cancel, retry, force, or manual reservation-release endpoint.
+Cancel is a control-plane action, not a force path. A queued job becomes
+`cancelled` immediately and releases its full credit hold. A starting or
+running job records `cancelling` plus a stop request; the runtime lane stops it
+and the reservation, volume guard, and any remaining hold stay in place until
+proof-backed termination. `recovery_required` returns 409 `job_not_cancellable`
+and can only be settled through reconcile. Already-terminal and already-
+cancelling rows return idempotent results. Every request requires a bounded
+reason, audits `jobs.cancel`/`jobs.cancel_applied` atomically with the
+transition, and sends one best-effort owner notification when the actor does
+not own the job. Audit unavailability returns 500 with no state change.
+
+Reconcile remains proof-only. The manage-gated row action opens a reason dialog
+and posts to `POST /api/admin/jobs/{id}/reconcile`. It renders the server result
+only after a confirmed response and never optimistically changes the row.
+Proof-insufficient or non-reconcilable responses leave the row and its
+protection unchanged. There is no retry, force, or manual reservation-release
+endpoint.
 
 ## Access and security checks
 
 - Owner authorization is enforced server-side on every route; foreign IDs are
   indistinguishable from missing IDs.
-- Admin visibility requires both the operations read grant and admin access,
-  plus a JWT session. Reconciliation additionally requires the operations manage
-  grant and a bounded audit reason; proof remains authoritative over the reason.
+- Admin visibility requires admin access, a cross-owner job read grant, and a
+  JWT session. Cancel and reconcile additionally require `jobs:write_all` (or
+  the compatibility `operations:manage_all` grant) and a bounded audit reason;
+  runtime proof remains authoritative over the reason for reconcile.
 - The batch container cannot reach the network, the Docker socket, or platform
   credentials; it runs non-root with no capabilities and a read-only rootfs.
 - Submission bounds argument count/bytes and runtime. The runtime bounds CPU,
@@ -324,10 +348,10 @@ is no admin cancel, retry, force, or manual reservation-release endpoint.
 
 Implemented and executed for the 2.4.0 batch-job change set (2026-11-28):
 
-- Backend full suite: 5,122 passed, 6 skipped, 0 failed.
-- Frontend: 247 unit tests passed; lint/format/type-check/build passed.
+- Backend full suite: 5,141 passed, 6 skipped, 0 failed.
+- Frontend: 251 unit tests passed; lint/format/type-check/build passed.
 - Targeted mocked browser suites passed: `jobs-ui` (14),
-  `guided-first-launch` (9), `admin-jobs-ui` (13), and the existing
+  `guided-first-launch` (9), `admin-jobs-ui` (16), and the existing
   queue/admin-setup regressions (10).
 - Real API→PostgreSQL/Redis/Celery/Docker `@jobs-runtime` scenario passed on a
   rebuilt disposable stack. Capacity queueing, exactly one hardened runtime
@@ -344,6 +368,11 @@ Implemented and executed for the 2.4.0 batch-job change set (2026-11-28):
   isolation, insufficient spendable balance, queued cancel/expiry, pre-start
   failure, terminal success/failure/timeout, `recovery_required` hold retention,
   and partial-balance unpaid settlement.
+- Jobs-specific cross-owner authorization and safe-cancel coverage passed:
+  read-all/access-others/manage grants, queued immediate cancel and hold
+  release, running stop-request retention, recovery-only refusal, terminal
+  idempotency, audit-failure rollback, owner notification, and sanitized
+  response/audit payloads.
 - Last-slot CPU/memory/disk and volume writer/mount/backup/restore/share/delete
   races passed, including retained `recovery_required` protection.
 - Storage capability and fail-closed submission/admission coverage passed. The

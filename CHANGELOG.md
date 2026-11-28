@@ -36,9 +36,14 @@ section.
   missing catalog.
 - Sanitized cross-owner batch-job visibility at `/admin/jobs` with state,
   reason, owner/environment/plan/volume labels, reservation and volume-guard
-  flags, heartbeat age, and log/cleanup state. Operators with
-  `operations:manage_all` get a proof-only reconcile action for
-  `recovery_required` rows; ambiguous evidence returns 409 and releases nothing.
+  flags, heartbeat age, and log/cleanup state. Jobs-specific `jobs:read_all`,
+  `jobs:write_all`, and `jobs:access_others` grants mirror the server
+  cross-owner model; legacy Operations grants remain a compatibility fallback.
+  Operators with manage authority get a reason-audited safe cancel for
+  queued/starting/running rows and a proof-only reconcile action for
+  `recovery_required` rows. Cancel releases a queued job's full hold but never
+  force-releases a started job's reservation, volume guard, or hold; ambiguous
+  reconcile evidence returns 409 and releases nothing.
 - Bounded physical purge of expired batch-job log payloads and one deduplicated
   owner completion notification per terminal result. Purge preserves the
   terminal result and metadata; notification failure never changes the result or

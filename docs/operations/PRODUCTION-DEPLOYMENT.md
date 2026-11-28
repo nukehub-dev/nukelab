@@ -282,8 +282,10 @@ existing jobs, history, logs and cancellation continue. Keep the worker and Beat
 running until no job is queued or active, and do not delete job rows,
 `job_writer` guards, or containers to drain the pilot. `recovery_required` jobs
 need operator inspection; proof-backed reconcile is available in `/admin/jobs`
-for operators with `operations:manage_all`, and ambiguous evidence releases
-nothing.
+for operators with `jobs:write_all` (or legacy `operations:manage_all`), and
+ambiguous evidence releases nothing. Safe cancellation is also available there
+for queued/starting/running jobs and keeps a started job's protection until
+verified termination.
 
 The full rollout, verification and drain procedure is in
 [OPERATIONS.md](OPERATIONS.md#115-batch-job-rollout-and-drain), and the lifecycle is

@@ -41,6 +41,7 @@ export interface AdminJobEntry {
   cleanup_state: string
   cleanup_attempts: number
   can_reconcile: boolean
+  can_cancel: boolean
 }
 
 /** Age-filtered state counts that stay stable under the active/history chip. */
@@ -97,4 +98,20 @@ export interface AdminJobReconcileResult {
   terminal_state: string | null
   proof_source: string | null
   reason_code: string | null
+}
+
+export type AdminJobCancelOutcome =
+  'cancelled' | 'cancellation_requested' | 'already_cancelling' | 'already_terminal'
+
+/**
+ * Sanitized control-plane cancellation outcome. A queued job becomes terminal
+ * immediately; a starting/running job records a stop request and keeps its
+ * reservation, volume guard, and credit hold until runtime proof.
+ */
+export interface AdminJobCancelResult {
+  job: AdminJobEntry
+  applied: boolean
+  already_terminal: boolean
+  outcome: AdminJobCancelOutcome
+  previous_state: string | null
 }

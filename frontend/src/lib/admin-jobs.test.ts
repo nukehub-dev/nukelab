@@ -4,12 +4,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from './api'
 import {
-  ADMIN_JOB_MANAGE_PERMISSIONS,
-  ADMIN_JOB_READ_PERMISSIONS,
+  ADMIN_JOB_MANAGE_ANY_PERMISSIONS,
+  ADMIN_JOB_READ_ANY_PERMISSIONS,
   ADMIN_JOB_REASON_MAX_LENGTH,
   ADMIN_JOB_REASON_MIN_LENGTH,
+  AdminJobCancelRequestError,
   AdminJobReconcileRequestError,
   adminJobAccess,
+  adminJobCancelErrorMessage,
+  adminJobCancelPath,
   adminJobCleanupStateLabel,
   adminJobCreatedLabel,
   adminJobEnvironmentLabel,
@@ -23,6 +26,7 @@ import {
   adminJobReconcileErrorInfo,
   adminJobReconcilePath,
   adminJobStatePresentation,
+  cancelAdminJob,
   adminJobVolumeLabel,
   adminJobsLoadErrorInfo,
   adminJobsPath,
@@ -35,6 +39,7 @@ import {
   normalizeAdminJobReason,
   reconcileAdminJob,
   safeAdminJobCode,
+  sanitizeAdminJobCancelResult,
   sanitizeAdminJobEntry,
   sanitizeAdminJobPage,
   sanitizeAdminJobReconcileResult,
@@ -68,6 +73,7 @@ function entry(overrides: Partial<AdminJobEntry> = {}): AdminJobEntry {
     cleanup_state: 'pending',
     cleanup_attempts: 0,
     can_reconcile: false,
+    can_cancel: false,
     ...overrides,
   }
 }
@@ -99,8 +105,33 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
+function expand(permissions: string[]): string[] {
+  const expanded = new Set(permissions)
+  if (expanded.has('jobs:read_all')) expanded.add('jobs:read_own')
+  if (expanded.has('jobs:access_others')) {
+    expanded.add('jobs:read_all')
+    expanded.add('jobs:read_own')
+  }
+  if (expanded.has('jobs:write_all')) {
+    expanded.add('jobs:write_own')
+    expanded.add('jobs:read_all')
+    expanded.add('jobs:read_own')
+  }
+  return [...expanded]
+}
+
 function granted(permissions: string[]) {
-  return (required: string[]) => required.every((permission) => permissions.includes(permission))
+  const available = expand(permissions)
+  return (required: string[]) => required.every((permission) => available.includes(permission))
+}
+
+function anyGranted(permissions: string[]) {
+  const available = expand(permissions)
+  return (required: string[]) => required.some((permission) => available.includes(permission))
+}
+
+function access(permissions: string[]) {
+  return adminJobAccess(granted(permissions), anyGranted(permissions))
 }
 
 beforeEach(() => {
@@ -116,41 +147,43 @@ afterEach(() => {
 })
 
 describe('admin jobs access', () => {
-  it('requires both operations read and admin access to read', () => {
-    expect([...ADMIN_JOB_READ_PERMISSIONS]).toEqual(['operations:read_all', 'admin:access'])
-    expect(adminJobAccess(granted([...ADMIN_JOB_READ_PERMISSIONS]))).toEqual({
+  it('requires admin access plus one cross-owner read grant', () => {
+    expect([...ADMIN_JOB_READ_ANY_PERMISSIONS]).toEqual([
+      'jobs:read_all',
+      'jobs:access_others',
+      'operations:read_all',
+    ])
+    expect(access(['admin:access', 'jobs:read_all'])).toEqual({
       canRead: true,
       canManage: false,
     })
-    expect(adminJobAccess(granted(['operations:read_all']))).toEqual({
-      canRead: false,
+    expect(access(['admin:access', 'jobs:access_others'])).toEqual({
+      canRead: true,
       canManage: false,
     })
-    expect(adminJobAccess(granted(['admin:access']))).toEqual({
-      canRead: false,
+    expect(access(['admin:access', 'operations:read_all'])).toEqual({
+      canRead: true,
       canManage: false,
     })
-    expect(adminJobAccess(granted([]))).toEqual({ canRead: false, canManage: false })
+    expect(access(['jobs:read_all'])).toEqual({ canRead: false, canManage: false })
+    expect(access(['admin:access'])).toEqual({ canRead: false, canManage: false })
+    expect(access([])).toEqual({ canRead: false, canManage: false })
   })
 
-  it('requires operations manage plus the read permissions for reconcile', () => {
-    expect([...ADMIN_JOB_MANAGE_PERMISSIONS]).toEqual([
+  it('requires admin access plus one cross-owner manage grant', () => {
+    expect([...ADMIN_JOB_MANAGE_ANY_PERMISSIONS]).toEqual([
+      'jobs:write_all',
       'operations:manage_all',
-      'operations:read_all',
-      'admin:access',
     ])
-    expect(adminJobAccess(granted([...ADMIN_JOB_MANAGE_PERMISSIONS]))).toEqual({
+    expect(access(['admin:access', 'jobs:write_all'])).toEqual({
       canRead: true,
       canManage: true,
     })
-    expect(adminJobAccess(granted(['operations:manage_all', 'admin:access']))).toEqual({
+    expect(access(['admin:access', 'operations:manage_all'])).toEqual({
       canRead: false,
-      canManage: false,
+      canManage: true,
     })
-    expect(adminJobAccess(granted(['operations:manage_all', 'operations:read_all']))).toEqual({
-      canRead: false,
-      canManage: false,
-    })
+    expect(access(['jobs:write_all'])).toEqual({ canRead: false, canManage: false })
   })
 })
 
@@ -439,6 +472,109 @@ describe('admin jobs reconcile', () => {
     expect(result.reason_code).toBeNull()
     expect(adminJobProofSourceLabel(result.proof_source)).toBe('Executor absent')
     expect(adminJobProofSourceLabel('/private/path')).toBe('Not reported')
+  })
+})
+
+describe('admin jobs cancel', () => {
+  function cancelPayload(overrides: Record<string, unknown> = {}) {
+    return {
+      job: entry({ state: 'cancelling', can_cancel: false }),
+      applied: true,
+      already_terminal: false,
+      outcome: 'cancellation_requested',
+      previous_state: 'running',
+      ...overrides,
+    }
+  }
+
+  it('posts the bounded reason and sanitizes the cancellation result', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(
+        cancelPayload({
+          job: {
+            ...entry({ state: 'cancelling', can_cancel: false }),
+            argv: ['python', '/work/secret.py'],
+            logs: { text: 'log-secret output' },
+          },
+          raw_runtime: '/var/lib/private/runtime',
+        })
+      )
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const reason = '  operator requested a safe stop  '
+    const result = await cancelAdminJob(jobId, reason)
+
+    expect(result.outcome).toBe('cancellation_requested')
+    expect(result.applied).toBe(true)
+    expect(result.already_terminal).toBe(false)
+    expect(result.previous_state).toBe('running')
+    expect(result.job.state).toBe('cancelling')
+    expect(result.job).not.toHaveProperty('argv')
+    expect(result.job).not.toHaveProperty('logs')
+    expect(result).not.toHaveProperty('raw_runtime')
+    expect(adminJobCancelPath(jobId)).toBe(`/admin/jobs/${jobId}/cancel`)
+    expect(fetchMock.mock.calls[0][0]).toBe(`/api/admin/jobs/${jobId}/cancel`)
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ reason: 'operator requested a safe stop' }),
+    })
+  })
+
+  it('maps recovery-only refusal and not-found to bounded messages', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ detail: { code: 'job_not_cancellable' } }, 409))
+    )
+    const notCancellable = await cancelAdminJob(jobId, 'operator requested a safe stop').catch(
+      (reason: unknown) => reason
+    )
+    expect(notCancellable).toBeInstanceOf(AdminJobCancelRequestError)
+    expect(notCancellable).toMatchObject({ status: 409, code: 'job_not_cancellable' })
+    expect((notCancellable as Error).message).toContain(
+      'no reservation, volume guard, or credit hold'
+    )
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ detail: { code: 'job_not_found' } }, 404))
+    )
+    const notFound = await cancelAdminJob(jobId, 'operator requested a safe stop').catch(
+      (reason: unknown) => reason
+    )
+    expect(notFound).toBeInstanceOf(AdminJobCancelRequestError)
+    expect((notFound as Error).message).toBe(
+      'The job no longer exists. Refresh the list and try again.'
+    )
+  })
+
+  it('preserves the server action flag and rejects unknown outcomes', () => {
+    expect(sanitizeAdminJobEntry(entry({ can_cancel: true })).can_cancel).toBe(true)
+    expect(sanitizeAdminJobEntry(entry({ id: 'not-a-uuid', can_cancel: true })).can_cancel).toBe(
+      false
+    )
+    expect(() =>
+      sanitizeAdminJobCancelResult({
+        job: entry(),
+        applied: false,
+        already_terminal: false,
+        outcome: 'applied',
+        previous_state: null,
+      })
+    ).toThrow(AdminJobCancelRequestError)
+    expect(adminJobCancelErrorMessage('audit_unavailable', 500)).toContain(
+      'no cancellation was applied'
+    )
+  })
+
+  it('rejects an invalid reason before making a request', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await cancelAdminJob(jobId, 'short').catch((reason: unknown) => reason)
+
+    expect(error).toMatchObject({ status: 422, code: 'invalid_reason' })
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 

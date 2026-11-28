@@ -76,10 +76,10 @@ users do not have permission override fields.
 | Role | Typical access |
 |---|---|
 | `super_admin` | Full system access (`*`), including cross-user server access |
-| `admin` | Full user, server, environment, plan, volume, workspace and credit management; cross-user NukeIDE access still requires `servers:access_others` |
-| `moderator` | User read/create/update, full server/catalog/quota management, audit read; cannot delete users, impersonate, or mint cross-user NukeIDE tokens |
-| `support` | User read, server read-all and own-server writes, credit grants, volume/workspace read-all and own writes; no cross-user server access by default |
-| `user` | Own servers, volumes and workspaces; read public environments/plans; own credits/analytics |
+| `admin` | Full user, server, environment, plan, volume, workspace and credit management, plus cross-owner batch-job read/cancel/reconcile; cross-user NukeIDE access still requires `servers:access_others` |
+| `moderator` | User read/create/update, full server/catalog/quota management, cross-owner batch-job grants, audit read; the `/admin/jobs` console additionally requires `ADMIN_ACCESS`; cannot delete users, impersonate, or mint cross-user NukeIDE tokens |
+| `support` | User read, server read-all and own-server writes, cross-owner batch-job read plus own-job writes (`/admin/jobs` additionally requires `ADMIN_ACCESS`), credit grants, volume/workspace read-all and own writes; no cross-user server access by default |
+| `user` | Own servers, volumes, workspaces and jobs; read public environments/plans; own credits/analytics |
 | `guest` | Own server/volume read only; no automatic expiry job |
 
 ## Permission examples
@@ -94,6 +94,11 @@ servers:write_own       - Start/stop/edit/delete own servers
 servers:read_all        - View all servers
 servers:write_all       - Manage all server records
 servers:access_others   - Mint a NukeIDE access token for another user's server
+jobs:read_own           - View and inspect own batch jobs
+jobs:write_own          - Submit and cancel own batch jobs
+jobs:read_all           - View sanitized batch jobs across owners
+jobs:write_all          - Cancel and reconcile batch jobs across owners
+jobs:access_others      - Cross-owner batch-job access (implies read-all)
 environment:create      - Create environment templates
 environment:update      - Verify or revoke environment revisions
 plan:update             - Edit plans, subject to the last-usable-plan guard

@@ -556,10 +556,11 @@ after the normal pinned upgrade and schema migration complete:
    ```
 
    An empty cohort falls back to the `jobs:write_own` grant. Grant
-   `jobs:read_own` to anyone who should keep history access. Keep the
-   `BATCH_JOBS_*` runtime, interval and limit values consistent across
-   `backend`, `celery-worker` and `celery-beat`; Beat schedules using the
-   interval settings.
+   `jobs:read_own` to anyone who should keep history access. Cross-owner
+   operators need `ADMIN_ACCESS` plus `jobs:read_all`; add `jobs:write_all`
+   for safe cancel and proof-backed reconcile. Keep the `BATCH_JOBS_*` runtime,
+   interval and limit values consistent across `backend`, `celery-worker` and
+   `celery-beat`; Beat schedules using the interval settings.
    Paid plans additionally require `BATCH_JOBS_ALLOW_PAID_PLANS=true` and
    `CREDITS_ENABLED=true`. Access follows the plan’s visibility/role rules;
    restrict the paid plan to the intended pilot cohort. A paid submission holds
@@ -583,18 +584,23 @@ continue through dispatch, monitoring, cancellation and cleanup, and history
 remains readable. Keep `celery-worker` and `celery-beat` running until no job is
 `queued`, `starting`, `running`, or `cancelling`; otherwise deadlines, exit
 observation and log capture wait for the next worker tick. Queued jobs can be
-cancelled by their owners or left to expire.
+cancelled by their owners (or by an operator with `jobs:write_all` and a
+recorded reason) or left to expire.
 
 Do not delete `batch_jobs`, `batch_job_logs`, `job_writer` volume-operation rows,
 or job containers to "clean up". A `recovery_required` job retains its
 reservation and volume guard; inspect it in `/jobs` or `/admin/jobs` and follow
 the [uncertain-work procedure](#113-investigating-uncertain-work). An operator
-with `operations:manage_all` and `ADMIN_ACCESS` can open the job in `/admin/jobs`
-and choose **Reconcile**. The action requires a bounded reason and reruns the
-read-only classifier; it applies only an exited runtime with recorded identity
-and exit evidence, or an absent runtime behind a recorded checkpoint with a
-stale executor claim. A 409 `proof_insufficient` means nothing changed and the
-guard remains. There is no force or manual release path; never clear
+with `jobs:write_all` (or the legacy `operations:manage_all`) and `ADMIN_ACCESS`
+can open the job in `/admin/jobs` and choose **Reconcile**. The action requires a
+bounded reason and reruns the read-only classifier; it applies only an exited
+runtime with recorded identity and exit evidence, or an absent runtime behind a
+recorded checkpoint with a stale executor claim. A 409 `proof_insufficient`
+means nothing changed and the guard remains. A queued, starting, or running job
+can instead be cancelled with a recorded reason: queued work becomes terminal
+and releases its full hold, while started work keeps its reservation, volume
+guard, and hold until verified termination. `recovery_required` is
+reconcile-only. There is no force or manual release path; never clear
 `reservation_active` or the guard by hand.
 
 Expired job logs are hidden at read time and then removed by the bounded

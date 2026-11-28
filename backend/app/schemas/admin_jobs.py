@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 # SPDX-License-Identifier: BSD-2-Clause
 
-"""Sanitized admin batch-job views and proof-only reconciliation requests.
+"""Sanitized admin batch-job views and bounded operator action requests.
 
 Response models carry only bounded job metadata. Command arguments, log text,
 environment values, secret references, image references, volume paths, runtime
@@ -17,6 +17,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 AdminJobListState = Literal["active", "history", "all"]
 AdminJobReconcileOutcome = Literal["applied", "already_terminal", "no_change"]
+AdminJobCancelOutcome = Literal[
+    "cancelled",
+    "cancellation_requested",
+    "already_cancelling",
+    "already_terminal",
+]
 
 REASON_MIN_LENGTH = 8
 REASON_MAX_LENGTH = 500
@@ -46,6 +52,8 @@ class AdminJobEntry(BaseModel):
     cleanup_attempts: int = 0
     # True only for an active recovery_required row when the caller may reconcile.
     can_reconcile: bool = False
+    # True only for queued/starting/running rows when the caller may cancel.
+    can_cancel: bool = False
 
 
 class AdminJobPagination(BaseModel):
@@ -109,3 +117,26 @@ class AdminJobReconcileResult(BaseModel):
     terminal_state: str | None = None
     proof_source: str | None = None
     reason_code: str | None = None
+
+
+class AdminJobCancelRequest(AdminJobReconcileRequest):
+    """Cancel input: a bounded operator reason only.
+
+    Inherits ``extra="forbid"``, so force/release/override fields are rejected
+    with 422 before the handler runs.
+    """
+
+
+class AdminJobCancelResult(BaseModel):
+    """Control-plane cancellation outcome with the current sanitized job row.
+
+    ``applied`` is true only when a state transition occurred. A running job
+    reports ``cancellation_requested`` and keeps its reservation and volume
+    guard until runtime proof confirms termination.
+    """
+
+    job: AdminJobEntry
+    applied: bool
+    already_terminal: bool
+    outcome: AdminJobCancelOutcome
+    previous_state: str | None = None

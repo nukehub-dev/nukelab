@@ -64,6 +64,8 @@ async def test_guest_is_denied_job_permissions(client, db_session):
 @pytest.mark.asyncio
 async def test_capabilities_contract(client, user_token, monkeypatch):
     monkeypatch.setattr(settings, "xfs_quota_enabled", False)
+    monkeypatch.setattr(settings, "batch_jobs_submission_enabled", False)
+    monkeypatch.setattr(settings, "batch_jobs_allow_paid_plans", False)
     response = await client.get("/api/jobs/capabilities", headers=auth_headers(user_token))
     assert response.status_code == 200
     body = response.json()

@@ -20,6 +20,7 @@ from app.models.activity_log import ActivityLog
 from app.models.batch_job import BatchJob
 from app.models.environment_revision import EnvironmentRevision
 from app.models.environment_template import EnvironmentTemplate
+from app.models.notification import Notification
 from app.models.server_plan import ServerPlan
 from app.models.user import User
 from app.models.volume import Volume
@@ -53,6 +54,16 @@ async def _activity(db, job_id):
             select(ActivityLog)
             .where(ActivityLog.target_id == job_id)
             .order_by(ActivityLog.created_at, ActivityLog.id)
+        )
+    ).all()
+
+
+async def _notifications(db, user_id):
+    return (
+        await db.scalars(
+            select(Notification)
+            .where(Notification.user_id == user_id)
+            .order_by(Notification.created_at, Notification.id)
         )
     ).all()
 
@@ -457,6 +468,7 @@ async def test_admin_jobs_sanitizes_labels_reasons_and_display_names(
         "cleanup_state",
         "cleanup_attempts",
         "can_reconcile",
+        "can_cancel",
     }
     assert item["owner_username"] == owner.username.replace(" ", "").replace("\x01", "").replace(
         "\t", ""
@@ -472,6 +484,7 @@ async def test_admin_jobs_sanitizes_labels_reasons_and_display_names(
     assert item["cleanup_state"] == "unknown"
     assert item["cleanup_attempts"] == 3
     assert item["can_reconcile"] is False
+    assert item["can_cancel"] is True
 
     text = json.dumps(item)
     for forbidden in (
@@ -598,6 +611,286 @@ async def test_admin_jobs_reconcile_requires_manage_permission(
     assert admin_detail.json()["can_reconcile"] is True
 
 
+async def test_jobs_specific_grants_authorize_admin_surface(
+    client, support_token, db_session, test_user
+):
+    _, revision, plan = await _targets(db_session)
+    running = _job(
+        test_user,
+        revision,
+        plan,
+        await _volume(db_session, test_user),
+        state="running",
+        reason_code=None,
+        reservation_active=True,
+        heartbeat_at=utc_now(),
+    )
+    recovery, _, _ = await _recovery_guarded(
+        db_session,
+        test_user,
+        revision,
+        plan,
+        heartbeat_at=utc_now(),
+    )
+    db_session.add(running)
+    await db_session.commit()
+    body = {"reason": "jobs-specific permission probe"}
+    headers = auth(support_token)
+
+    ROLE_PERMISSIONS["support"] = [Permission.ADMIN_ACCESS, Permission.JOBS_READ_ALL]
+    _rebuild_expansion_cache()
+    listing = await client.get("/api/admin/jobs", headers=headers)
+    assert listing.status_code == 200
+    detail = await client.get(f"/api/admin/jobs/{running.id}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["can_cancel"] is False
+    assert (
+        await client.post(f"/api/admin/jobs/{running.id}/cancel", headers=headers, json=body)
+    ).status_code == 403
+
+    ROLE_PERMISSIONS["support"] = [Permission.ADMIN_ACCESS, Permission.JOBS_ACCESS_OTHERS]
+    _rebuild_expansion_cache()
+    assert (await client.get("/api/admin/jobs", headers=headers)).status_code == 200
+    assert (
+        await client.post(f"/api/admin/jobs/{running.id}/cancel", headers=headers, json=body)
+    ).status_code == 403
+
+    ROLE_PERMISSIONS["support"] = [Permission.ADMIN_ACCESS, Permission.JOBS_WRITE_ALL]
+    _rebuild_expansion_cache()
+    detail = await client.get(f"/api/admin/jobs/{running.id}", headers=headers)
+    assert detail.status_code == 200
+    assert detail.json()["can_cancel"] is True
+    assert detail.json()["can_reconcile"] is False
+    recovery_detail = await client.get(f"/api/admin/jobs/{recovery.id}", headers=headers)
+    assert recovery_detail.json()["can_reconcile"] is True
+    cancelled = await client.post(
+        f"/api/admin/jobs/{running.id}/cancel", headers=headers, json=body
+    )
+    assert cancelled.status_code == 200
+    assert cancelled.json()["outcome"] == "cancellation_requested"
+    assert cancelled.json()["job"]["state"] == "cancelling"
+
+
+async def test_admin_cancel_queued_job_is_terminal_and_notifies_owner(
+    client, admin_token, admin_user, db_session
+):
+    _, revision, plan = await _targets(db_session)
+    owner = await _owner(db_session)
+    job = _job(owner, revision, plan, await _volume(db_session, owner), state="queued")
+    db_session.add(job)
+    await db_session.commit()
+    reason = "owner asked an operator to cancel the pilot"
+
+    response = await client.post(
+        f"/api/admin/jobs/{job.id}/cancel",
+        headers=auth(admin_token),
+        json={"reason": reason},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["applied"] is True
+    assert data["already_terminal"] is False
+    assert data["outcome"] == "cancelled"
+    assert data["previous_state"] == "queued"
+    assert data["job"]["state"] == "cancelled"
+    assert data["job"]["can_cancel"] is False
+    assert data["job"]["reservation_active"] is False
+
+    row = await _load_job(db_session, job.id)
+    assert row.state == "cancelled"
+    assert row.reservation_active is False
+    assert row.finished_at is not None
+
+    logs = await _activity(db_session, job.id)
+    assert [log.action for log in logs] == ["jobs.cancel_applied"]
+    assert logs[0].actor_id == admin_user.id
+    assert logs[0].details == {
+        "reason": reason,
+        "outcome": "cancelled",
+        "applied": True,
+        "previous_state": "queued",
+        "new_state": "cancelled",
+    }
+
+    notifications = await _notifications(db_session, owner.id)
+    assert len(notifications) == 1
+    assert notifications[0].title == "Batch job cancelled"
+    assert notifications[0].action_url == f"/jobs/{job.id}"
+    assert reason in notifications[0].message
+    assert notifications[0].extra_data["event_key"] == "batch_job_cancelled"
+
+
+async def test_admin_cancel_running_job_requests_stop_and_keeps_protection(
+    client, admin_token, db_session
+):
+    _, revision, plan = await _targets(db_session)
+    owner = await _owner(db_session)
+    volume = await _volume(db_session, owner)
+    job = _job(
+        owner,
+        revision,
+        plan,
+        volume,
+        state="running",
+        reason_code=None,
+        reservation_active=True,
+        heartbeat_at=utc_now(),
+    )
+    job.volume_operation_id = job.id
+    db_session.add(job)
+    await db_session.flush()
+    guard = await _guarded(db_session, job, volume, owner)
+    job.volume_fencing_token = guard.fencing_token
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/admin/jobs/{job.id}/cancel",
+        headers=auth(admin_token),
+        json={"reason": "operator must stop the degraded pilot run"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["applied"] is True
+    assert data["already_terminal"] is False
+    assert data["outcome"] == "cancellation_requested"
+    assert data["previous_state"] == "running"
+    assert data["job"]["state"] == "cancelling"
+    assert data["job"]["reservation_active"] is True
+    assert data["job"]["guard_active"] is True
+
+    row = await _load_job(db_session, job.id)
+    assert row.state == "cancelling"
+    assert row.stop_requested_at is not None
+    assert row.reservation_active is True
+    assert (await _load_guard(db_session, job.id)).state == "reserved"
+
+    logs = await _activity(db_session, job.id)
+    assert [log.action for log in logs] == ["jobs.cancel_applied"]
+    assert logs[0].details["new_state"] == "cancelling"
+    assert logs[0].details["applied"] is True
+
+    notifications = await _notifications(db_session, owner.id)
+    assert len(notifications) == 1
+    assert notifications[0].title == "Batch job cancellation requested"
+
+
+async def test_admin_cancel_recovery_required_is_refused_without_release(
+    client, admin_token, db_session, test_user
+):
+    _, revision, plan = await _targets(db_session)
+    job, _, guard = await _recovery_guarded(
+        db_session,
+        test_user,
+        revision,
+        plan,
+        heartbeat_at=utc_now(),
+    )
+
+    response = await client.post(
+        f"/api/admin/jobs/{job.id}/cancel",
+        headers=auth(admin_token),
+        json={"reason": "operator cannot force a recovery-only row"},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == {"code": "job_not_cancellable"}
+
+    row = await _load_job(db_session, job.id)
+    assert row.state == "recovery_required"
+    assert row.reservation_active is True
+    assert (await _load_guard(db_session, job.id)).state == "reserved"
+    assert await _notifications(db_session, test_user.id) == []
+
+    logs = await _activity(db_session, job.id)
+    assert [log.action for log in logs] == ["jobs.cancel"]
+    assert logs[0].details["outcome"] == "not_cancellable"
+    assert logs[0].details["applied"] is False
+    assert logs[0].details["previous_state"] == "recovery_required"
+    assert logs[0].details["new_state"] == "recovery_required"
+
+
+async def test_admin_cancel_terminal_and_unknown_rows_are_idempotent(
+    client, admin_token, db_session, test_user
+):
+    _, revision, plan = await _targets(db_session)
+    succeeded = _job(
+        test_user,
+        revision,
+        plan,
+        await _volume(db_session, test_user),
+        state="succeeded",
+        reason_code=None,
+        finished_at=utc_now(),
+    )
+    db_session.add(succeeded)
+    await db_session.commit()
+
+    terminal = await client.post(
+        f"/api/admin/jobs/{succeeded.id}/cancel",
+        headers=auth(admin_token),
+        json={"reason": "confirm terminal cancellation is a no-op"},
+    )
+    assert terminal.status_code == 200
+    data = terminal.json()
+    assert data["applied"] is False
+    assert data["already_terminal"] is True
+    assert data["outcome"] == "already_terminal"
+    assert data["previous_state"] == "succeeded"
+    assert data["job"]["state"] == "succeeded"
+
+    target = uuid.uuid4()
+    missing = await client.post(
+        f"/api/admin/jobs/{target}/cancel",
+        headers=auth(admin_token),
+        json={"reason": "operator probes an unknown job"},
+    )
+    assert missing.status_code == 404
+    assert missing.json()["detail"] == {"code": "job_not_found"}
+
+    terminal_logs = await _activity(db_session, succeeded.id)
+    assert [log.action for log in terminal_logs] == ["jobs.cancel"]
+    assert terminal_logs[0].details["outcome"] == "already_terminal"
+    missing_logs = await _activity(db_session, target)
+    assert [log.action for log in missing_logs] == ["jobs.cancel"]
+    assert missing_logs[0].details["outcome"] == "job_not_found"
+
+
+async def test_admin_cancel_audit_failure_blocks_mutation(
+    client, admin_token, db_session, test_user, monkeypatch
+):
+    _, revision, plan = await _targets(db_session)
+    job = _job(
+        test_user,
+        revision,
+        plan,
+        await _volume(db_session, test_user),
+        state="queued",
+        reservation_active=True,
+    )
+    db_session.add(job)
+    await db_session.commit()
+    job_id = job.id
+    owner_id = test_user.id
+
+    def _unavailable(*args, **kwargs):
+        raise RuntimeError("activity store unavailable")
+
+    monkeypatch.setattr(ActivityService, "record", _unavailable)
+
+    response = await client.post(
+        f"/api/admin/jobs/{job_id}/cancel",
+        headers=auth(admin_token),
+        json={"reason": "operator tries to cancel during an audit outage"},
+    )
+    assert response.status_code == 500
+    assert response.json()["detail"] == {"code": "audit_unavailable"}
+
+    row = await _load_job(db_session, job_id)
+    assert row.state == "queued"
+    assert row.reservation_active is True
+    assert row.finished_at is None
+    assert await _notifications(db_session, owner_id) == []
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -621,7 +914,31 @@ async def test_admin_jobs_reconcile_rejects_invalid_bodies(client, admin_token, 
     assert response.status_code == 422
 
 
-async def test_admin_jobs_exposes_only_proof_reconcile_mutation(client, admin_token):
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"reason": ""},
+        {"reason": "short"},
+        {"reason": "   short   "},
+        {"reason": "x" * 501},
+        {"reason": "valid reason", "force": True},
+        {"reason": "valid reason", "release": True},
+        {"reason": "valid reason", "unknown": "field"},
+        {"reason": "valid\nreason"},
+        {"reason": "\x7f" * 8},
+    ],
+)
+async def test_admin_jobs_cancel_rejects_invalid_bodies(client, admin_token, body):
+    response = await client.post(
+        f"/api/admin/jobs/{uuid.uuid4()}/cancel",
+        headers=auth(admin_token),
+        json=body,
+    )
+    assert response.status_code == 422
+
+
+async def test_admin_jobs_exposes_only_proof_backed_mutations(client, admin_token):
     headers = auth(admin_token)
     target = uuid.uuid4()
     assert (await client.post("/api/admin/jobs", headers=headers, json={})).status_code == 405
@@ -631,7 +948,7 @@ async def test_admin_jobs_exposes_only_proof_reconcile_mutation(client, admin_to
     assert (await client.delete(f"/api/admin/jobs/{target}", headers=headers)).status_code == 405
     assert (
         await client.post(f"/api/admin/jobs/{target}/cancel", headers=headers, json={})
-    ).status_code == 404
+    ).status_code == 422
     assert (
         await client.post(f"/api/admin/jobs/{target}/reconcile", headers=headers, json={})
     ).status_code == 422
@@ -640,9 +957,11 @@ async def test_admin_jobs_exposes_only_proof_reconcile_mutation(client, admin_to
     assert set(job_routes) == {
         "/admin/jobs",
         "/admin/jobs/{job_id}",
+        "/admin/jobs/{job_id}/cancel",
         "/admin/jobs/{job_id}/reconcile",
     }
     assert job_routes["/admin/jobs/{job_id}/reconcile"].methods == {"POST"}
+    assert job_routes["/admin/jobs/{job_id}/cancel"].methods == {"POST"}
     assert job_routes["/admin/jobs/{job_id}"].methods <= {"GET", "HEAD"}
 
 

@@ -1,19 +1,21 @@
 # SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 # SPDX-License-Identifier: BSD-2-Clause
 
-"""Sanitized cross-owner batch job visibility and proof-only reconciliation.
+"""Sanitized cross-owner batch job visibility and operator actions.
 
 Rows are deliberately sanitized: command arguments, retained logs, environment
 values, image references, runtime identity, volume paths, fencing tokens and
-raw daemon payloads stay in the owner surface. Reconciliation is proof-only:
-the read-only classifier must support one terminal transition before the
-existing fenced finalizer runs. There is no admin cancel, retry, force or manual
-reservation-release path.
+raw daemon payloads stay in the owner surface. Reconcile is proof-only: the
+read-only classifier must support one terminal transition before the existing
+fenced finalizer runs. Cancel records a control-plane stop request and never
+releases a reservation, volume guard, or credit hold for a started job. There is
+no admin retry, force, or manual reservation-release path.
 """
 
 from __future__ import annotations
 
 import logging
+from contextlib import AsyncExitStack
 from datetime import timedelta
 from typing import Annotated
 from uuid import UUID
@@ -26,20 +28,21 @@ from app.api.admin_operations import (
     _heartbeat_age,
     _safe_code,
     _safe_display_name,
-    require_operations_manage,
-    require_operations_read,
 )
+from app.api.auth import require_jwt_auth
 from app.container.driver import ContainerDriver
 from app.container.factory import get_driver
 from app.core.permissions import Permission
-from app.core.security import has_all_permissions
+from app.core.security import has_any_permission, has_permission
 from app.core.time_utils import utc_now
 from app.db.session import get_db
-from app.dependencies import no_store_cache
+from app.dependencies import PermissionChecker, get_current_active_user, no_store_cache
 from app.models.batch_job import ACTIVE_JOB_STATES, TERMINAL_JOB_STATES, BatchJob
 from app.models.user import User
 from app.models.volume_operation import VolumeOperation
 from app.schemas.admin_jobs import (
+    AdminJobCancelRequest,
+    AdminJobCancelResult,
     AdminJobEntry,
     AdminJobListState,
     AdminJobPage,
@@ -54,6 +57,15 @@ from app.services.batch_job_reconciliation import (
     BatchJobReconcileDecision,
     BatchJobReconciliationService,
 )
+from app.services.batch_job_service import (
+    CANCEL_ALREADY_TERMINAL,
+    CANCEL_CANCELLED,
+    CANCEL_NOT_CANCELLABLE,
+    CANCEL_NOT_FOUND,
+    CANCEL_REQUESTED,
+    BatchJobService,
+)
+from app.services.notification_service import NotificationService
 from app.services.volume_operation_service import ACTIVE_STATES as ACTIVE_VOLUME_STATES
 
 logger = logging.getLogger(__name__)
@@ -67,7 +79,40 @@ _MAX_CLEANUP_ATTEMPTS = 2**31 - 1
 _ACTIVE_STATES = frozenset(ACTIVE_JOB_STATES)
 _HISTORY_STATES = frozenset(TERMINAL_JOB_STATES)
 _JOB_STATES = (*ACTIVE_JOB_STATES, *TERMINAL_JOB_STATES)
-_MANAGE_PERMISSIONS = (Permission.ADMIN_ACCESS, Permission.OPERATIONS_MANAGE_ALL)
+_CANCELLABLE_STATES = frozenset({"queued", "starting", "running"})
+# Jobs-specific grants are the primary model; the operations grants remain a
+# compatibility fallback for roles created before jobs:read_all/write_all.
+_READ_ANY = (
+    Permission.JOBS_READ_ALL,
+    Permission.JOBS_ACCESS_OTHERS,
+    Permission.OPERATIONS_READ_ALL,
+)
+_MANAGE_ANY = (
+    Permission.JOBS_WRITE_ALL,
+    Permission.OPERATIONS_MANAGE_ALL,
+)
+
+
+async def require_admin_job_read(
+    current_user: User = Depends(get_current_active_user),
+    _jwt=Depends(require_jwt_auth()),
+) -> User:
+    """Require admin access, a cross-owner job read grant, and a JWT session."""
+    checker = PermissionChecker(current_user)
+    checker.require(Permission.ADMIN_ACCESS)
+    checker.require_any(list(_READ_ANY))
+    return current_user
+
+
+async def require_admin_job_manage(
+    current_user: User = Depends(get_current_active_user),
+    _jwt=Depends(require_jwt_auth()),
+) -> User:
+    """Require admin access, a cross-owner job manage grant, and a JWT session."""
+    checker = PermissionChecker(current_user)
+    checker.require(Permission.ADMIN_ACCESS)
+    checker.require_any(list(_MANAGE_ANY))
+    return current_user
 
 
 def _not_found() -> HTTPException:
@@ -178,6 +223,7 @@ def _entry(
         cleanup_state=_safe_code(job.cleanup_state, fallback="unknown") or "unknown",
         cleanup_attempts=min(max(int(job.cleanup_attempts or 0), 0), _MAX_CLEANUP_ATTEMPTS),
         can_reconcile=can_manage and state == "recovery_required",
+        can_cancel=can_manage and state in _CANCELLABLE_STATES,
     )
 
 
@@ -194,7 +240,9 @@ async def _entry_for_job(db: AsyncSession, job: BatchJob, *, can_manage: bool) -
 
 
 def _can_manage(current_user: User) -> bool:
-    return has_all_permissions(current_user, list(_MANAGE_PERMISSIONS))
+    return has_permission(current_user, Permission.ADMIN_ACCESS) and has_any_permission(
+        current_user, list(_MANAGE_ANY)
+    )
 
 
 async def _summary(db: AsyncSession, *, cutoff) -> AdminJobSummary:
@@ -222,7 +270,7 @@ async def _summary(db: AsyncSession, *, cutoff) -> AdminJobSummary:
 async def list_jobs(
     response: Response,
     db: Database,
-    current_user: User = Depends(require_operations_read),
+    current_user: User = Depends(require_admin_job_read),
     state: AdminJobListState = Query("all"),
     age_min_seconds: int | None = Query(None, ge=0, le=_MAX_AGE_SECONDS),
     limit: int = Query(50, ge=1, le=100),
@@ -276,7 +324,7 @@ async def get_job(
     job_id: UUID,
     response: Response,
     db: Database,
-    current_user: User = Depends(require_operations_read),
+    current_user: User = Depends(require_admin_job_read),
 ):
     """Return one sanitized job row.
 
@@ -347,6 +395,72 @@ async def _record_audit(
         ) from None
 
 
+def _record_cancel_audit(
+    db: AsyncSession,
+    *,
+    actor_id: str,
+    job_id: UUID,
+    reason: str,
+    outcome: str,
+    applied: bool = False,
+    previous_state: str | None = None,
+    current_state: str | None = None,
+) -> None:
+    """Stage bounded cancel audit details; the caller commits them atomically."""
+    ActivityService(db).record(
+        action="jobs.cancel_applied" if applied else "jobs.cancel",
+        target_type="batch_job",
+        target_id=str(job_id),
+        actor_id=actor_id,
+        details={
+            "reason": reason,
+            "outcome": outcome,
+            "applied": applied,
+            "previous_state": previous_state,
+            "new_state": current_state,
+        },
+    )
+
+
+async def _notify_cancellation(
+    db: AsyncSession,
+    *,
+    job: BatchJob,
+    actor: User,
+    reason: str,
+    outcome: str,
+) -> None:
+    """Best-effort owner notice after a committed cancellation transition."""
+    name = _safe_display_name(job.name)
+    subject = f"batch job '{name}' ({job.id})" if name else f"batch job ({job.id})"
+    if outcome == CANCEL_REQUESTED:
+        title = "Batch job cancellation requested"
+        action = "requested cancellation of"
+    else:
+        title = "Batch job cancelled"
+        action = "cancelled"
+    try:
+        await NotificationService(db).create(
+            user_id=job.user_id,
+            title=title,
+            message=f"{actor.username or 'An operator'} {action} your {subject}. Reason: {reason}",
+            type="job",
+            severity="warning",
+            action_url=f"/jobs/{job.id}",
+            extra_data={"job_id": str(job.id), "outcome": outcome},
+            event_key="batch_job_cancelled",
+        )
+    except Exception as exc:
+        logger.warning(
+            "Batch job cancellation notification deferred",
+            extra={"job_id": str(job.id), "error_class": type(exc).__name__},
+        )
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+
+
 @router.post(
     "/{job_id}/reconcile",
     response_model=AdminJobReconcileResult,
@@ -357,7 +471,7 @@ async def reconcile_job(
     body: AdminJobReconcileRequest,
     response: Response,
     db: Database,
-    current_user: User = Depends(require_operations_manage),
+    current_user: User = Depends(require_admin_job_manage),
 ):
     """Apply one proof-backed terminal result through the existing finalizer."""
     no_store_cache(response)
@@ -544,4 +658,124 @@ async def reconcile_job(
         terminal_state=decision.terminal_state,
         proof_source=decision.proof_source,
         reason_code=decision.reason_code,
+    )
+
+
+@router.post(
+    "/{job_id}/cancel",
+    response_model=AdminJobCancelResult,
+    responses={409: {"description": "The row is recovery-only or otherwise not cancellable."}},
+)
+async def cancel_job(
+    job_id: UUID,
+    body: AdminJobCancelRequest,
+    response: Response,
+    db: Database,
+    current_user: User = Depends(require_admin_job_manage),
+):
+    """Request cancellation without releasing protection prematurely.
+
+    A queued job becomes terminal and releases its full credit hold. A
+    starting/running job records a stop request and keeps its reservation and
+    volume guard until runtime proof confirms termination. ``recovery_required``
+    is proof-only and cannot be cancelled.
+    """
+    no_store_cache(response)
+    actor_id = str(current_user.id)
+    can_manage = _can_manage(current_user)
+    denial: HTTPException | None = None
+    applied = False
+
+    async with AsyncExitStack() as stack:
+        if not db.in_transaction():
+            await stack.enter_async_context(db.begin())
+        try:
+            transition = await BatchJobService(db).cancel_transition(job_id, owner_id=None)
+        except Exception as exc:
+            logger.warning(
+                "Batch job cancellation transition failed",
+                extra={"job_id": str(job_id), "error_class": type(exc).__name__},
+            )
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"code": "cancellation_failed"},
+            ) from None
+
+        outcome = transition.outcome
+        job = transition.job
+        if outcome == CANCEL_NOT_FOUND or job is None:
+            outcome = CANCEL_NOT_FOUND
+            previous_state = None
+            current_state = None
+            denial = _not_found()
+        elif outcome == CANCEL_NOT_CANCELLABLE:
+            previous_state = transition.previous_state
+            current_state = _safe_code(job.state, fallback="unknown") or "unknown"
+            denial = HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": "job_not_cancellable"},
+            )
+        else:
+            previous_state = transition.previous_state
+            current_state = _safe_code(job.state, fallback="unknown") or "unknown"
+            applied = outcome in (CANCEL_CANCELLED, CANCEL_REQUESTED)
+
+        try:
+            _record_cancel_audit(
+                db,
+                actor_id=actor_id,
+                job_id=job_id,
+                reason=body.reason,
+                outcome=outcome,
+                applied=applied,
+                previous_state=previous_state,
+                current_state=current_state,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Batch job cancellation audit failed",
+                extra={"job_id": str(job_id), "error_class": type(exc).__name__},
+            )
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"code": "audit_unavailable"},
+            ) from None
+
+        try:
+            await db.commit()
+        except Exception as exc:
+            logger.warning(
+                "Batch job cancellation commit failed",
+                extra={"job_id": str(job_id), "error_class": type(exc).__name__},
+            )
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"code": "cancellation_failed"},
+            ) from None
+
+    if denial is not None:
+        raise denial
+    if job is None:  # Defensive: the not-found branch above always denies.
+        raise _not_found()
+    if applied and job.user_id != current_user.id:
+        await _notify_cancellation(
+            db,
+            job=job,
+            actor=current_user,
+            reason=body.reason,
+            outcome=outcome,
+        )
+    current = await db.get(BatchJob, job_id, populate_existing=True)
+    if current is None:
+        raise _not_found()
+    entry = await _entry_for_job(db, current, can_manage=can_manage)
+    return AdminJobCancelResult(
+        job=entry,
+        applied=applied,
+        already_terminal=outcome == CANCEL_ALREADY_TERMINAL,
+        outcome=outcome,
+        previous_state=previous_state,
     )

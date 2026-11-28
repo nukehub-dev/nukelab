@@ -8,6 +8,8 @@ import { useAuthStore } from '../stores/auth-store'
 interface PageGuardOptions {
   permission?: string
   permissions?: string[]
+  /** Additional any-of gate applied after the primary permission check. */
+  anyPermission?: string[]
   requireAll?: boolean
   redirectTo?: string
 }
@@ -25,7 +27,7 @@ interface PageGuardOptions {
  */
 export function usePageGuard(options: PageGuardOptions): boolean {
   const navigate = useNavigate()
-  const { permission, permissions, requireAll = false, redirectTo = '/' } = options
+  const { permission, permissions, anyPermission, requireAll = false, redirectTo = '/' } = options
 
   const user = useAuthStore((state) => state.user)
   const hasPermission = useAuthStore((state) => state.hasPermission)
@@ -43,6 +45,9 @@ export function usePageGuard(options: PageGuardOptions): boolean {
     allowed = hasPermission(permission)
   } else if (permissions && permissions.length > 0) {
     allowed = requireAll ? hasAllPermissions(permissions) : hasAnyPermission(permissions)
+  }
+  if (allowed && anyPermission && anyPermission.length > 0) {
+    allowed = hasAnyPermission(anyPermission)
   }
 
   useEffect(() => {

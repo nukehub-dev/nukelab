@@ -65,6 +65,7 @@ AUDIT_KEYS = {
     "liveness",
     "reason_code",
 }
+CANCEL_AUDIT_KEYS = {"reason", "outcome", "applied", "previous_state", "new_state"}
 
 
 def auth(token):
@@ -203,9 +204,15 @@ async def _denied(client, headers):
         headers=headers,
         json={"reason": "negative authorization check"},
     )
+    cancel = await client.post(
+        f"/api/admin/jobs/{uuid.uuid4()}/cancel",
+        headers=headers,
+        json={"reason": "negative authorization check"},
+    )
     assert listing.status_code == 403
     assert detail.status_code == 403
     assert reconcile.status_code == 403
+    assert cancel.status_code == 403
 
 
 @pytest.mark.parametrize("role_index", [0, 1, 2])
@@ -280,6 +287,13 @@ async def test_read_only_operations_role_can_read_but_cannot_mutate(
             json={"reason": "read-only role must not reconcile"},
         )
     ).status_code == 403
+    assert (
+        await client.post(
+            f"/api/admin/jobs/{target}/cancel",
+            headers=headers,
+            json={"reason": "read-only role must not cancel"},
+        )
+    ).status_code == 403
     assert (await client.delete(f"/api/admin/jobs/{target}", headers=headers)).status_code == 405
 
 
@@ -309,6 +323,13 @@ async def test_admin_api_token_cannot_use_job_view(client, admin_user, db_sessio
     )
     assert reconcile.status_code == 403
     assert "JWT" in reconcile.json()["detail"]
+    cancel = await client.post(
+        f"/api/admin/jobs/{uuid.uuid4()}/cancel",
+        headers=auth(raw_token),
+        json={"reason": "api token must not cancel"},
+    )
+    assert cancel.status_code == 403
+    assert "JWT" in cancel.json()["detail"]
 
 
 async def test_cross_owner_rows_never_disclose_payloads_or_runtime_identity(
@@ -427,6 +448,78 @@ async def test_reconcile_response_and_audit_never_disclose_payloads(
     assert entry.target_id == job_id
     assert entry.actor_id == admin_id
     assert set(entry.details) <= AUDIT_KEYS
+    audit_text = json.dumps(entry.details)
+    for value in forbidden:
+        assert value not in audit_text
+
+
+async def test_cancel_response_and_audit_never_disclose_payloads(
+    client, admin_token, admin_user, db_session
+):
+    job, owner, volume, revision, _plan = await _private_job(db_session)
+    job.volume_operation_id = job.id
+    guard = VolumeOperation(
+        operation_id=job.id,
+        volume_id=volume.id,
+        owner_id=owner.id,
+        kind="job_writer",
+        state="reserved",
+        fencing_token=uuid.uuid4(),
+    )
+    job.volume_fencing_token = guard.fencing_token
+    db_session.add(guard)
+    job_id = job.id
+    volume_id = volume.id
+    revision_id = revision.id
+    revision_fingerprint = str(revision.fingerprint)
+    job_fence = str(job.fencing_token)
+    volume_fence = str(job.volume_fencing_token)
+    executor_id = str(job.executor_id)
+    admin_id = admin_user.id
+    await db_session.commit()
+
+    response = await client.post(
+        f"/api/admin/jobs/{job_id}/cancel",
+        headers=auth(admin_token),
+        json={"reason": "operator requests a safe stop"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["applied"] is True
+    assert data["outcome"] == "cancellation_requested"
+    assert data["job"]["state"] == "cancelling"
+    assert data["job"]["reservation_active"] is True
+    assert data["job"]["guard_active"] is True
+
+    forbidden = [
+        *FORBIDDEN_VALUES,
+        str(volume_id),
+        str(revision_id),
+        revision_fingerprint,
+        job_fence,
+        volume_fence,
+        executor_id,
+    ]
+    text = json.dumps(data)
+    for value in forbidden:
+        assert value not in text
+    for key in ("argv", "logs", "log_text", "environment_values", "name"):
+        assert f'"{key}"' not in text
+
+    logs = (
+        await db_session.scalars(
+            select(ActivityLog)
+            .where(ActivityLog.target_id == job_id)
+            .order_by(ActivityLog.created_at, ActivityLog.id)
+        )
+    ).all()
+    assert len(logs) == 1
+    entry = logs[0]
+    assert entry.action == "jobs.cancel_applied"
+    assert entry.target_type == "batch_job"
+    assert entry.target_id == job_id
+    assert entry.actor_id == admin_id
+    assert set(entry.details) == CANCEL_AUDIT_KEYS
     audit_text = json.dumps(entry.details)
     for value in forbidden:
         assert value not in audit_text

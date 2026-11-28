@@ -14,6 +14,7 @@ import hashlib
 import re
 import uuid
 from contextlib import AsyncExitStack
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -83,6 +84,24 @@ _SAFE_IMAGE_REFERENCE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]*(?:@sha256:[
 _ACTIVE_RESOURCE_STATES = tuple(state for state in ACTIVE_JOB_STATES if state != "queued")
 _TERMINAL_STATES = frozenset(TERMINAL_JOB_STATES)
 _CANCELLABLE_STATES = frozenset({"queued", "starting", "running"})
+
+CANCEL_CANCELLED = "cancelled"
+CANCEL_REQUESTED = "cancellation_requested"
+CANCEL_ALREADY_CANCELLING = "already_cancelling"
+CANCEL_ALREADY_TERMINAL = "already_terminal"
+CANCEL_NOT_CANCELLABLE = "not_cancellable"
+CANCEL_NOT_FOUND = "job_not_found"
+
+
+@dataclass(frozen=True)
+class CancelTransition:
+    """Locked cancellation classification; the caller owns the transaction."""
+
+    job: BatchJob | None
+    previous_state: str | None
+    outcome: str
+
+
 _BUSY_VOLUME_STATUSES = frozenset({"restoring", "restore_failed", "deleting"})
 
 _REASON_MESSAGES = {
@@ -651,49 +670,79 @@ class BatchJobService:
         job = await self._get_owned(job_id, user.id)
         return await self.detail(job, replayed=False)
 
+    async def cancel_transition(
+        self, job_id: uuid.UUID, *, owner_id: uuid.UUID | None
+    ) -> CancelTransition:
+        """Lock a job and apply cancellation without committing.
+
+        The caller must own an open transaction. Lock order matches submission
+        and admission: shared admission lock, then the job row. A queued job
+        releases its full credit hold here; starting/running jobs only record a
+        stop request, and every other active state is refused without releasing
+        protection.
+        """
+        if not self.db.in_transaction():
+            raise RuntimeError("Cancellation requires a caller-owned transaction")
+        await acquire_admission_lock(self.db)
+        conditions = [BatchJob.id == job_id]
+        if owner_id is not None:
+            conditions.append(BatchJob.user_id == owner_id)
+        job = await self.db.scalar(
+            select(BatchJob)
+            .where(*conditions)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if job is None:
+            # Foreign and missing ids are deliberately indistinguishable.
+            return CancelTransition(job=None, previous_state=None, outcome=CANCEL_NOT_FOUND)
+
+        previous = job.state
+        now = utc_now()
+        if job.state == "queued":
+            job.state = "cancelled"
+            job.outcome_code = "cancelled"
+            job.reason_code = "request_cancelled"
+            job.state_changed_at = now
+            job.finished_at = now
+            job.result_recorded_at = now
+            job.proof_class = "control_plane"
+            job.reservation_active = False
+            job.updated_at = now
+            released = await CreditHoldService.release(self.db, job.id)
+            if released or job.billing_state == HELD or job.billing_mode == "paid":
+                job.billing_state = RELEASED
+                job.charged_credits = 0
+            outcome = CANCEL_CANCELLED
+        elif job.state in ("starting", "running"):
+            job.state = "cancelling"
+            job.reason_code = "cancellation_requested"
+            job.state_changed_at = now
+            job.stop_requested_at = now
+            job.updated_at = now
+            outcome = CANCEL_REQUESTED
+        elif job.state == "cancelling":
+            outcome = CANCEL_ALREADY_CANCELLING
+        elif job.state in _TERMINAL_STATES:
+            outcome = CANCEL_ALREADY_TERMINAL
+        else:
+            outcome = CANCEL_NOT_CANCELLABLE
+        return CancelTransition(job=job, previous_state=previous, outcome=outcome)
+
     async def cancel(self, user: User, job_id: uuid.UUID) -> BatchJobDetail:
         """Serialize cancellation with admission under the shared lock and row lock."""
-        owner_id = user.id
         async with AsyncExitStack() as stack:
             if not self.db.in_transaction():
                 await stack.enter_async_context(self.db.begin())
-            await acquire_admission_lock(self.db)
-            job = await self.db.scalar(
-                select(BatchJob)
-                .where(BatchJob.id == job_id, BatchJob.user_id == owner_id)
-                .with_for_update()
-                .execution_options(populate_existing=True)
-            )
-            if job is None:
-                # Foreign and missing ids are deliberately indistinguishable.
+            transition = await self.cancel_transition(job_id, owner_id=user.id)
+            if transition.outcome == CANCEL_NOT_FOUND:
                 raise JobError("job_not_found", 404)
-            now = utc_now()
-            if job.state == "queued":
-                job.state = "cancelled"
-                job.outcome_code = "cancelled"
-                job.reason_code = "request_cancelled"
-                job.state_changed_at = now
-                job.finished_at = now
-                job.result_recorded_at = now
-                job.proof_class = "control_plane"
-                job.reservation_active = False
-                job.updated_at = now
-                released = await CreditHoldService.release(self.db, job.id)
-                if released or job.billing_state == HELD or job.billing_mode == "paid":
-                    job.billing_state = RELEASED
-                    job.charged_credits = 0
-            elif job.state in ("starting", "running"):
-                job.state = "cancelling"
-                job.reason_code = "cancellation_requested"
-                job.state_changed_at = now
-                job.stop_requested_at = now
-                job.updated_at = now
-            elif job.state == "cancelling" or job.state in _TERMINAL_STATES:
-                # Idempotent: retain the authoritative terminal/stop-requested state.
-                pass
-            else:
+            if transition.outcome == CANCEL_NOT_CANCELLABLE:
                 raise JobError("job_not_cancellable", 409)
             await self.db.commit()
+        job = transition.job
+        if job is None:  # Defensive: the two refusal outcomes above cover all None cases.
+            raise JobError("job_not_found", 404)
         return await self.detail(job, replayed=False)
 
     async def logs(self, user: User, job_id: uuid.UUID) -> JobLogsResponse:
