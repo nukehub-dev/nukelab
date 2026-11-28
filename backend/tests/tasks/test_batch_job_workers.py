@@ -11,6 +11,7 @@ from app import tasks
 from app.services.batch_job_dispatch_service import BatchJobDispatchReport
 from app.services.batch_job_monitor import MonitorReport
 from app.services.batch_job_reconciliation import BatchJobRecoveryReport
+from app.services.batch_job_retention import LogPurgeReport
 from app.services.batch_job_runtime import RuntimeStartResult
 from tests.tasks.test_lifecycle_workers import database, worker_resources
 
@@ -23,6 +24,7 @@ def test_batch_tasks_and_beat_entries_are_registered():
         "app.tasks.run_batch_job",
         "app.tasks.monitor_batch_jobs",
         "app.tasks.reconcile_batch_jobs",
+        "app.tasks.purge_batch_job_logs",
     ):
         assert name in celery_app.tasks
 
@@ -30,6 +32,7 @@ def test_batch_tasks_and_beat_entries_are_registered():
     assert schedule["dispatch-batch-jobs"]["task"] == "app.tasks.dispatch_batch_jobs"
     assert schedule["monitor-batch-jobs"]["task"] == "app.tasks.monitor_batch_jobs"
     assert schedule["reconcile-batch-jobs"]["task"] == "app.tasks.reconcile_batch_jobs"
+    assert schedule["purge-batch-job-logs"]["task"] == "app.tasks.purge_batch_job_logs"
     assert "process-server-queue" in schedule
     assert "reconcile-operations" in schedule
     assert _JOURNAL_RELATIONS["batch_jobs"] == {
@@ -127,6 +130,38 @@ def test_reconcile_task_returns_a_short_summary():
     assert "1 cleanups complete" in result
     assert "1 cleanups pending" in result
     service.scan.assert_awaited_once()
+
+
+class _EmptySession:
+    async def __aenter__(self):
+        return SimpleNamespace()
+
+    async def __aexit__(self, *args):
+        return False
+
+
+def test_purge_task_returns_bounded_counts():
+    with (
+        patch("app.tasks.AsyncSessionLocal", return_value=_EmptySession()),
+        patch(
+            "app.services.batch_job_retention.purge_expired_logs",
+            AsyncMock(return_value=LogPurgeReport(scanned=5, deleted=4, errors=1)),
+        ) as purge,
+    ):
+        result = tasks.purge_batch_job_logs.run()
+    assert result == "Batch job log purge: scanned=5, deleted=4, errors=1"
+    purge.assert_awaited_once()
+
+
+def test_purge_task_failure_is_reported_without_raising():
+    with (
+        patch("app.tasks.AsyncSessionLocal", return_value=_EmptySession()),
+        patch(
+            "app.services.batch_job_retention.purge_expired_logs",
+            AsyncMock(side_effect=RuntimeError("database unavailable")),
+        ),
+    ):
+        assert tasks.purge_batch_job_logs.run() == "Batch job log purge deferred"
 
 
 def test_service_failure_is_reported_without_raising():

@@ -727,6 +727,33 @@ def reconcile_batch_jobs(self):
 
 
 @celery_app.task(bind=True)
+def purge_batch_job_logs(self):
+    """Physically delete one bounded batch of expired log payloads."""
+
+    async def purge():
+        from app.services.batch_job_retention import purge_expired_logs
+
+        async with AsyncSessionLocal() as db:
+            return await purge_expired_logs(
+                db,
+                limit=settings.batch_jobs_log_purge_batch_size,
+            )
+
+    try:
+        report = _run_async(purge())
+    except Exception as exc:
+        logger.warning(
+            "Batch job log purge deferred",
+            extra={"error_class": type(exc).__name__},
+        )
+        return "Batch job log purge deferred"
+    return (
+        f"Batch job log purge: scanned={report.scanned}, deleted={report.deleted}, "
+        f"errors={report.errors}"
+    )
+
+
+@celery_app.task(bind=True)
 def evaluate_schedules(self):
     """Evaluate schedules within one joined loop-owned operation."""
 
