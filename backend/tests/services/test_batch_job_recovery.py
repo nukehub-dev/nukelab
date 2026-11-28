@@ -3,7 +3,8 @@
 
 """Batch job recovery: stale inspections, retained guards and cleanup retry."""
 
-from datetime import timedelta
+import uuid
+from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -218,3 +219,262 @@ async def test_recovery_scan_bound_is_validated(committed_admitted_job):
         for value in (0, 501, True, "5"):
             with pytest.raises(ValueError, match="between 1 and 500"):
                 await service.scan(limit=value)
+
+
+def stale_heartbeat() -> datetime:
+    return utc_now() - timedelta(seconds=settings.batch_jobs_heartbeat_stale_seconds + 5)
+
+
+async def inspect(fixture, driver):
+    async with AsyncSession(test_engine, expire_on_commit=False) as db:
+        return await BatchJobReconciliationService(db, driver).inspect(fixture.job_id)
+
+
+@pytest.mark.asyncio
+async def test_inspect_running_container_is_read_only(committed_admitted_job):
+    fixture = committed_admitted_job
+    driver = fixture.driver
+    await stale_running(driver, fixture)
+    before = await load_job(fixture.job_id)
+    before_guard = await volume_operation(fixture.job_id)
+
+    decision = await inspect(fixture, driver)
+
+    assert decision.state == "running"
+    assert decision.terminal_state is None
+    assert decision.reason_code == "runtime_running"
+    assert decision.proof_source == "runtime_inspection"
+    assert decision.runtime_state == "present"
+    assert decision.liveness == "stopped"
+    assert decision.exit_code is None
+
+    after = await load_job(fixture.job_id)
+    assert after.state == before.state
+    assert after.heartbeat_at == before.heartbeat_at
+    assert after.container_id == before.container_id
+    assert after.reservation_active is True
+    assert after.updated_at == before.updated_at
+    assert (await volume_operation(fixture.job_id)).state == before_guard.state
+    assert driver.created == []
+    assert driver.started == []
+    assert driver.stopped == []
+    assert driver.deleted == []
+
+
+@pytest.mark.asyncio
+async def test_inspect_absent_runtime_after_checkpoint_is_reconcilable(committed_admitted_job):
+    fixture = committed_admitted_job
+    driver = fixture.driver
+    await set_job(
+        fixture.job_id,
+        state="recovery_required",
+        container_id="job-container",
+        create_requested_at=utc_now() - timedelta(minutes=10),
+        heartbeat_at=stale_heartbeat(),
+    )
+
+    decision = await inspect(fixture, driver)
+
+    assert decision.state == "recovery_required"
+    assert decision.terminal_state == "failed"
+    assert decision.reason_code == "runtime_absent"
+    assert decision.proof_source == "runtime_inspection"
+    assert decision.runtime_state == "absent"
+    assert decision.liveness == "stopped"
+    assert decision.exit_code is None
+    assert driver.created == []
+    assert driver.started == []
+
+
+@pytest.mark.asyncio
+async def test_inspect_absent_runtime_with_live_executor_is_ambiguous(committed_admitted_job):
+    fixture = committed_admitted_job
+    driver = fixture.driver
+    await set_job(
+        fixture.job_id,
+        state="recovery_required",
+        container_id="job-container",
+        create_requested_at=utc_now() - timedelta(minutes=10),
+        heartbeat_at=utc_now(),
+    )
+
+    decision = await inspect(fixture, driver)
+
+    assert decision.terminal_state is None
+    assert decision.reason_code == "executor_live"
+    assert decision.proof_source == "none"
+    assert decision.runtime_state == "absent"
+    assert decision.liveness == "alive"
+    assert (await volume_operation(fixture.job_id)).state == "reserved"
+
+
+@pytest.mark.asyncio
+async def test_inspect_absent_runtime_without_checkpoint_is_ambiguous(committed_admitted_job):
+    fixture = committed_admitted_job
+    driver = fixture.driver
+    await set_job(
+        fixture.job_id,
+        state="recovery_required",
+        container_id=None,
+        create_requested_at=None,
+        start_requested_at=None,
+        heartbeat_at=stale_heartbeat(),
+    )
+
+    decision = await inspect(fixture, driver)
+
+    assert decision.terminal_state is None
+    assert decision.reason_code == "runtime_unverifiable"
+    assert decision.proof_source == "none"
+    assert decision.runtime_state == "absent"
+    assert decision.liveness == "stopped"
+
+
+@pytest.mark.asyncio
+async def test_inspect_exited_runtime_is_reconcilable(committed_admitted_job):
+    fixture = committed_admitted_job
+    driver = fixture.driver
+    now = utc_now()
+    editor = await set_job(
+        fixture.job_id,
+        state="recovery_required",
+        container_id="job-container",
+        heartbeat_at=stale_heartbeat(),
+        started_at=now - timedelta(minutes=10),
+        deadline_at=now + timedelta(minutes=10),
+    )
+    driver.add_job_container(
+        editor,
+        container_id="job-container",
+        status="exited",
+        exit_code=0,
+        started_at=now - timedelta(minutes=2),
+        finished_at=now - timedelta(minutes=1),
+    )
+
+    decision = await inspect(fixture, driver)
+
+    assert decision.state == "recovery_required"
+    assert decision.terminal_state == "succeeded"
+    assert decision.reason_code == "exit_zero"
+    assert decision.proof_source == "runtime_inspection"
+    assert decision.runtime_state == "present"
+    assert decision.exit_code == 0
+    assert (await load_job(fixture.job_id)).state == "recovery_required"
+    assert (await volume_operation(fixture.job_id)).state == "reserved"
+
+
+@pytest.mark.asyncio
+async def test_inspect_exited_runtime_without_exit_code_is_ambiguous(committed_admitted_job):
+    fixture = committed_admitted_job
+    driver = fixture.driver
+    now = utc_now()
+    editor = await set_job(
+        fixture.job_id,
+        state="recovery_required",
+        container_id="job-container",
+        heartbeat_at=stale_heartbeat(),
+        started_at=now - timedelta(minutes=10),
+        deadline_at=now + timedelta(minutes=10),
+    )
+    driver.add_job_container(
+        editor,
+        container_id="job-container",
+        status="exited",
+        exit_code=None,
+        started_at=now - timedelta(minutes=2),
+        finished_at=now - timedelta(minutes=1),
+    )
+
+    decision = await inspect(fixture, driver)
+
+    assert decision.terminal_state is None
+    assert decision.reason_code == "runtime_unverifiable"
+    assert decision.runtime_state == "present"
+    assert decision.exit_code is None
+
+
+@pytest.mark.asyncio
+async def test_inspect_identity_mismatch_is_ambiguous(committed_admitted_job):
+    fixture = committed_admitted_job
+    driver = fixture.driver
+    now = utc_now()
+    editor = await set_job(
+        fixture.job_id,
+        state="recovery_required",
+        container_id="job-container",
+        heartbeat_at=stale_heartbeat(),
+    )
+    driver.add_job_container(
+        editor,
+        container_id="job-container",
+        status="exited",
+        exit_code=0,
+        labels={"nukelab.job.fence": str(uuid.uuid4())},
+        started_at=now - timedelta(minutes=2),
+        finished_at=now - timedelta(minutes=1),
+    )
+
+    decision = await inspect(fixture, driver)
+
+    assert decision.terminal_state is None
+    assert decision.reason_code == "runtime_unverifiable"
+    assert decision.proof_source == "none"
+    assert decision.runtime_state == "ambiguous"
+
+
+@pytest.mark.asyncio
+async def test_inspect_unavailable_daemon_is_ambiguous(committed_admitted_job):
+    fixture = committed_admitted_job
+    driver = fixture.driver
+    await set_job(
+        fixture.job_id,
+        state="recovery_required",
+        container_id="job-container",
+        create_requested_at=utc_now() - timedelta(minutes=10),
+        heartbeat_at=stale_heartbeat(),
+    )
+
+    async def unavailable(container_id):
+        raise RuntimeError("daemon unavailable")
+
+    driver.get_container_info = unavailable
+
+    decision = await inspect(fixture, driver)
+
+    assert decision.terminal_state is None
+    assert decision.reason_code == "runtime_unverifiable"
+    assert decision.proof_source == "none"
+    assert decision.runtime_state == "ambiguous"
+
+
+@pytest.mark.asyncio
+async def test_inspect_does_not_adopt_an_unrecorded_container_id(committed_admitted_job):
+    fixture = committed_admitted_job
+    driver = fixture.driver
+    now = utc_now()
+    editor = await set_job(
+        fixture.job_id,
+        state="recovery_required",
+        container_id=None,
+        heartbeat_at=stale_heartbeat(),
+        started_at=now - timedelta(minutes=10),
+        deadline_at=now + timedelta(minutes=10),
+    )
+    driver.add_job_container(
+        editor,
+        container_id="job-container",
+        status="exited",
+        exit_code=0,
+        started_at=now - timedelta(minutes=2),
+        finished_at=now - timedelta(minutes=1),
+    )
+
+    decision = await inspect(fixture, driver)
+
+    assert decision.terminal_state is None
+    assert decision.reason_code == "runtime_unverifiable"
+    job = await load_job(fixture.job_id)
+    assert job.container_id is None
+    assert job.state == "recovery_required"
+    assert driver.deleted == []

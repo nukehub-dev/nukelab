@@ -975,7 +975,7 @@ class BatchJobRuntimeService:
         if container_id is None:
             container_id = await self._container_id_from_info(snapshot, info)
         logs = await self._capture_logs(container_id)
-        state, outcome, reason, exit_code, started_at, finished_at = _classify_exit(
+        state, outcome, reason, exit_code, started_at, finished_at = classify_exit(
             snapshot, info, forced=forced
         )
         result = await self.finalizer.finalize(
@@ -1185,12 +1185,13 @@ def _snapshot(job: BatchJob, *, volume_name: str | None) -> JobStateSnapshot:
     )
 
 
-def _classify_exit(
+def classify_exit(
     snapshot: JobStateSnapshot,
     info: dict,
     *,
     forced: str | None,
 ) -> tuple[str, str, str | None, int | None, datetime | None, datetime]:
+    """Classify one observed container exit for a proof-backed terminal result."""
     state = _state(info)
     now = utc_now()
     exit_code = state.get("ExitCode")
@@ -1275,6 +1276,7 @@ __all__ = [
     "LogCapture",
     "RuntimeStartResult",
     "capture_tail",
+    "classify_exit",
     "container_status",
     "sanitize_environment",
     "validate_job_container",
