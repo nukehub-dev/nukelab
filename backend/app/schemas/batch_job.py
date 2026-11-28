@@ -46,6 +46,8 @@ class JobCapabilitiesResponse(BaseModel):
     can_submit: bool
     billing_mode: BillingMode
     secrets_enabled: bool = False
+    storage_limits_enforced: bool
+    storage_enforcement_required: bool
     reason_code: str | None = None
     limits: JobLimits
 

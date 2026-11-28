@@ -64,6 +64,7 @@ from app.services.environment_revision_service import (
 from app.services.environment_service import EnvironmentService
 from app.services.plan_service import PlanService
 from app.services.resource_pool_service import ResourcePoolService
+from app.services.storage_capability_service import StorageCapabilityService
 
 _ELIGIBLE_REVISION_LIMIT = 50
 _ELIGIBLE_SCAN_LIMIT = 200
@@ -89,6 +90,7 @@ _REASON_MESSAGES = {
     "quota_exceeded": "The job exceeds the account resource quota.",
     "artifact_missing": "The approved environment artifact is unavailable.",
     "queue_expired": "The queued job expired. Submit a new job.",
+    "storage_limits_unenforced": "Writable storage limits are not kernel-enforced on this host.",
     "insufficient_credits": "The account does not have enough credits.",
     "job_deadline_exceeded": "The job exceeded its maximum runtime.",
     "recovery_required": (
@@ -241,6 +243,7 @@ class BatchJobService:
         submission_enabled = bool(settings.batch_jobs_submission_enabled)
         permitted = has_permission(user, Permission.JOBS_WRITE_OWN)
         cohort_allowed = self._cohort_allows(user)
+        storage = StorageCapabilityService.probe()
         can_submit = submission_enabled and permitted and cohort_allowed
         if not submission_enabled:
             reason_code = "feature_disabled"
@@ -248,6 +251,11 @@ class BatchJobService:
             reason_code = "permission_denied"
         elif not cohort_allowed:
             reason_code = "cohort_not_allowed"
+        elif storage.required and not storage.enforced:
+            # Fail closed rather than advertise a writable limit the kernel
+            # cannot enforce. Probe failures are sanitized to one reason.
+            can_submit = False
+            reason_code = "storage_limits_unenforced"
         else:
             reason_code = None
         # Paid settlement is not implemented in this release; never advertise it.
@@ -257,6 +265,8 @@ class BatchJobService:
             can_submit=can_submit,
             billing_mode=billing_mode,
             secrets_enabled=False,
+            storage_limits_enforced=storage.enforced,
+            storage_enforcement_required=storage.required,
             reason_code=reason_code,
             limits=JobLimits(
                 max_active_jobs=settings.batch_jobs_max_active_per_owner,
@@ -361,6 +371,11 @@ class BatchJobService:
         existing = await self._find_by_idempotency(user.id, key_hash)
         if existing is not None:
             return await self._replay(existing, fingerprint)
+
+        if settings.batch_jobs_require_storage_enforcement:
+            storage = StorageCapabilityService.probe()
+            if not storage.enforced:
+                raise JobError("storage_limits_unenforced", 503)
 
         revision = await self._require_revision(user, request.revision_id)
         plan = await self._require_plan(user, request.plan_id)

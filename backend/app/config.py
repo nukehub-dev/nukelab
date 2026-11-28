@@ -231,6 +231,13 @@ class Settings(BaseSettings):
     batch_jobs_max_input_bytes: int = Field(default=16384, gt=0)
     batch_jobs_log_tail_bytes: int = Field(default=262144, gt=0)
     batch_jobs_log_retention_seconds: int = Field(default=604800, gt=0)
+    # Publish-time storage enforcement gate. The default keeps the existing
+    # dev/test pilot behavior: resource limits are advertised as configured,
+    # while capabilities truthfully report whether the kernel enforces them.
+    # Set true only when the volume storage path is on XFS mounted with
+    # prjquota/pquota and xfs_quota is usable; submission, capabilities and
+    # admission then fail closed with `storage_limits_unenforced` otherwise.
+    batch_jobs_require_storage_enforcement: bool = False
 
     # Batch admission/runtime controls. The fleet cap counts active reservations
     # across owners; zero means unlimited. Interval and batch bounds keep
