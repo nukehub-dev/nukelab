@@ -3,9 +3,22 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { AlertTriangle, Cpu, HardDrive, Info, MemoryStick, Play, Terminal, Zap } from 'lucide-react'
+import {
+  AlertTriangle,
+  Cpu,
+  ExternalLink,
+  HardDrive,
+  Info,
+  MemoryStick,
+  Play,
+  Terminal,
+  Zap,
+} from 'lucide-react'
 import { ApiError } from '../../lib/api'
 import {
+  JOB_RUNTIME_UNIT_OPTIONS,
+  MIN_JOB_RUNTIME_SECONDS,
+  convertJobRuntime,
   createJobIdempotencyKey,
   formatJobCredits,
   isJobFormField,
@@ -13,10 +26,13 @@ import {
   jobErrorField,
   jobMaximumCost,
   jobRequestSignature,
+  jobRuntimeDisplay,
+  jobRuntimeSeconds,
   parseJobArgs,
   validateJobArgv,
+  type JobRuntimeUnit,
 } from '../../lib/batch-job'
-import { formatBytes, formatDuration, parseMemoryString } from '../../lib/utils'
+import { cn, formatBytes, formatDuration, parseMemoryString } from '../../lib/utils'
 import { usePlans } from '../../hooks/use-plans'
 import { useEligibleJobRevisions, useCreateJob } from '../../hooks/use-jobs'
 import { useVolumes } from '../../hooks/use-volumes'
@@ -31,9 +47,9 @@ import type {
 import type { Plan } from '../../types/api'
 import type { Volume } from '../../hooks/use-volumes'
 import { Button } from '../ui/button'
+import { Combobox, type ComboboxOption } from '../ui/combobox'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
-import { Select, SelectItem } from '../ui/select'
 import { Textarea } from '../ui/textarea'
 import {
   Dialog,
@@ -52,10 +68,18 @@ interface JobFormState {
   volumeId: string
   executable: string
   argsText: string
-  runtimeSeconds: string
+  runtimeValue: string
+  runtimeUnit: JobRuntimeUnit
+}
+
+const RUNTIME_UNIT_FACTOR: Record<JobRuntimeUnit, number> = {
+  seconds: 1,
+  minutes: 60,
+  hours: 3600,
 }
 
 function emptyForm(capabilities: JobCapabilities): JobFormState {
+  const runtime = jobRuntimeDisplay(capabilities.limits.default_runtime_seconds)
   return {
     name: '',
     revisionId: '',
@@ -63,7 +87,8 @@ function emptyForm(capabilities: JobCapabilities): JobFormState {
     volumeId: '',
     executable: '',
     argsText: '',
-    runtimeSeconds: String(capabilities.limits.default_runtime_seconds),
+    runtimeValue: runtime.value,
+    runtimeUnit: runtime.unit,
   }
 }
 
@@ -76,13 +101,15 @@ function FieldMessage({ id, message }: { id: string; message?: string }) {
   )
 }
 
-function eligiblePlans(plans: Plan[], capabilities: JobCapabilities) {
-  return plans.filter(
-    (plan) =>
-      plan.is_active &&
-      plan.gpu_limit === 0 &&
-      (capabilities.billing_mode !== 'zero_cost' || plan.cost_per_hour === 0)
-  )
+function isCpuPlan(plan: Plan) {
+  return plan.is_active && plan.gpu_limit === 0
+}
+
+function planLabel(plan: Plan) {
+  const cost = plan.cost_per_hour > 0 ? ` · ${formatJobCredits(plan.cost_per_hour)} NUKE/h` : ''
+  return `${plan.name} · ${plan.cpu_limit} vCPU · ${formatBytes(
+    parseMemoryString(plan.memory_limit)
+  )} RAM · ${formatBytes(parseMemoryString(plan.disk_limit))} disk${cost}`
 }
 
 function eligibleVolumes(volumes: Volume[], ownerId: string | undefined) {
@@ -118,11 +145,34 @@ export function NewJobDialog({
   const volumesQuery = useVolumes()
   const createJob = useCreateJob()
 
-  const plans = eligiblePlans(plansQuery.data?.data ?? [], capabilities)
+  const allCpuPlans = (plansQuery.data?.data ?? []).filter(isCpuPlan)
+  const paidPlansDisabled = capabilities.billing_mode === 'zero_cost'
+  const plans = allCpuPlans.filter((plan) => !paidPlansDisabled || plan.cost_per_hour === 0)
+  const disabledPaidPlans = allCpuPlans.length - plans.length
   const volumes = eligibleVolumes(volumesQuery.data ?? [], ownerId)
   const revisionsAvailable = (revisions.data?.items ?? []).filter(
     (revision) => revision.supports_jobs && !revision.reason_code
   )
+  const revisionOptions: ComboboxOption[] = revisionsAvailable.map((revision) => ({
+    value: revision.revision_id,
+    label: revisionLabel(revision),
+    testId: `job-revision-${revision.revision_id}`,
+  }))
+  const planOptions: ComboboxOption[] = allCpuPlans.map((plan) => {
+    const disabled = paidPlansDisabled && plan.cost_per_hour > 0
+    return {
+      value: plan.id,
+      label: planLabel(plan),
+      testId: `job-plan-${plan.id}`,
+      disabled,
+      hint: disabled ? 'Paid plan — paid batch jobs are disabled on this deployment' : undefined,
+    }
+  })
+  const volumeOptions: ComboboxOption[] = volumes.map((volume) => ({
+    value: volume.id,
+    label: `${volume.display_name} · ${formatBytes(volume.size_bytes)}`,
+    testId: `job-volume-${volume.id}`,
+  }))
   const savedPlanId =
     typeof user?.preferences?.default_plan === 'string' ? user.preferences.default_plan : ''
   const savedEnvironmentId =
@@ -157,7 +207,10 @@ export function NewJobDialog({
   const selectedRevision = revisionsAvailable.find(
     (revision) => revision.revision_id === effectiveRevisionId
   )
-  const runtimeSeconds = Number(form.runtimeSeconds)
+  const runtimeSeconds = jobRuntimeSeconds(form.runtimeValue, form.runtimeUnit)
+  const runtimeFactor = RUNTIME_UNIT_FACTOR[form.runtimeUnit]
+  const runtimeMin = MIN_JOB_RUNTIME_SECONDS / runtimeFactor
+  const runtimeMax = capabilities.limits.max_runtime_seconds / runtimeFactor
   const maximumCost =
     selectedPlan && Number.isFinite(runtimeSeconds)
       ? jobMaximumCost(selectedPlan.cost_per_hour, runtimeSeconds, capabilities.billing_mode)
@@ -183,7 +236,7 @@ export function NewJobDialog({
           ? 'plan_id'
           : key === 'volumeId'
             ? 'volume_id'
-            : key === 'runtimeSeconds'
+            : key === 'runtimeValue' || key === 'runtimeUnit'
               ? 'max_runtime_seconds'
               : key === 'executable' || key === 'argsText'
                 ? 'argv'
@@ -195,6 +248,20 @@ export function NewJobDialog({
       if (!current[field]) return current
       const next = { ...current }
       delete next[field]
+      return next
+    })
+  }
+
+  const updateRuntimeUnit = (unit: JobRuntimeUnit) => {
+    setForm((current) => ({
+      ...current,
+      runtimeUnit: unit,
+      runtimeValue: convertJobRuntime(current.runtimeValue, current.runtimeUnit, unit),
+    }))
+    setFieldErrors((current) => {
+      if (!current.max_runtime_seconds) return current
+      const next = { ...current }
+      delete next.max_runtime_seconds
       return next
     })
   }
@@ -223,8 +290,10 @@ export function NewJobDialog({
       if (argvError) errors.argv = argvError
     }
 
-    if (!Number.isInteger(runtimeSeconds) || runtimeSeconds <= 0) {
-      errors.max_runtime_seconds = 'Enter a whole number of seconds.'
+    if (!Number.isFinite(runtimeSeconds) || runtimeSeconds <= 0) {
+      errors.max_runtime_seconds = 'Enter a positive duration.'
+    } else if (runtimeSeconds < MIN_JOB_RUNTIME_SECONDS) {
+      errors.max_runtime_seconds = 'Use at least 1 minute (60 seconds).'
     } else if (runtimeSeconds > capabilities.limits.max_runtime_seconds) {
       errors.max_runtime_seconds = `Use at most ${formatDuration(
         capabilities.limits.max_runtime_seconds
@@ -309,11 +378,21 @@ export function NewJobDialog({
         className="flex min-h-full flex-col"
         onKeyDown={(event) => {
           if (event.key !== 'Tab') return
-          const controls = contentRef.current?.querySelectorAll<HTMLElement>(
-            'button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]'
+          const contentControls = Array.from(
+            contentRef.current?.querySelectorAll<HTMLElement>(
+              'button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]'
+            ) ?? []
           )
-          const first = controls?.[0]
-          const last = controls?.[controls.length - 1]
+          // Combobox panels are portaled so they escape drawer clipping.
+          // Include their open controls in the dialog's focus cycle.
+          const panelControls = Array.from(
+            document.querySelectorAll<HTMLElement>(
+              '[data-combobox-panel] input:not(:disabled), [data-combobox-panel] button:not(:disabled)'
+            )
+          )
+          const controls = [...contentControls, ...panelControls]
+          const first = controls[0]
+          const last = controls[controls.length - 1]
           if (!first || !last) {
             event.preventDefault()
             return
@@ -392,25 +471,17 @@ export function NewJobDialog({
 
           <div className="space-y-1.5">
             <Label>Environment revision</Label>
-            <Select
+            <Combobox
               value={effectiveRevisionId}
               onChange={(value) => update('revisionId', value)}
+              options={revisionOptions}
               placeholder={
                 revisions.isPending ? 'Loading approved environments…' : 'Select a revision'
               }
+              searchPlaceholder="Search approved revisions…"
               disabled={revisions.isPending || revisions.isError || revisionsAvailable.length === 0}
               data-testid="job-revision"
-            >
-              {revisionsAvailable.map((revision) => (
-                <SelectItem
-                  key={revision.revision_id}
-                  value={revision.revision_id}
-                  data-testid={`job-revision-${revision.revision_id}`}
-                >
-                  {revisionLabel(revision)}
-                </SelectItem>
-              ))}
-            </Select>
+            />
             <p className="text-xs text-muted-foreground">
               Only approved revisions that support single-run jobs are listed. The selected image is
               fixed at submission.
@@ -436,21 +507,15 @@ export function NewJobDialog({
 
           <div className="space-y-1.5">
             <Label>Resource plan</Label>
-            <Select
+            <Combobox
               value={effectivePlanId}
               onChange={(value) => update('planId', value)}
+              options={planOptions}
               placeholder={plansQuery.isPending ? 'Loading plans…' : 'Select a plan'}
-              disabled={plansQuery.isPending || plansQuery.isError || plans.length === 0}
+              searchPlaceholder="Search CPU plans…"
+              disabled={plansQuery.isPending || plansQuery.isError || allCpuPlans.length === 0}
               data-testid="job-plan"
-            >
-              {plans.map((plan) => (
-                <SelectItem key={plan.id} value={plan.id} data-testid={`job-plan-${plan.id}`}>
-                  {`${plan.name} · ${plan.cpu_limit} vCPU · ${formatBytes(
-                    parseMemoryString(plan.memory_limit)
-                  )} RAM`}
-                </SelectItem>
-              ))}
-            </Select>
+            />
             {plansQuery.isError ? (
               <p role="status" className="text-xs text-destructive">
                 Resource plans could not be loaded.{' '}
@@ -462,35 +527,55 @@ export function NewJobDialog({
                   Retry
                 </button>
               </p>
+            ) : plansQuery.data && allCpuPlans.length === 0 ? (
+              <p role="status" className="text-xs text-amber-400">
+                No active CPU plan is available. Contact an administrator.
+              </p>
             ) : plansQuery.data && plans.length === 0 ? (
               <p role="status" className="text-xs text-amber-400">
-                {capabilities.billing_mode === 'zero_cost'
-                  ? 'No eligible zero-cost CPU plan is available. Contact an administrator.'
-                  : 'No eligible CPU plan is available. Contact an administrator.'}
+                All active CPU plans are paid, and paid batch jobs are disabled on this deployment.
               </p>
             ) : null}
+            {disabledPaidPlans > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {disabledPaidPlans} paid CPU plan{disabledPaidPlans === 1 ? '' : 's'} listed but
+                disabled because paid batch jobs are off.
+              </p>
+            )}
             <FieldMessage id="job-plan-error" message={fieldErrors.plan_id} />
           </div>
 
           <div className="space-y-1.5">
-            <Label>Private work volume</Label>
-            <Select
+            <div className="flex items-center justify-between gap-3">
+              <Label>Private work volume</Label>
+              <div className="flex items-center gap-3 text-xs">
+                <button
+                  type="button"
+                  className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  onClick={() => void volumesQuery.refetch()}
+                >
+                  Refresh
+                </button>
+                <a
+                  href="/volumes"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
+                >
+                  Create volume
+                  <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                </a>
+              </div>
+            </div>
+            <Combobox
               value={form.volumeId}
               onChange={(value) => update('volumeId', value)}
+              options={volumeOptions}
               placeholder={volumesQuery.isPending ? 'Loading volumes…' : 'Select a private volume'}
+              searchPlaceholder="Search owned private volumes…"
               disabled={volumesQuery.isPending || volumesQuery.isError || volumes.length === 0}
               data-testid="job-volume"
-            >
-              {volumes.map((volume) => (
-                <SelectItem
-                  key={volume.id}
-                  value={volume.id}
-                  data-testid={`job-volume-${volume.id}`}
-                >
-                  {`${volume.display_name} · ${formatBytes(volume.size_bytes)}`}
-                </SelectItem>
-              ))}
-            </Select>
+            />
             <p className="text-xs text-muted-foreground">
               The volume is mounted read/write at <code className="font-mono">/work</code> for the
               exclusive duration of the job. Inputs must already be present.
@@ -508,7 +593,16 @@ export function NewJobDialog({
               </p>
             ) : volumesQuery.data && volumes.length === 0 ? (
               <p role="status" className="text-xs text-amber-400">
-                No owned private volume is available. Create an active private volume first.
+                No owned private volume is available.{' '}
+                <a
+                  href="/volumes"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline underline-offset-2"
+                >
+                  Create an active private volume
+                </a>{' '}
+                first.
               </p>
             ) : null}
             <FieldMessage id="job-volume-error" message={fieldErrors.volume_id} />
@@ -556,23 +650,54 @@ export function NewJobDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="job-runtime">Maximum runtime (seconds)</Label>
-            <Input
-              id="job-runtime"
-              data-testid="job-runtime"
-              type="number"
-              min={1}
-              step={1}
-              max={capabilities.limits.max_runtime_seconds}
-              value={form.runtimeSeconds}
-              aria-invalid={!!fieldErrors.max_runtime_seconds}
-              aria-describedby={
-                fieldErrors.max_runtime_seconds ? runtimeErrorId : 'job-runtime-help'
-              }
-              onChange={(event) => update('runtimeSeconds', event.target.value)}
-            />
+            <Label htmlFor="job-runtime">Maximum runtime</Label>
+            <div className="flex gap-2">
+              <Input
+                id="job-runtime"
+                data-testid="job-runtime"
+                type="number"
+                min={runtimeMin}
+                step="any"
+                max={runtimeMax}
+                value={form.runtimeValue}
+                className="flex-1"
+                aria-invalid={!!fieldErrors.max_runtime_seconds}
+                aria-describedby={
+                  fieldErrors.max_runtime_seconds ? runtimeErrorId : 'job-runtime-help'
+                }
+                onChange={(event) => update('runtimeValue', event.target.value)}
+              />
+              <div
+                role="group"
+                aria-label="Runtime unit"
+                className="flex h-9 shrink-0 overflow-hidden rounded-lg border border-input bg-input/80"
+              >
+                {JOB_RUNTIME_UNIT_OPTIONS.map((option) => {
+                  const selected = form.runtimeUnit === option.value
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={selected}
+                      aria-label={option.label}
+                      data-testid={`job-runtime-unit-${option.value}`}
+                      onClick={() => updateRuntimeUnit(option.value)}
+                      className={cn(
+                        'w-9 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50',
+                        selected
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:bg-accent'
+                      )}
+                    >
+                      {option.shortLabel}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
             <p id="job-runtime-help" className="text-xs text-muted-foreground">
-              Default {formatDuration(capabilities.limits.default_runtime_seconds)}; maximum{' '}
+              Default {formatDuration(capabilities.limits.default_runtime_seconds)}; minimum{' '}
+              {formatDuration(MIN_JOB_RUNTIME_SECONDS)}; maximum{' '}
               {formatDuration(capabilities.limits.max_runtime_seconds)}. The deadline starts when
               the runtime is observed running.
             </p>

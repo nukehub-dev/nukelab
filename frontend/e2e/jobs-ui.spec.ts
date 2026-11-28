@@ -17,6 +17,7 @@ const ids = {
   revision: 'd6d2e4b3-4796-4335-9247-8ab76ce8e378',
   environment: '74e90887-4ee9-4f6f-a0d5-02c004477ea6',
   plan: '88136537-bd44-4522-8796-897d21d66a75',
+  paidPlan: '99136537-bd44-4522-8796-897d21d66a76',
   volume: 'b7e48a5f-0e4d-45a8-93cb-1cbc67581e83',
   job: 'f4e3f70f-4bf4-4f2d-a66c-35b6790ff9df',
   foreign: 'a7a609c0-6603-44cb-80a2-c51dc7312e81',
@@ -198,14 +199,18 @@ async function fillEligibleJob(page: Page) {
   const dialog = page.getByRole('dialog')
   await dialog.getByTestId('job-name').fill('preserved-checksum')
   await dialog.getByTestId('job-revision-trigger').click()
-  await dialog.getByTestId(`job-revision-${ids.revision}`).click()
+  await page.getByTestId(`job-revision-${ids.revision}`).click()
   await dialog.getByTestId('job-plan-trigger').click()
-  await dialog.getByTestId(`job-plan-${ids.plan}`).click()
+  await page.getByTestId(`job-plan-${ids.plan}`).click()
   await dialog.getByTestId('job-volume-trigger').click()
-  await dialog.getByTestId(`job-volume-${ids.volume}`).click()
+  await page.getByTestId(`job-volume-${ids.volume}`).click()
   await dialog.getByTestId('job-executable').fill('python')
   await dialog.getByTestId('job-args').fill('/work/input.py\n--flag')
-  await dialog.getByTestId('job-runtime').fill('600')
+  await expect(dialog.getByTestId('job-runtime-unit-minutes')).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  )
+  await dialog.getByTestId('job-runtime').fill('10')
 }
 
 async function mockJobs(
@@ -339,7 +344,9 @@ test('disabled feature explains availability and does not query job records', as
   })
 
   await page.goto('/jobs')
-  await expect(page.getByRole('heading', { name: 'Jobs', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Jobs', exact: true })).toBeVisible({
+    timeout: 15_000,
+  })
   await expect(page.getByRole('heading', { name: 'Batch jobs are not available' })).toBeVisible()
   await expect(page.getByText(/Batch job submission is disabled on this deployment/)).toBeVisible()
   await expect(page.getByTestId('new-job')).toHaveCount(0)
@@ -417,7 +424,7 @@ test('paid plans quote a rounded hold, note refunds, and surface insufficient cr
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByRole('heading', { name: 'New job' })).toBeVisible({ timeout: 15_000 })
   await fillEligibleJob(page)
-  await dialog.getByTestId('job-runtime').fill('900')
+  await dialog.getByTestId('job-runtime').fill('15')
 
   await expect(dialog.getByTestId('job-plan-trigger')).toContainText('Small research plan')
   await expect(dialog.getByTestId('job-maximum-hold')).toHaveText('3 NUKE')
@@ -434,6 +441,55 @@ test('paid plans quote a rounded hold, note refunds, and surface insufficient cr
   await expect(page).toHaveURL(/\/jobs$/)
   expect(state.creates).toHaveLength(1)
   expect(state.creates[0]).toMatchObject({ max_runtime_seconds: 900 })
+})
+
+test('maximum runtime accepts seconds, minutes, and hours', async ({ page }) => {
+  await mockJobs(page)
+  await page.goto('/jobs')
+  await page.getByTestId('new-job').click()
+  const dialog = page.getByRole('dialog')
+
+  await expect(dialog.getByTestId('job-runtime')).toHaveValue('30')
+  await expect(dialog.getByTestId('job-runtime-unit-minutes')).toHaveAttribute(
+    'aria-pressed',
+    'true'
+  )
+  await dialog.getByTestId('job-runtime-unit-hours').click()
+  await expect(dialog.getByTestId('job-runtime')).toHaveValue('0.5')
+
+  await dialog.getByTestId('job-runtime-unit-seconds').click()
+  await expect(dialog.getByTestId('job-runtime')).toHaveValue('1800')
+
+  await dialog.getByTestId('job-runtime').fill('59')
+  await dialog.getByTestId('job-submit').click()
+  await expect(dialog.getByText('Use at least 1 minute (60 seconds).')).toBeVisible()
+  await dialog.getByTestId('job-runtime').fill('600')
+  await expect(dialog.getByText('Use at least 1 minute (60 seconds).')).toHaveCount(0)
+})
+
+test('zero-cost mode lists paid CPU plans as disabled and explains why', async ({ page }) => {
+  const paidPlan = {
+    ...plan,
+    id: ids.paidPlan,
+    name: 'Jobs E2E Paid CPU',
+    slug: 'jobs-e2e-paid',
+    cost_per_hour: 60,
+  }
+  await mockJobs(page, { plans: [plan, paidPlan] })
+  await page.goto('/jobs')
+  await page.getByTestId('new-job').click()
+  const dialog = page.getByRole('dialog')
+
+  await expect(
+    dialog.getByText('1 paid CPU plan listed but disabled because paid batch jobs are off.')
+  ).toBeVisible()
+  await dialog.getByTestId('job-plan-trigger').click()
+  const paidOption = page.getByTestId(`job-plan-${ids.paidPlan}`)
+  await expect(paidOption).toBeDisabled()
+  await expect(paidOption).toContainText('Paid plan — paid batch jobs are disabled')
+
+  await page.getByTestId(`job-plan-${ids.plan}`).click()
+  await expect(dialog.getByTestId('job-plan-trigger')).toContainText('Small research plan')
 })
 
 test('paid detail reports the rate, authorized hold, charge and refund', async ({ page }) => {

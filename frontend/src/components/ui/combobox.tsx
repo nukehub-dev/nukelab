@@ -7,10 +7,15 @@ import { cn } from '../../lib/utils'
 import { ChevronDown, Check, Search } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-interface ComboboxOption {
+export interface ComboboxOption {
   value: string
   label: string
   image?: string
+  /** Optional second line, e.g. a paid-plan explanation. */
+  hint?: string
+  disabled?: boolean
+  /** Optional test id for the option button. */
+  testId?: string
 }
 
 interface ComboboxProps {
@@ -25,6 +30,7 @@ interface ComboboxProps {
   searchPlaceholder?: string
   /** Optional server-side search callback for large option sources. */
   onSearchChange?: (value: string) => void
+  'data-testid'?: string
 }
 
 const GAP = 4
@@ -68,6 +74,7 @@ export function Combobox({
   disabled,
   searchPlaceholder = 'Search...',
   onSearchChange,
+  'data-testid': dataTestId,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState('')
@@ -145,6 +152,7 @@ export function Combobox({
       {open && (
         <motion.div
           ref={panelRef}
+          data-combobox-panel=""
           initial={{ opacity: 0, y: -4, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -4, scale: 0.98 }}
@@ -187,22 +195,30 @@ export function Combobox({
                   <button
                     key={option.value}
                     type="button"
+                    data-testid={option.testId}
+                    disabled={option.disabled}
+                    aria-disabled={option.disabled || undefined}
                     onClick={() => {
+                      if (option.disabled) return
                       onChange(option.value)
                       setOpen(false)
                       setSearch('')
                       onSearchChange?.('')
                     }}
                     className={cn(
-                      'relative flex w-full cursor-pointer select-none items-center gap-2 rounded-lg px-3 py-2 text-sm outline-none transition-colors',
-                      !isSelected && 'text-foreground hover:bg-accent',
+                      'relative flex w-full cursor-pointer select-none items-start gap-2 rounded-lg px-3 py-2 text-sm outline-none transition-colors',
+                      option.disabled && 'cursor-not-allowed opacity-50',
+                      !isSelected && !option.disabled && 'text-foreground hover:bg-accent',
                       isSelected && 'bg-primary/10 text-primary'
                     )}
                   >
                     <Check
-                      className={cn('h-4 w-4 shrink-0', isSelected ? 'opacity-100' : 'opacity-0')}
+                      className={cn(
+                        'mt-0.5 h-4 w-4 shrink-0',
+                        isSelected ? 'opacity-100' : 'opacity-0'
+                      )}
                     />
-                    <span className="flex items-center gap-2 flex-1 text-left truncate">
+                    <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
                       {option.image && (
                         <img
                           src={option.image}
@@ -210,7 +226,14 @@ export function Combobox({
                           className="w-5 h-5 rounded-full object-cover shrink-0"
                         />
                       )}
-                      <span className="truncate">{option.label}</span>
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate">{option.label}</span>
+                        {option.hint && (
+                          <span className="truncate text-[11px] text-muted-foreground">
+                            {option.hint}
+                          </span>
+                        )}
+                      </span>
                     </span>
                   </button>
                 )
@@ -223,10 +246,11 @@ export function Combobox({
   )
 
   return (
-    <div ref={containerRef} className={cn('relative', className)}>
+    <div ref={containerRef} data-testid={dataTestId} className={cn('relative', className)}>
       <button
         ref={buttonRef}
         type="button"
+        data-testid={dataTestId ? `${dataTestId}-trigger` : undefined}
         disabled={disabled}
         onClick={() => {
           setOpen(!open)

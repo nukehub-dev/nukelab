@@ -361,6 +361,23 @@ test('unambiguous catalog is preselected on the dashboard, reviewed and launched
   })
 })
 
+test('long plan names wrap in the plan menu without horizontal overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const longPlan = makePlan({
+    id: ids.planSmall,
+    name: 'Jobs E2E Capacity Filler '.repeat(3).trim(),
+    slug: 'long-plan',
+  })
+  await mockGuidedLaunch(page, { plans: [longPlan] })
+  await openDashboardDialog(page)
+
+  await page.getByTestId('deploy-server-plan-trigger').click()
+  const option = page.getByTestId(`deploy-server-plan-${ids.planSmall}`)
+  await expect(option).toBeVisible()
+  const overflow = await option.evaluate((element) => element.scrollWidth - element.clientWidth)
+  expect(overflow).toBeLessThanOrEqual(1)
+})
+
 test('a marked starter is preselected and remains editable', async ({ page }) => {
   const starterPlan = makePlan({
     id: ids.planSmall,

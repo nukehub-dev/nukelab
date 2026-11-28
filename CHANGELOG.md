@@ -25,6 +25,11 @@ section.
   submission, fenced admission, shared CPU/memory/disk accounting, owner/fleet
   caps, and an exclusive `job_writer` volume guard. Job history, retained logs,
   and cancellation remain available while submission is disabled.
+- A faster batch-job form: searchable environment, plan, and private-volume
+  pickers; a link to `/volumes` with list refresh for creating a work volume;
+  second/minute/hour runtime units with a one-minute minimum; and all active
+  CPU plans listed with paid plans disabled and explained while paid jobs are
+  off. Long select labels now wrap instead of creating horizontal scroll.
 - A hardened headless execution profile: approved immutable image identity,
   owned `/work` preparation before the non-root job, literal argv with no shell
   parsing, no network, read-only rootfs, dropped capabilities, UID 65532, bounded

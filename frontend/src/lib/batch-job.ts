@@ -36,6 +36,52 @@ export const JOB_TERMINAL_STATES: readonly JobState[] = [
 
 export const JOB_LIST_FILTERS: readonly JobListFilter[] = ['active', 'history', 'all']
 
+export type JobRuntimeUnit = 'seconds' | 'minutes' | 'hours'
+
+export const JOB_RUNTIME_UNIT_OPTIONS: readonly {
+  value: JobRuntimeUnit
+  label: string
+  shortLabel: string
+}[] = [
+  { value: 'seconds', label: 'Seconds', shortLabel: 's' },
+  { value: 'minutes', label: 'Minutes', shortLabel: 'm' },
+  { value: 'hours', label: 'Hours', shortLabel: 'h' },
+]
+
+export const MIN_JOB_RUNTIME_SECONDS = 60
+
+const JOB_RUNTIME_UNIT_SECONDS: Record<JobRuntimeUnit, number> = {
+  seconds: 1,
+  minutes: 60,
+  hours: 3600,
+}
+
+/** Convert a display value and unit to whole seconds, rounding fractional input. */
+export function jobRuntimeSeconds(value: string, unit: JobRuntimeUnit): number {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric <= 0) return Number.NaN
+  return Math.round(numeric * JOB_RUNTIME_UNIT_SECONDS[unit])
+}
+
+/** Pick the largest whole unit for a server-provided runtime default. */
+export function jobRuntimeDisplay(seconds: number): { value: string; unit: JobRuntimeUnit } {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return { value: '', unit: 'seconds' }
+  }
+  if (seconds % 3600 === 0) return { value: String(seconds / 3600), unit: 'hours' }
+  if (seconds % 60 === 0) return { value: String(seconds / 60), unit: 'minutes' }
+  return { value: String(Math.round(seconds)), unit: 'seconds' }
+}
+
+/** Preserve the duration while changing the display unit. */
+export function convertJobRuntime(value: string, from: JobRuntimeUnit, to: JobRuntimeUnit): string {
+  const seconds = jobRuntimeSeconds(value, from)
+  if (!Number.isFinite(seconds)) return value
+  const converted = seconds / JOB_RUNTIME_UNIT_SECONDS[to]
+  const rounded = Math.round(converted * 100) / 100
+  return String(rounded)
+}
+
 const JOB_STATE_LABELS: Record<JobState, string> = {
   queued: 'Queued',
   starting: 'Starting',

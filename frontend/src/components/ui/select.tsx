@@ -94,7 +94,7 @@ function Select({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -4, scale: 0.98 }}
               transition={{ duration: 0.15 }}
-              className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-xl border border-border bg-popover p-1.5 shadow-lg space-y-1"
+              className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto overflow-x-hidden rounded-xl border border-border bg-popover p-1.5 shadow-lg space-y-1"
               data-testid="select-dropdown"
             >
               {children}
@@ -122,13 +122,15 @@ function SelectItem({ value, children, 'data-testid': dataTestId }: SelectItemPr
         setOpen(false)
       }}
       className={cn(
-        'relative flex w-full cursor-pointer select-none items-center gap-2 rounded-lg px-3 py-2 text-sm outline-none transition-colors',
+        'relative flex w-full cursor-pointer select-none items-start gap-2 rounded-lg px-3 py-2 text-sm outline-none transition-colors',
         !isSelected && 'text-foreground hover:bg-accent',
         isSelected && 'bg-primary/10 text-primary'
       )}
     >
-      <Check className={cn('h-4 w-4 shrink-0', isSelected ? 'opacity-100' : 'opacity-0')} />
-      <span className="flex-1 text-left whitespace-nowrap">{children}</span>
+      <Check className={cn('mt-0.5 h-4 w-4 shrink-0', isSelected ? 'opacity-100' : 'opacity-0')} />
+      <span className="min-w-0 flex-1 text-left whitespace-normal break-words leading-relaxed">
+        {children}
+      </span>
     </button>
   )
 }

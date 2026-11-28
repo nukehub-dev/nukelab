@@ -110,6 +110,15 @@ use, an active CPU-only plan the actor can use, and an owned active private
 volume. Plans with GPUs are rejected. A nonzero hourly cost is accepted only when
 `BATCH_JOBS_ALLOW_PAID_PLANS=true`.
 
+The owner dialog makes the frozen choices searchable. Environment revisions,
+CPU plans, and owned private volumes use a searchable picker; the volume picker
+links to `/volumes` and can refresh its list. All active CPU plans are shown,
+but nonzero-cost plans stay disabled with an inline explanation while paid
+batch jobs are off, so the list is not silently narrowed to zero-cost plans.
+Maximum runtime accepts seconds, minutes, or hours and is converted to whole
+seconds before submission; the backend still enforces the 60-second minimum and
+the configured maximum.
+
 `Idempotency-Key` is mandatory (1–128 visible ASCII characters). The unique
 owner/key-hash index plus the canonical request fingerprint make retries safe:
 the same payload returns the original job with `replayed=true` and HTTP 200; a
@@ -349,9 +358,9 @@ endpoint.
 Implemented and executed for the 2.4.0 batch-job change set (2026-11-28):
 
 - Backend full suite: 5,141 passed, 6 skipped, 0 failed.
-- Frontend: 251 unit tests passed; lint/format/type-check/build passed.
-- Targeted mocked browser suites passed: `jobs-ui` (14),
-  `guided-first-launch` (9), `admin-jobs-ui` (16), and the existing
+- Frontend: 255 unit tests passed; lint/format/type-check/build passed.
+- Targeted mocked browser suites passed: `jobs-ui` (16),
+  `guided-first-launch` (10), `admin-jobs-ui` (16), and the existing
   queue/admin-setup regressions (10).
 - Real API→PostgreSQL/Redis/Celery/Docker `@jobs-runtime` scenario passed on a
   rebuilt disposable stack. Capacity queueing, exactly one hardened runtime

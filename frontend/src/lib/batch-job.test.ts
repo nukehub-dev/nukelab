@@ -3,8 +3,10 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  MIN_JOB_RUNTIME_SECONDS,
   argvByteLength,
   canCancelJob,
+  convertJobRuntime,
   createJobIdempotencyKey,
   disabledJobCapabilities,
   formatJobCredits,
@@ -22,6 +24,8 @@ import {
   jobPollInterval,
   jobReasonCopy,
   jobRequestSignature,
+  jobRuntimeDisplay,
+  jobRuntimeSeconds,
   jobStateDescription,
   jobStateLabel,
   parseJobArgs,
@@ -153,6 +157,35 @@ describe('idempotency keys', () => {
     expect(jobRequestSignature(request)).not.toBe(
       jobRequestSignature({ ...request, max_runtime_seconds: 60 })
     )
+  })
+})
+
+describe('runtime units', () => {
+  it('converts display values to whole seconds', () => {
+    expect(jobRuntimeSeconds('60', 'seconds')).toBe(60)
+    expect(jobRuntimeSeconds('30', 'minutes')).toBe(1800)
+    expect(jobRuntimeSeconds('2', 'hours')).toBe(7200)
+    expect(jobRuntimeSeconds('0.5', 'hours')).toBe(1800)
+    expect(jobRuntimeSeconds('0.5', 'minutes')).toBe(30)
+    expect(jobRuntimeSeconds('', 'minutes')).toBeNaN()
+    expect(jobRuntimeSeconds('0', 'minutes')).toBeNaN()
+  })
+
+  it('chooses the largest whole display unit', () => {
+    expect(jobRuntimeDisplay(1800)).toEqual({ value: '30', unit: 'minutes' })
+    expect(jobRuntimeDisplay(7200)).toEqual({ value: '2', unit: 'hours' })
+    expect(jobRuntimeDisplay(90)).toEqual({ value: '90', unit: 'seconds' })
+  })
+
+  it('preserves the duration across unit changes', () => {
+    expect(convertJobRuntime('30', 'minutes', 'hours')).toBe('0.5')
+    expect(convertJobRuntime('2', 'hours', 'minutes')).toBe('120')
+    expect(convertJobRuntime('90', 'seconds', 'minutes')).toBe('1.5')
+    expect(convertJobRuntime('bad', 'minutes', 'seconds')).toBe('bad')
+  })
+
+  it('exposes the one-minute backend minimum', () => {
+    expect(MIN_JOB_RUNTIME_SECONDS).toBe(60)
   })
 })
 
