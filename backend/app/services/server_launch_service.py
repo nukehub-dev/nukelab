@@ -44,6 +44,7 @@ from app.schemas.environment_manifest import (
 from app.schemas.server_launch import NormalizedLaunchRequest
 from app.schemas.server_queue import QueuedServerResponse
 from app.services.admission_service import acquire_admission_lock
+from app.services.credit_hold_service import CreditHoldService
 from app.services.environment_revision_service import (
     EnvironmentRevisionService,
     fingerprint,
@@ -555,7 +556,9 @@ class ServerLaunchService:
                 )
             )["allowed"]:
                 raise LaunchError("quota_exceeded", 429)
-            if settings.credits_enabled and (owner.nuke_balance or 0) < (plan.cost_per_hour or 0):
+            if settings.credits_enabled and await CreditHoldService.spendable_balance(
+                self.db, owner.id
+            ) < (plan.cost_per_hour or 0):
                 raise LaunchError("insufficient_credits", 402)
             mounts = await validate_launch_volumes(
                 self.db,
@@ -1234,7 +1237,9 @@ class ServerLaunchService:
             revision = await self._revisions(owner_id).require_available(revision_id)
             if revision.template_id != request.environment_id:
                 raise LaunchError("revision_unavailable")
-            if settings.credits_enabled and (owner.nuke_balance or 0) < (plan.cost_per_hour or 0):
+            if settings.credits_enabled and await CreditHoldService.spendable_balance(
+                self.db, owner.id
+            ) < (plan.cost_per_hour or 0):
                 raise LaunchError("insufficient_credits", 402)
             runtime = ImageIdentity.model_validate(revision.runtime_identity)
             toolchain = (

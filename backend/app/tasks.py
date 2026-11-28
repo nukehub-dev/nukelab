@@ -480,7 +480,6 @@ def process_nuke_billing(self):
 
         from app.models.server import Server
         from app.models.server_plan import ServerPlan
-        from app.models.user import User
         from app.services.credit_service import CreditService
         from app.services.notification_service import NotificationService
 
@@ -506,9 +505,7 @@ def process_nuke_billing(self):
                 ):
                     continue
                 owner_id, name, rate = server.user_id, server.name, plan.cost_per_hour
-                balance = (
-                    await db.execute(select(User.nuke_balance).where(User.id == owner_id))
-                ).scalar_one_or_none() or 0
+                balance = await CreditService(db).get_spendable_balance(str(owner_id))
                 if balance <= 0:
                     if settings.server_auto_stop_on_depletion:
                         try:

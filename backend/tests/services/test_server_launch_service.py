@@ -13,6 +13,8 @@ import pytest_asyncio
 from sqlalchemy import func, select
 
 from app.config import settings
+from app.core.time_utils import utc_now
+from app.models.batch_job import BatchJob
 from app.models.credit_transaction import CreditTransaction
 from app.models.gpu_allocation import GpuAllocation
 from app.models.resource_quota import ResourceQuota
@@ -25,6 +27,7 @@ from app.models.user import User
 from app.models.volume import Volume
 from app.models.volume_operation import VolumeOperation
 from app.schemas.server_queue import QueuedServerResponse
+from app.services.credit_hold_service import CreditHoldService
 from app.services.server_launch_service import LaunchError, LaunchReservation, ServerLaunchService
 from app.services.server_launch_validation import normalize_launch_request
 
@@ -636,6 +639,49 @@ async def test_credit_denial_creates_no_waiting_or_storage_reservation(db_sessio
     for model in (Server, Volume, ServerQueue, VolumeOperation, CreditTransaction):
         assert await db_session.scalar(select(func.count()).select_from(model)) == 0
     assert (await db_session.get(User, launch_fixture.owner_id)).nuke_balance == 2
+
+
+@pytest.mark.asyncio
+async def test_held_batch_credits_block_an_interactive_launch(db_session, launch_fixture):
+    service = ServerLaunchService(db_session, runtime_driver())
+    request = launch_fixture.request()
+    revision_id = await service.resolve_revision(launch_fixture.owner_id, request)
+    owner = await db_session.get(User, launch_fixture.owner_id)
+    owner.nuke_balance = 3  # Exactly the selected plan's hourly cost.
+    now = utc_now()
+    job = BatchJob(
+        user_id=owner.id,
+        name="held-batch-job",
+        idempotency_key_hash=uuid.uuid4().hex * 2,
+        request_fingerprint=uuid.uuid4().hex * 2,
+        revision_id=revision_id,
+        plan_id=launch_fixture.plan_id,
+        argv=["true"],
+        max_runtime_seconds=600,
+        state="queued",
+        state_changed_at=now,
+        revision_snapshot={},
+        plan_snapshot={},
+        volume_snapshot={},
+        fencing_token=uuid.uuid4(),
+        billing_mode="paid",
+        authorized_credits=3,
+        billing_rate_per_hour=3,
+        billing_state="held",
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(job)
+    await db_session.flush()
+    await CreditHoldService.create_hold(db_session, user_id=owner.id, job_id=job.id, amount=3)
+    await db_session.commit()
+
+    with pytest.raises(LaunchError, match="insufficient_credits") as denial:
+        await service.reserve(launch_fixture.owner_id, request, revision_id)
+    assert denial.value.status_code == 402
+    for model in (Server, Volume, ServerQueue, VolumeOperation, CreditTransaction):
+        assert await db_session.scalar(select(func.count()).select_from(model)) == 0
+    assert (await db_session.get(User, launch_fixture.owner_id)).nuke_balance == 3
 
 
 @pytest.mark.asyncio

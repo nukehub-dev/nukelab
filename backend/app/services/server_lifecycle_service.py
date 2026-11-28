@@ -22,6 +22,7 @@ from app.models.user import User
 from app.models.volume import Volume
 from app.schemas.server_launch import NormalizedVolumeMount
 from app.services.admission_service import acquire_admission_lock
+from app.services.credit_hold_service import CreditHoldService
 from app.services.gpu_allocator import GpuAllocatorService
 from app.services.quota_service import QuotaService
 from app.services.resource_pool_service import ResourcePoolService
@@ -275,7 +276,9 @@ class ServerLifecycleService(ServerLaunchService):
                         )
                     ):
                         raise LaunchError("volume_unavailable", 403)
-                if settings.credits_enabled and (owner.nuke_balance or 0) <= 0:
+                if settings.credits_enabled and (
+                    await CreditHoldService.spendable_balance(self.db, owner.id) <= 0
+                ):
                     raise LaunchError("insufficient_credits", 402)
                 mounts = previous
                 generation = None
@@ -296,9 +299,9 @@ class ServerLifecycleService(ServerLaunchService):
                     )
                 )["allowed"]:
                     raise LaunchError("quota_exceeded", 429)
-                if settings.credits_enabled and (owner.nuke_balance or 0) < (
-                    plan.cost_per_hour or 0
-                ):
+                if settings.credits_enabled and await CreditHoldService.spendable_balance(
+                    self.db, owner.id
+                ) < (plan.cost_per_hour or 0):
                     raise LaunchError("insufficient_credits", 402)
                 selections = await validate_launch_volumes(
                     self.db,

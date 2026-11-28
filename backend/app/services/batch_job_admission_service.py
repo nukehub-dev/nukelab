@@ -30,6 +30,7 @@ from app.models.batch_job import (
     BatchJob,
     BatchJobLog,
 )
+from app.models.credit_hold import CreditHold
 from app.models.environment_revision import EnvironmentRevision
 from app.models.environment_template import EnvironmentTemplate
 from app.models.server_plan import ServerPlan
@@ -38,6 +39,11 @@ from app.models.volume import Volume
 from app.models.volume_operation import VolumeOperation
 from app.schemas.environment_manifest import ImageIdentity
 from app.services.admission_service import acquire_admission_lock
+from app.services.credit_hold_service import (
+    HELD,
+    RELEASED,
+    CreditHoldService,
+)
 from app.services.environment_revision_service import (
     EnvironmentRevisionService,
     RevisionUnavailable,
@@ -342,8 +348,15 @@ class BatchJobAdmissionService:
         )
         return runtime, toolchain
 
-    @staticmethod
-    def _fail_job(job: BatchJob, reason: str, proof_class: str, now) -> None:
+    async def _release_hold(self, job: BatchJob) -> None:
+        """Release an active hold without charging; safe to repeat."""
+        released = await CreditHoldService.release(self.db, job.id)
+        if released or job.billing_state == HELD or job.billing_mode == "paid":
+            job.billing_state = RELEASED
+            job.charged_credits = 0
+
+    async def _fail_job(self, job: BatchJob, reason: str, proof_class: str, now) -> None:
+        await self._release_hold(job)
         job.state = "failed"
         job.outcome_code = "failed"
         job.reason_code = reason
@@ -354,8 +367,8 @@ class BatchJobAdmissionService:
         job.reservation_active = False
         job.updated_at = now
 
-    @staticmethod
-    def _expire_job(job: BatchJob, now) -> None:
+    async def _expire_job(self, job: BatchJob, now) -> None:
+        await self._release_hold(job)
         job.state = "expired"
         job.outcome_code = "expired"
         job.reason_code = "queue_expired"
@@ -374,7 +387,7 @@ class BatchJobAdmissionService:
             job = await self._locked_job(job_id)
             if job is None or job.state != "queued":
                 return False
-            self._fail_job(job, reason, proof_class, utc_now())
+            await self._fail_job(job, reason, proof_class, utc_now())
             return True
 
     async def _defer_queued(self, job_id: uuid.UUID, reason: str) -> bool:
@@ -425,7 +438,7 @@ class BatchJobAdmissionService:
 
             now = utc_now()
             if job.queue_expires_at is not None and job.queue_expires_at <= now:
-                self._expire_job(job, now)
+                await self._expire_job(job, now)
                 return None
 
             user = await self.db.scalar(
@@ -436,11 +449,11 @@ class BatchJobAdmissionService:
                 or not user.is_active
                 or not has_permission(user, Permission.JOBS_WRITE_OWN)
             ):
-                self._fail_job(job, "permission_revoked", _POLICY_PROOF, now)
+                await self._fail_job(job, "permission_revoked", _POLICY_PROOF, now)
                 return None
             cohort = settings.batch_jobs_allowed_user_id_set
             if cohort and user.id not in cohort:
-                self._fail_job(job, "cohort_not_allowed", _POLICY_PROOF, now)
+                await self._fail_job(job, "cohort_not_allowed", _POLICY_PROOF, now)
                 return None
 
             async def authorize_template(template: EnvironmentTemplate) -> None:
@@ -459,7 +472,7 @@ class BatchJobAdmissionService:
                     self.db, authorize_template
                 ).require_available(job.revision_id)
             except RevisionUnavailable:
-                self._fail_job(job, "revision_unavailable", _POLICY_PROOF, now)
+                await self._fail_job(job, "revision_unavailable", _POLICY_PROOF, now)
                 return None
 
             template = await self.db.scalar(
@@ -474,7 +487,7 @@ class BatchJobAdmissionService:
                 or not template.is_active
                 or str(template.id) != str(snapshot_environment_id)
             ):
-                self._fail_job(job, "revision_unavailable", _POLICY_PROOF, now)
+                await self._fail_job(job, "revision_unavailable", _POLICY_PROOF, now)
                 return None
 
             current_runtime = _parse_identity(revision.runtime_identity)
@@ -493,7 +506,7 @@ class BatchJobAdmissionService:
                     and _identity_key(current_toolchain) != _identity_key(proof.toolchain_identity)
                 )
             ):
-                self._fail_job(job, "revision_unavailable", _POLICY_PROOF, now)
+                await self._fail_job(job, "revision_unavailable", _POLICY_PROOF, now)
                 return None
 
             plan = await self.db.scalar(
@@ -502,28 +515,56 @@ class BatchJobAdmissionService:
                 .execution_options(populate_existing=True)
             )
             if plan is None or not plan.is_active:
-                self._fail_job(job, "plan_unavailable", _POLICY_PROOF, now)
+                await self._fail_job(job, "plan_unavailable", _POLICY_PROOF, now)
                 return None
             if not await PlanService(self.db).can_user_use_plan(
                 str(plan.id), user.role, str(user.id)
             ):
-                self._fail_job(job, "plan_unavailable", _POLICY_PROOF, now)
+                await self._fail_job(job, "plan_unavailable", _POLICY_PROOF, now)
                 return None
             if (plan.gpu_limit or 0) != 0:
-                self._fail_job(job, "plan_unavailable", _POLICY_PROOF, now)
+                await self._fail_job(job, "plan_unavailable", _POLICY_PROOF, now)
                 return None
 
             snapshot_values = _snapshot_plan_values(job.plan_snapshot)
             current_values = _current_plan_values(plan)
             if snapshot_values is None or current_values is None:
-                self._fail_job(job, "plan_changed", _POLICY_PROOF, now)
-                return None
-            if snapshot_values["cost_per_hour"] > 0:
-                self._fail_job(job, "paid_plan_unsupported", _POLICY_PROOF, now)
+                await self._fail_job(job, "plan_changed", _POLICY_PROOF, now)
                 return None
             if snapshot_values != current_values:
-                self._fail_job(job, "plan_changed", _POLICY_PROOF, now)
+                await self._fail_job(job, "plan_changed", _POLICY_PROOF, now)
                 return None
+            if snapshot_values["cost_per_hour"] > 0:
+                if not settings.batch_jobs_allow_paid_plans:
+                    await self._fail_job(job, "paid_plan_unsupported", _POLICY_PROOF, now)
+                    return None
+                if job.billing_mode != "paid" or job.billing_state != HELD:
+                    await self._fail_job(job, "billing_unavailable", _POLICY_PROOF, now)
+                    return None
+                hold = await self.db.scalar(
+                    select(CreditHold)
+                    .where(CreditHold.job_id == job.id)
+                    .execution_options(populate_existing=True)
+                )
+                if (
+                    hold is None
+                    or hold.state != HELD
+                    or int(hold.amount) != int(job.authorized_credits or 0)
+                ):
+                    await self._fail_job(job, "billing_unavailable", _POLICY_PROOF, now)
+                    return None
+                # Lock the user row for the rest of the admission transaction so
+                # a concurrent debit cannot spend the rechecked hold funding.
+                funded_user = await self.db.scalar(
+                    select(User)
+                    .where(User.id == job.user_id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+                if funded_user is None or int(funded_user.nuke_balance or 0) < int(hold.amount):
+                    await self._fail_job(job, "insufficient_credits", _POLICY_PROOF, now)
+                    return None
+                user = funded_user
 
             volume = await self.db.scalar(
                 select(Volume)
@@ -531,14 +572,14 @@ class BatchJobAdmissionService:
                 .execution_options(populate_existing=True)
             )
             if volume is None or volume.owner_id != job.user_id or volume.visibility != "private":
-                self._fail_job(job, "volume_unavailable", _POLICY_PROOF, now)
+                await self._fail_job(job, "volume_unavailable", _POLICY_PROOF, now)
                 return None
             if volume.status in _BUSY_VOLUME_STATUSES:
                 job.reason_code = "volume_busy"
                 job.updated_at = now
                 return None
             if volume.status != "active":
-                self._fail_job(job, "volume_unavailable", _POLICY_PROOF, now)
+                await self._fail_job(job, "volume_unavailable", _POLICY_PROOF, now)
                 return None
 
             owner_active = int(
@@ -589,7 +630,7 @@ class BatchJobAdmissionService:
                 include_gpu_pool=False,
             )
             if not quota["allowed"]:
-                self._fail_job(job, "quota_exceeded", _POLICY_PROOF, now)
+                await self._fail_job(job, "quota_exceeded", _POLICY_PROOF, now)
                 return None
 
             try:
@@ -606,7 +647,7 @@ class BatchJobAdmissionService:
                     job.updated_at = now
                     return None
                 if exc.code == "volume_unavailable":
-                    self._fail_job(job, "volume_unavailable", _POLICY_PROOF, now)
+                    await self._fail_job(job, "volume_unavailable", _POLICY_PROOF, now)
                     return None
                 raise
             if (
@@ -804,6 +845,41 @@ class BatchJobAdmissionService:
         if log_expires_at is not None:
             job.log_expires_at = log_expires_at
 
+    async def _settle_billing(self, job: BatchJob, *, finished_at: datetime) -> None:
+        """Settle the hold from the bounded observed interval; never preempts result."""
+        rate = int(job.billing_rate_per_hour or 0)
+        authorized = int(job.authorized_credits or 0)
+        observed_seconds = 0
+        if job.started_at is not None and finished_at > job.started_at:
+            elapsed = int((finished_at - job.started_at).total_seconds())
+            observed_seconds = max(0, min(elapsed, int(job.max_runtime_seconds or 0)))
+        if observed_seconds > 0 and rate > 0:
+            charge = min(authorized, max(1, -(-(rate * observed_seconds) // 3600)))
+        else:
+            charge = 0
+        settlement = await CreditHoldService.settle(
+            self.db,
+            job_id=job.id,
+            charge=charge,
+            description=(
+                f"Batch job usage: '{job.name}' ({observed_seconds}s at {rate} NUKE/hour)"
+            ),
+            meta={
+                "job_id": str(job.id),
+                "rate_per_hour": rate,
+                "authorized_credits": authorized,
+                "observed_seconds": observed_seconds,
+            },
+        )
+        if settlement.state == "none":
+            job.charged_credits = 0
+            if job.billing_state != RELEASED:
+                job.billing_state = "none"
+            return
+        job.charged_credits = int(settlement.charged)
+        job.billing_transaction_id = settlement.transaction_id
+        job.billing_state = settlement.state
+
     async def release_terminal(
         self,
         job_id: uuid.UUID,
@@ -846,16 +922,15 @@ class BatchJobAdmissionService:
                     return job
                 if not executor_terminated:
                     raise JobAdmissionError("executor_unconfirmed")
+                job.updated_at = utc_now()
+                await self._settle_billing(job, finished_at=job.finished_at or job.updated_at)
                 await self._release_volume_guard(job, succeeded=job.outcome_code == "succeeded")
                 job.reservation_active = False
-                job.updated_at = utc_now()
                 return job
             if job.state not in _RESERVED_JOB_STATES:
                 raise JobAdmissionError("job_not_active")
             if not executor_terminated:
                 raise JobAdmissionError("executor_unconfirmed")
-
-            await self._release_volume_guard(job, succeeded=state == "succeeded")
 
             now = utc_now()
             job.state = state
@@ -872,6 +947,8 @@ class BatchJobAdmissionService:
             job.state_changed_at = now
             job.reservation_active = False
             job.updated_at = now
+            await self._settle_billing(job, finished_at=job.finished_at)
+            await self._release_volume_guard(job, succeeded=state == "succeeded")
             await self._write_terminal_log(
                 job,
                 log_state=log_state,

@@ -125,6 +125,9 @@ class JobLogSummary(BaseModel):
 class JobBilling(BaseModel):
     mode: BillingMode
     charged: int = 0
+    authorized: int = 0
+    rate_per_hour: int = 0
+    state: str = "none"
 
 
 class BatchJobSummary(BaseModel):

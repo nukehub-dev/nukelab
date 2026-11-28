@@ -313,7 +313,13 @@ history.
   cascaded for owned child rows, or set to null for optional references.
 - Alembic revisions form exactly one head. Migration tests assert the single
   head, and mixed or branched heads are unsupported for deployment. The batch
-  job additions extend the chain through `e2c7a9f4d6b1`.
+  job additions extend the chain through `f1a2b3c4d5e6`.
+
+`credit_holds` stores one authorization per paid batch job: owner/job references,
+held amount, state (`held`/`settled`/`released`), captured charge, unpaid
+remainder, the optional `batch_job_usage` transaction id, and creation/settlement
+times. A unique job id prevents duplicate holds. Batch jobs also carry
+`authorized_credits`, `billing_rate_per_hour`, and `billing_state`.
 
 ## Related documents
 

@@ -177,7 +177,7 @@ The owner/admin history surfaces remain readable while submission is disabled.
 | Variable | Default | Description |
 |---|---|---|
 | `BATCH_JOBS_SUBMISSION_ENABLED` | `false` | Allow new owner submissions. `false` blocks submission only; existing jobs, history, logs and cancellation continue |
-| `BATCH_JOBS_ALLOW_PAID_PLANS` | `false` | Inert compatibility flag. Paid settlement is not implemented; nonzero-cost plans are always rejected and capabilities report `zero_cost` |
+| `BATCH_JOBS_ALLOW_PAID_PLANS` | `false` | Enables paid plans for batch jobs. When false, nonzero-cost plans are rejected with `paid_plan_unsupported` and capabilities report `zero_cost`. When true, a paid submission creates one credit hold for the maximum runtime; actual usage settles at the frozen rate and the unused authorization is refunded |
 | `BATCH_JOBS_ALLOWED_USER_IDS` | empty | Optional comma-separated owner UUID pilot cohort (one UUID is a valid one-entry list). Empty means the `jobs:write_own` grant defines eligibility; a nonempty list narrows it |
 | `BATCH_JOBS_MAX_ACTIVE_PER_OWNER` | `1` | Maximum active (`starting`, `running`, `cancelling`, `recovery_required`) jobs per owner |
 | `BATCH_JOBS_MAX_QUEUED_PER_OWNER` | `3` | Maximum unexpired queued jobs per owner |
